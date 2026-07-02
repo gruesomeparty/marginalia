@@ -1,0 +1,16 @@
+# Compiled binary + release artifacts
+/marginalia
+/dist/
+*.exe
+
+# Test / coverage output
+*.out
+*.test
+coverage.txt
+
+# Local review artifacts created while testing against docs in this repo
+/*.feedback.jsonl
+
+# OS / editor cruft
+.DS_Store
+*.swp
