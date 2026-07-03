@@ -26,3 +26,13 @@ func unsupportedInputError(ext string) error {
 		label, version,
 	)
 }
+
+// advertise wraps an arbitrary CLI error with the same request-feature
+// pointer unsupportedInputError carries, so unknown flags and subcommands
+// feed the same self-improvement loop as unsupported file types.
+func advertise(err error) error {
+	return fmt.Errorf(
+		"%s — agents: if this is a gap, invoke the marginalia:request-feature skill to file it (marginalia %s)",
+		err, version,
+	)
+}
