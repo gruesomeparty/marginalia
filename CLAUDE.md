@@ -76,8 +76,8 @@ JSON/YAML trees → M4 automated implementation pipeline → M5 static share mod
 
 ## Commands
 
-None exist yet. Once the Go module is initialized, standard Go tooling applies:
-`go build ./...`, `go test ./...`, `go test -run TestName ./pkg/...` for a single
-test. Distribution is planned via goreleaser + GitHub releases (same pattern as
-black-mirror). The `review-doc` and `request-feature` skills live in
-`skills/` and ship as an installable Claude Code plugin.
+- Build: `go build ./...`  ·  Run: `go run . serve <doc.md> --open`
+- Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
+- Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
+- Lint: `golangci-lint run`
+- Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
