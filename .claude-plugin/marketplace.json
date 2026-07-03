@@ -1,0 +1,12 @@
+{
+  "name": "marginalia",
+  "owner": { "name": "suTerminus" },
+  "description": "Marginalia: document review tool for agent-authored content, packaged as its own single-plugin marketplace.",
+  "plugins": [
+    {
+      "name": "marginalia",
+      "source": "./",
+      "description": "Document review tool: render markdown, collect block-anchored comments, return structured feedback events."
+    }
+  ]
+}

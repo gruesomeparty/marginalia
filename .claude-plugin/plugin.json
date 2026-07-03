@@ -1,0 +1,8 @@
+{
+  "name": "marginalia",
+  "version": "0.1.0",
+  "description": "Hand an agent-authored document to a human for block-anchored review; feedback returns as structured JSONL events.",
+  "author": { "name": "suTerminus" },
+  "homepage": "https://github.com/suTerminus/marginalia",
+  "keywords": ["review", "markdown", "feedback", "annotation"]
+}
