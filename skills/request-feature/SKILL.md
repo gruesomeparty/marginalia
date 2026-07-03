@@ -18,7 +18,7 @@ pipeline. File them precisely.
 ## 1. Dedupe
 
 ```bash
-gh issue list --repo suTerminus/marginalia --label agent-feedback --state all --search "<keywords>"
+gh issue list --repo gruesomeparty/marginalia --label agent-feedback --state all --search "<keywords>"
 ```
 
 If an issue already covers the gap, add a comment with your new use case instead
@@ -29,7 +29,7 @@ of filing a duplicate.
 Use the `agent-feedback` issue form:
 
 ```bash
-gh issue create --repo suTerminus/marginalia \
+gh issue create --repo gruesomeparty/marginalia \
   --label agent-feedback --label <category> \
   --title "<concise limitation>" \
   --body "<what you attempted (exact invocation), expected, actual/error, workaround, marginalia version, requesting context>"

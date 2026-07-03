@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/suTerminus/marginalia/internal/feedback"
-	"github.com/suTerminus/marginalia/internal/web"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/web"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

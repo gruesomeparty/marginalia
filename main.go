@@ -1,5 +1,5 @@
 package main
 
-import "github.com/suTerminus/marginalia/cmd"
+import "github.com/gruesomeparty/marginalia/cmd"
 
 func main() { cmd.Execute() }

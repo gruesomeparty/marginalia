@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Module path: `github.com/suTerminus/marginalia` — copy verbatim in every import.
+- Module path: `github.com/gruesomeparty/marginalia` — copy verbatim in every import.
 - Go version floor: `1.26`.
 - **Invariant — never mutate the source document.** Only ever read the input `.md`.
 - **Invariant — feedback is append-only.** Only `O_APPEND`; never truncate/rewrite `<doc>.feedback.jsonl`.
@@ -107,12 +107,12 @@ func Execute()                    // calls os.Exit on error
 - [ ] **Step 1: Init module + deps**
 
 ```bash
-go mod init github.com/suTerminus/marginalia
+go mod init github.com/gruesomeparty/marginalia
 go get github.com/spf13/cobra@latest
 go get github.com/yuin/goldmark@latest
 go mod tidy
 ```
-Expected: `go.mod` declares `module github.com/suTerminus/marginalia` and `go 1.26`.
+Expected: `go.mod` declares `module github.com/gruesomeparty/marginalia` and `go 1.26`.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -152,7 +152,7 @@ Expected: FAIL — `newRootCmd` undefined.
 ```go
 package main
 
-import "github.com/suTerminus/marginalia/cmd"
+import "github.com/gruesomeparty/marginalia/cmd"
 
 func main() { cmd.Execute() }
 ```
@@ -827,8 +827,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 func TestRenderSelfContained(t *testing.T) {
@@ -880,8 +880,8 @@ import (
 	"html/template"
 	"io"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 //go:embed review.html.tmpl
@@ -1101,8 +1101,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 func newTestServer(t *testing.T) (*Server, *feedback.Store, string) {
@@ -1191,8 +1191,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 // Options configures a review Server.
@@ -1261,8 +1261,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/suTerminus/marginalia/internal/feedback"
-	"github.com/suTerminus/marginalia/internal/web"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/web"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -1508,9 +1508,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
-	"github.com/suTerminus/marginalia/internal/server"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/server"
 )
 
 func buildServer(path, host string, port int, open bool, author string) (*server.Server, error) {
@@ -1770,9 +1770,9 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/suTerminus/marginalia/cmd.version={{.Version}}
-      - -X github.com/suTerminus/marginalia/cmd.commit={{.Commit}}
-      - -X github.com/suTerminus/marginalia/cmd.date={{.Date}}
+      - -X github.com/gruesomeparty/marginalia/cmd.version={{.Version}}
+      - -X github.com/gruesomeparty/marginalia/cmd.commit={{.Commit}}
+      - -X github.com/gruesomeparty/marginalia/cmd.date={{.Date}}
 archives:
   - id: default
     formats: [tar.gz]
@@ -1946,8 +1946,8 @@ git commit -m "ci: CodeQL scanning, Dependabot (actions), Renovate (gomod)"
   "name": "marginalia",
   "version": "0.1.0",
   "description": "Hand an agent-authored document to a human for block-anchored review; feedback returns as structured JSONL events.",
-  "author": { "name": "suTerminus" },
-  "homepage": "https://github.com/suTerminus/marginalia",
+  "author": { "name": "gruesomeparty" },
+  "homepage": "https://github.com/gruesomeparty/marginalia",
   "keywords": ["review", "markdown", "feedback", "annotation"]
 }
 ```
@@ -1957,7 +1957,7 @@ git commit -m "ci: CodeQL scanning, Dependabot (actions), Renovate (gomod)"
 ```json
 {
   "name": "marginalia",
-  "owner": { "name": "suTerminus", "url": "https://github.com/suTerminus" },
+  "owner": { "name": "gruesomeparty", "url": "https://github.com/gruesomeparty" },
   "plugins": [
     {
       "name": "marginalia",
@@ -2019,10 +2019,10 @@ description: Use when you need a human to review a document you produced (spec, 
 Run `marginalia version`. If it is not found, install it:
 
 ```bash
-go install github.com/suTerminus/marginalia@latest
+go install github.com/gruesomeparty/marginalia@latest
 ```
 
-(or download a release binary from https://github.com/suTerminus/marginalia/releases).
+(or download a release binary from https://github.com/gruesomeparty/marginalia/releases).
 
 ## 1. Serve the document
 
@@ -2096,7 +2096,7 @@ pipeline. File them precisely.
 ## 1. Dedupe
 
 ```bash
-gh issue list --repo suTerminus/marginalia --label agent-feedback --state all --search "<keywords>"
+gh issue list --repo gruesomeparty/marginalia --label agent-feedback --state all --search "<keywords>"
 ```
 
 If an issue already covers the gap, add a comment with your new use case instead
@@ -2107,7 +2107,7 @@ of filing a duplicate.
 Use the `agent-feedback` issue form:
 
 ```bash
-gh issue create --repo suTerminus/marginalia \
+gh issue create --repo gruesomeparty/marginalia \
   --label agent-feedback --label <category> \
   --title "<concise limitation>" \
   --body "<what you attempted (exact invocation), expected, actual/error, workaround, marginalia version, requesting context>"
@@ -2211,7 +2211,7 @@ blank_issues_enabled: true
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-repo="suTerminus/marginalia"
+repo="gruesomeparty/marginalia"
 create(){ gh label create "$1" --repo "$repo" --color "$2" --description "$3" --force; }
 create agent-feedback     "1d76db" "Filed by an agent hitting a limitation"
 create approved-for-agent "0e8a16" "Approved for automated implementation"
@@ -2228,7 +2228,7 @@ Then: `chmod +x scripts/setup-labels.sh`
 ```bash
 python3 -c "import yaml;yaml.safe_load(open('.github/ISSUE_TEMPLATE/agent-feedback.yml'))"
 ./scripts/setup-labels.sh
-gh label list --repo suTerminus/marginalia | grep agent-feedback
+gh label list --repo gruesomeparty/marginalia | grep agent-feedback
 ```
 Expected: labels created; form YAML valid.
 
@@ -2263,15 +2263,15 @@ See `PRD.md` for the full product spec.
 **Binary:**
 
 ```bash
-go install github.com/suTerminus/marginalia@latest
+go install github.com/gruesomeparty/marginalia@latest
 ```
 
-Or download a release from the [releases page](https://github.com/suTerminus/marginalia/releases).
+Or download a release from the [releases page](https://github.com/gruesomeparty/marginalia/releases).
 
 **Claude plugin:**
 
 ```
-/plugin marketplace add suTerminus/marginalia
+/plugin marketplace add gruesomeparty/marginalia
 /plugin install marginalia
 ```
 

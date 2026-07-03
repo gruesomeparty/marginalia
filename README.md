@@ -11,15 +11,21 @@ See `PRD.md` for the full product spec.
 **Binary:**
 
 ```bash
-go install github.com/suTerminus/marginalia@latest
+go install github.com/gruesomeparty/marginalia@latest
 ```
 
-Or download a release from the [releases page](https://github.com/suTerminus/marginalia/releases).
+Or download a release from the [releases page](https://github.com/gruesomeparty/marginalia/releases).
 
-**Claude plugin:**
+**Claude plugin** — add it from either marketplace, then install:
 
 ```
-/plugin marketplace add suTerminus/marginalia
+# Option A — this repo, as its own marketplace:
+/plugin marketplace add gruesomeparty/marginalia
+
+# Option B — the ghost-bazaar aggregator (all my plugins in one place):
+/plugin marketplace add gruesomeparty/ghost-bazaar
+
+# then, from whichever you added:
 /plugin install marginalia
 ```
 

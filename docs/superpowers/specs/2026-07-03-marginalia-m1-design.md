@@ -9,7 +9,7 @@
 
 ## 1. Decisions locked for this cycle
 
-- **Module:** `github.com/suTerminus/marginalia`. Repo private to start; MIT `LICENSE` added when it goes public.
+- **Module:** `github.com/gruesomeparty/marginalia`. Repo private to start; MIT `LICENSE` added when it goes public.
 - **Go:** 1.26 (toolchain available: 1.26.3).
 - **Dependency automation split:** Dependabot → GitHub Actions bumps + security updates; Renovate → Go modules (grouped, patch/minor automerge after green CI).
 - **Coverage:** self-contained threshold gate, floor **80%**, table written to the Actions job summary; plus an optional Codecov upload step that runs only when `CODECOV_TOKEN` is present.
@@ -29,7 +29,7 @@
 
 ```
 marginalia/
-  go.mod  go.sum                      module github.com/suTerminus/marginalia
+  go.mod  go.sum                      module github.com/gruesomeparty/marginalia
   main.go                             thin — calls cmd.Execute()
   cmd/
     root.go                           cobra root; wires version; SilenceUsage on runtime errors
@@ -187,10 +187,10 @@ Single `go:embed` template, server-rendered blocks + an inline `<script>window._
 
 - `.claude-plugin/plugin.json` — the plugin manifest (name `marginalia`, version, description, author). **Verify current schema against official Claude Code plugin docs before writing.**
 - `.claude-plugin/marketplace.json` — lists the `marginalia` plugin with `source` this repo, so the repo is its own marketplace.
-- `skills/review-doc/SKILL.md` — PRD §5.5 workflow: `marginalia serve <doc> --open` → tell the human the URL + the ask → watch `<doc>.feedback.jsonl` for `review_done` (fallbacks: quiescence / human says done) → read, group by block, address each event quoting `block`+`quote`, flag hash-stale → offer re-render. Includes a "binary not found → `go install github.com/suTerminus/marginalia@latest` (or download release)" preflight.
+- `skills/review-doc/SKILL.md` — PRD §5.5 workflow: `marginalia serve <doc> --open` → tell the human the URL + the ask → watch `<doc>.feedback.jsonl` for `review_done` (fallbacks: quiescence / human says done) → read, group by block, address each event quoting `block`+`quote`, flag hash-stale → offer re-render. Includes a "binary not found → `go install github.com/gruesomeparty/marginalia@latest` (or download release)" preflight.
 - `skills/request-feature/SKILL.md` — PRD §8.2 workflow: dedupe via `gh issue list --label agent-feedback` + search → file via the issue form → label `agent-feedback` + category (`format-support`/`customization`/`skill-gap`/`bug`). Guardrails: quote structure not content; ≤1 issue per limitation per session.
 - `commands/review-doc.md` — thin `/review-doc <path>` entry that invokes the review-doc skill.
-- **README** documents: install plugin (`/plugin marketplace add suTerminus/marginalia` → `/plugin install marginalia`), install binary (`go install …@latest` / release download), and quickstart (`marginalia serve README.md --open`).
+- **README** documents: install plugin (`/plugin marketplace add gruesomeparty/marginalia` → `/plugin install marginalia`), install binary (`go install …@latest` / release download), and quickstart (`marginalia serve README.md --open`).
 
 ## 12. Deferred (explicitly out of scope this cycle)
 

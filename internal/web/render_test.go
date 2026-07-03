@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 func TestRenderSelfContained(t *testing.T) {

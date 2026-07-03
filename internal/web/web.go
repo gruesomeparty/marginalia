@@ -6,8 +6,8 @@ import (
 	"html/template"
 	"io"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 //go:embed review.html.tmpl

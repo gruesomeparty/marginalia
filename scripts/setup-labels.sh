@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-repo="suTerminus/marginalia"
+repo="gruesomeparty/marginalia"
 create(){ gh label create "$1" --repo "$repo" --color "$2" --description "$3" --force; }
 create agent-feedback     "1d76db" "Filed by an agent hitting a limitation"
 create approved-for-agent "0e8a16" "Approved for automated implementation"

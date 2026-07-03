@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/suTerminus/marginalia/internal/document"
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 func newTestServer(t *testing.T) (*Server, *feedback.Store, string) {

@@ -1,6 +1,6 @@
 {
   "name": "marginalia",
-  "owner": { "name": "suTerminus" },
+  "owner": { "name": "gruesomeparty" },
   "description": "Marginalia: document review tool for agent-authored content, packaged as its own single-plugin marketplace.",
   "plugins": [
     {

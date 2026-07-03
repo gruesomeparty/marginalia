@@ -13,9 +13,9 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/suTerminus/marginalia/cmd.version={{.Version}}
-      - -X github.com/suTerminus/marginalia/cmd.commit={{.Commit}}
-      - -X github.com/suTerminus/marginalia/cmd.date={{.Date}}
+      - -X github.com/gruesomeparty/marginalia/cmd.version={{.Version}}
+      - -X github.com/gruesomeparty/marginalia/cmd.commit={{.Commit}}
+      - -X github.com/gruesomeparty/marginalia/cmd.date={{.Date}}
 archives:
   - id: default
     formats: [tar.gz]

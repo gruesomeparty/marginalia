@@ -14,10 +14,10 @@ itself — follow it whether you were invoked that way or reached it directly.
 Run `marginalia version`. If it is not found, install it:
 
 ```bash
-go install github.com/suTerminus/marginalia@latest
+go install github.com/gruesomeparty/marginalia@latest
 ```
 
-(or download a release binary from https://github.com/suTerminus/marginalia/releases).
+(or download a release binary from https://github.com/gruesomeparty/marginalia/releases).
 
 ## 1. Serve the document
 

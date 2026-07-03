@@ -1,4 +1,4 @@
-module github.com/suTerminus/marginalia
+module github.com/gruesomeparty/marginalia
 
 go 1.26.3
 

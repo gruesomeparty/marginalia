@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/suTerminus/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 func TestServeGracefulShutdown(t *testing.T) {
