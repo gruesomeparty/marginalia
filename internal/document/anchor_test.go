@@ -1,6 +1,9 @@
 package document
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSectionPathsAndOrdinals(t *testing.T) {
 	src := []byte("intro para\n\n# First\n\npara under first\n\n## Nested\n\ndeep para\n")
@@ -65,5 +68,47 @@ func TestNoHeadings(t *testing.T) {
 	doc, _ := ParseBytes("t.md", []byte("just one paragraph\n"))
 	if doc.Blocks[0].ID != "0/1" {
 		t.Errorf("id = %s, want 0/1", doc.Blocks[0].ID)
+	}
+}
+
+func TestNestedCodeBlockInBlockquote(t *testing.T) {
+	doc, err := ParseBytes("t.md", []byte("> ```\n> secret-code-content\n> ```\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := doc.Blocks[0]
+	if b.Kind != "blockquote" {
+		t.Fatalf("kind = %s, want blockquote", b.Kind)
+	}
+	if !strings.Contains(b.PlainText, "secret-code-content") {
+		t.Errorf("PlainText = %q, want it to contain %q", b.PlainText, "secret-code-content")
+	}
+	if b.Hash == "e3b0c44298fc" {
+		t.Errorf("hash = %s, want not the empty-string hash (code content was dropped)", b.Hash)
+	}
+}
+
+func TestCodeBlockUnderListItem(t *testing.T) {
+	doc, err := ParseBytes("t.md", []byte("- step one\n\n  ```\n  run-this-command\n  ```\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := doc.Blocks[0]
+	if !strings.Contains(b.PlainText, "step one") {
+		t.Errorf("PlainText = %q, want it to contain %q", b.PlainText, "step one")
+	}
+	if !strings.Contains(b.PlainText, "run-this-command") {
+		t.Errorf("PlainText = %q, want it to contain %q", b.PlainText, "run-this-command")
+	}
+}
+
+func TestNestedListTextCaptured(t *testing.T) {
+	doc, err := ParseBytes("t.md", []byte("- outer item\n  - inner item with nested-text-marker\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := doc.Blocks[0]
+	if !strings.Contains(b.PlainText, "nested-text-marker") {
+		t.Errorf("PlainText = %q, want it to contain text from nested list item %q", b.PlainText, "nested-text-marker")
 	}
 }

@@ -56,18 +56,9 @@ func kindOf(n ast.Node) string {
 	return strings.ToLower(n.Kind().String())
 }
 
-// nodeText extracts the plain text of a block node.
+// nodeText extracts the plain text of a block node, including code-block
+// content nested anywhere in the subtree (e.g. inside a blockquote or list).
 func nodeText(n ast.Node, source []byte) string {
-	switch n.Kind() {
-	case ast.KindFencedCodeBlock, ast.KindCodeBlock:
-		var sb strings.Builder
-		lines := n.Lines()
-		for i := 0; i < lines.Len(); i++ {
-			seg := lines.At(i)
-			sb.Write(seg.Value(source))
-		}
-		return sb.String()
-	}
 	var sb strings.Builder
 	_ = ast.Walk(n, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -83,6 +74,12 @@ func nodeText(n ast.Node, source []byte) string {
 			sb.Write(t.Value)
 		case *ast.AutoLink:
 			sb.Write(t.URL(source))
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			lines := node.Lines()
+			for i := 0; i < lines.Len(); i++ {
+				seg := lines.At(i)
+				sb.Write(seg.Value(source))
+			}
 		}
 		return ast.WalkContinue, nil
 	})
