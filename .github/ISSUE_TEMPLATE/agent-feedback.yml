@@ -3,6 +3,9 @@ description: A limitation an agent hit while using Marginalia (auto-routed by th
 title: "[agent-feedback] "
 labels: ["agent-feedback"]
 body:
+  - type: markdown
+    attributes:
+      value: "Do not paste private document content or secrets. Describe structure only."
   - type: input
     id: invocation
     attributes:
@@ -46,6 +49,3 @@ body:
       label: Requesting context (project/harness — structure, not content)
     validations:
       required: true
-  - type: markdown
-    attributes:
-      value: "Do not paste private document content or secrets. Describe structure only."

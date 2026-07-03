@@ -2,12 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: greenfield
+## Status: M1 shipped
 
-The repo currently contains **only `PRD.md`** — no code, no Go module, no git repo
-yet. `PRD.md` is the authoritative spec; read it before writing anything. This
-file summarizes it and flags the constraints that are easy to violate. When the
-PRD and this file disagree, the PRD wins (and update this file).
+The repo has a working Go module implementing PRD milestone **M1** — server mode
+for markdown (`serve`, block anchoring, append-only JSONL feedback,
+`review_done`) — plus full CI/CD and the installable Claude plugin (skills +
+`/marginalia:review-doc`). `PRD.md` is the authoritative spec; read it before
+writing anything. This file summarizes it and flags the constraints that are
+easy to violate. When the PRD and this file disagree, the PRD wins (and update
+this file). M2–M5 are still ahead (see Build order below).
 
 ## What Marginalia is
 
