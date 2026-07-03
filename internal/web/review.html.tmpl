@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marginalia — {{.Doc.Path}}</title>
+<style>
+:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:0 1px 3px rgba(0,0,0,.12)}
+@media (prefers-color-scheme:dark){:root{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,'Times New Roman',serif;line-height:1.6}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;gap:1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+header .count{color:var(--muted)}
+header button{margin-left:auto;font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
+main{max-width:68ch;margin:2rem auto;padding:0 2.5rem}
+h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.25}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-size:.9em}
+:not(pre)>code{background:var(--card);padding:.1em .35em;border-radius:4px;font-size:.9em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--rule);padding:.4rem .6rem}
+blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:var(--muted)}
+.block{position:relative;border-radius:6px;padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
+@media (prefers-reduced-motion:reduce){.block,.toast{transition:none}}
+.block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.block[data-count]:not([data-count="0"])::before{content:attr(data-count);position:absolute;left:-2.4rem;top:.3rem;min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--marker);color:#000;border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
+.composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:.8rem;box-shadow:var(--shadow);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem}
+.composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
+.composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:999px;background:transparent;color:var(--fg);cursor:pointer;font:inherit}
+.composer .chip[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.composer textarea{width:100%;min-height:4rem;font:inherit;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg);resize:vertical}
+.composer .actions{display:flex;gap:.5rem;margin-top:.5rem}
+.composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:6px;cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+.composer .actions .save{background:var(--accent);color:#fff;border-color:var(--accent)}
+.existing{margin:.3rem 0 .6rem;font-family:-apple-system,sans-serif;font-size:.82rem}
+.existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:0 6px 6px 0}
+.existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
+.existing .item.stale{opacity:.65}
+.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.5rem 1rem;border-radius:6px;font-family:sans-serif;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <strong>{{.Doc.Path}}</strong>
+  <span class="count" id="count">0 comments</span>
+  <button id="done" type="button">Done</button>
+</header>
+<main id="doc">
+  {{range .Doc.Blocks}}
+  <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
+  {{end}}
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+window.__MARGINALIA__ = {{.DataJSON}};
+(function(){
+  "use strict";
+  var data = window.__MARGINALIA__;
+  var author = data.author || "reviewer";
+  var TYPES = [["comment","Comment"],["suggest_edit","Suggest edit"],["question","Question"],["approve","Approve"],["reject","Reject"]];
+  var hashOf = {}; data.doc.blocks.forEach(function(b){ hashOf[b.id]=b.hash; });
+  var blockOf = {}; data.doc.blocks.forEach(function(b){ blockOf[b.id]=b; });
+  var byBlock = {};
+  data.events.filter(function(e){return e.type!=="review_done";}).forEach(function(e){ (byBlock[e.block]=byBlock[e.block]||[]).push(e); });
+
+  function count(){
+    var n=0; Object.keys(byBlock).forEach(function(k){ n+=byBlock[k].length; });
+    document.getElementById("count").textContent = n+" comment"+(n===1?"":"s");
+  }
+  function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
+  function marker(el){ el.dataset.count = (byBlock[el.dataset.block]||[]).length; }
+  function renderExisting(el){
+    var id=el.dataset.block, list=byBlock[id]||[];
+    var box=el.nextElementSibling;
+    if(box && box.classList.contains("existing")) box.remove();
+    if(!list.length) return;
+    box=document.createElement("div"); box.className="existing";
+    list.forEach(function(e){
+      var item=document.createElement("div"); item.className="item";
+      if(e.hash && hashOf[id] && e.hash!==hashOf[id]) item.classList.add("stale");
+      var t=document.createElement("span"); t.className="type"; t.textContent=e.type.replace("_"," ");
+      var body=document.createElement("div"); body.textContent=e.text||"";
+      item.appendChild(t); item.appendChild(body); box.appendChild(item);
+    });
+    el.after(box);
+  }
+  function closeComposer(){ var c=document.querySelector(".composer"); if(c) c.remove(); }
+  function openComposer(el){
+    closeComposer();
+    var id=el.dataset.block, type="comment";
+    var c=document.createElement("div"); c.className="composer";
+    var chips=document.createElement("div"); chips.className="chips";
+    var ta=document.createElement("textarea"); ta.placeholder="Your note…";
+    TYPES.forEach(function(pair){
+      var b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=pair[1];
+      b.setAttribute("aria-pressed", pair[0]===type?"true":"false");
+      b.onclick=function(){
+        type=pair[0];
+        chips.querySelectorAll(".chip").forEach(function(x){x.setAttribute("aria-pressed","false");});
+        b.setAttribute("aria-pressed","true");
+        if(pair[0]==="suggest_edit" && !ta.value){ var blk=blockOf[id]; ta.value=blk?blk.text:""; }
+      };
+      chips.appendChild(b);
+    });
+    var actions=document.createElement("div"); actions.className="actions";
+    var save=document.createElement("button"); save.className="save"; save.type="button"; save.textContent="Save";
+    var cancel=document.createElement("button"); cancel.type="button"; cancel.textContent="Cancel"; cancel.onclick=closeComposer;
+    save.onclick=function(){
+      var text=ta.value.trim();
+      if(!text && type!=="approve" && type!=="reject"){ ta.focus(); return; }
+      var blk=blockOf[id]||{};
+      var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:type,text:text,author:author};
+      fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+        .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
+        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push(saved); marker(el); renderExisting(el); count(); closeComposer(); toast("Saved"); })
+        .catch(function(err){ toast("Save failed: "+err.message); });
+    };
+    actions.appendChild(save); actions.appendChild(cancel);
+    c.appendChild(chips); c.appendChild(ta); c.appendChild(actions);
+    el.after(c); ta.focus();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".block"), function(el){
+    marker(el); renderExisting(el);
+    el.addEventListener("click", function(e){ if(e.target.closest(".composer,.existing")) return; openComposer(el); });
+    el.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); openComposer(el); } });
+  });
+  count();
+  document.getElementById("done").onclick=function(){
+    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
+      .then(function(res){ if(!res.ok) throw new Error("failed"); toast("Review marked done — you can close this tab."); })
+      .catch(function(err){ toast("Failed: "+err.message); });
+  };
+})();
+</script>
+</body>
+</html>
