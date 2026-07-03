@@ -33,11 +33,15 @@ func (s *Store) Append(e Event) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	if _, err := f.Write(append(line, '\n')); err != nil {
+		_ = f.Close()
 		return err
 	}
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // Load reads all events in chronological (file) order.

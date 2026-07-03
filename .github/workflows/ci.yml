@@ -1,0 +1,50 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+      - name: Test
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Coverage gate + summary
+        if: matrix.os == 'ubuntu-latest'
+        run: ./scripts/coverage.sh 80
+      - name: Upload to Codecov
+        if: matrix.os == 'ubuntu-latest' && env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v7
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+      - run: go build ./...

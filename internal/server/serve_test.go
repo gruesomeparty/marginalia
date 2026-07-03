@@ -31,7 +31,7 @@ func TestServeGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET / status = %d", resp.StatusCode)
 	}
