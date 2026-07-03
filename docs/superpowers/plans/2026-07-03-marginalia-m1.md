@@ -374,11 +374,11 @@ package document
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
 
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
-	"github.com/yuin/goldmark/text"
 )
 
 func normalize(s string) string { return strings.Join(strings.Fields(s), " ") }
@@ -483,7 +483,7 @@ func (s *sectioner) next(n ast.Node) (section string, ordinal int) {
 		}
 		parts := make([]string, 0, lvl)
 		for i := 1; i <= lvl; i++ {
-			parts = append(parts, itoa(s.counters[i]))
+			parts = append(parts, strconv.Itoa(s.counters[i]))
 		}
 		s.section = strings.Join(parts, ".")
 		s.ordinal = 0
@@ -492,23 +492,7 @@ func (s *sectioner) next(n ast.Node) (section string, ordinal int) {
 	return s.section, s.ordinal
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}
-
-var _ = text.NewReader // keep import stable across edits
 ```
-(Remove the `text.NewReader` keep-alive line once `parse.go` imports it.)
 
 - [ ] **Step 5: Implement `parse.go`**
 
@@ -563,7 +547,6 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 	return doc, nil
 }
 ```
-Then delete the `var _ = text.NewReader` keep-alive line from `anchor.go` and its `text` import.
 
 - [ ] **Step 6: Run tests**
 
@@ -1438,45 +1421,41 @@ func TestSupportedExtensionsPass(t *testing.T) {
 package cmd
 
 import (
-	"context"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-func TestServeRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	doc := filepath.Join(dir, "d.md")
+func TestBuildServerValidDoc(t *testing.T) {
+	doc := filepath.Join(t.TempDir(), "d.md")
 	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Bind to an ephemeral port via serve internals.
 	srv, err := buildServer(doc, "127.0.0.1", 0, false, "tester")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("buildServer: %v", err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- srv.Run(ctx) }()
-	defer func() { cancel(); <-done }()
-	// Give it a moment to bind, then hit the API on the known port.
-	time.Sleep(50 * time.Millisecond)
-	_ = doc
-	// This test asserts buildServer wires a parseable doc + store.
-	// Endpoint behavior is covered in internal/server; here we assert no error path.
 	if srv == nil {
-		t.Fatal("nil server")
+		t.Fatal("nil server for valid doc")
 	}
-	_ = http.MethodGet
-	_ = io.Discard
-	_ = strings.TrimSpace
+}
+
+func TestBuildServerUnsupportedExtension(t *testing.T) {
+	_, err := buildServer("notes.toml", "127.0.0.1", 0, false, "tester")
+	if err == nil || !strings.Contains(err.Error(), "request-feature") {
+		t.Fatalf("want advertise-on-error, got %v", err)
+	}
+}
+
+func TestBuildServerMissingFile(t *testing.T) {
+	_, err := buildServer(filepath.Join(t.TempDir(), "nope.md"), "127.0.0.1", 0, false, "tester")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
 }
 ```
-> Note: `serve` end-to-end HTTP is already covered by `internal/server` tests. This task's test asserts the CLI wiring via a `buildServer` helper so the command is unit-testable without binding a fixed port.
+> Note: end-to-end HTTP behavior is covered by `internal/server` tests. This task verifies the CLI wiring in `buildServer` — valid doc, advertise-on-error for unsupported input, and missing-file handling — without binding a port. The full serve round-trip is exercised manually in Step 6.
 
 - [ ] **Step 2: Run to verify failure**
 
