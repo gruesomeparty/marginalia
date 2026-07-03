@@ -1,0 +1,51 @@
+name: Agent feedback
+description: A limitation an agent hit while using Marginalia (auto-routed by the request-feature skill).
+title: "[agent-feedback] "
+labels: ["agent-feedback"]
+body:
+  - type: input
+    id: invocation
+    attributes:
+      label: What was attempted (exact invocation)
+      placeholder: marginalia serve notes.toml --open
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / error
+    validations:
+      required: true
+  - type: input
+    id: workaround
+    attributes:
+      label: Workaround used (if any)
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options: [format-support, customization, skill-gap, bug]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Marginalia version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: context
+    attributes:
+      label: Requesting context (project/harness — structure, not content)
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "Do not paste private document content or secrets. Describe structure only."
