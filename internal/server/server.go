@@ -48,6 +48,11 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return s.Serve(ctx, ln)
+}
+
+// Serve runs the HTTP server on ln until ctx is cancelled, then shuts down gracefully.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	httpSrv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()

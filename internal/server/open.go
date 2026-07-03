@@ -6,13 +6,22 @@ import (
 	"runtime"
 )
 
-func openBrowser(url string) error {
-	switch runtime.GOOS {
+// browserCommand returns the command + args to open url on the given GOOS.
+func browserCommand(goos, url string) (string, []string, error) {
+	switch goos {
 	case "darwin":
-		return exec.Command("open", url).Start()
+		return "open", []string{url}, nil
 	case "linux":
-		return exec.Command("xdg-open", url).Start()
+		return "xdg-open", []string{url}, nil
 	default:
-		return fmt.Errorf("--open not supported on %s", runtime.GOOS)
+		return "", nil, fmt.Errorf("--open not supported on %s", goos)
 	}
+}
+
+func openBrowser(url string) error {
+	name, args, err := browserCommand(runtime.GOOS, url)
+	if err != nil {
+		return err
+	}
+	return exec.Command(name, args...).Start()
 }
