@@ -1,0 +1,28 @@
+version: 2
+project_name: marginalia
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: marginalia
+    main: .
+    binary: marginalia
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/suTerminus/marginalia/cmd.version={{.Version}}
+      - -X github.com/suTerminus/marginalia/cmd.commit={{.Commit}}
+      - -X github.com/suTerminus/marginalia/cmd.date={{.Date}}
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+changelog:
+  disable: true
+release:
+  draft: false
