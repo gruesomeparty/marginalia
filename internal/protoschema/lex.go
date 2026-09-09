@@ -21,6 +21,12 @@ type token struct {
 	trail string // comment following this token on the same line
 }
 
+// blockCommentEnd reports whether src[i:] opens the `*/` closing a block
+// comment.
+func blockCommentEnd(src []byte, i int) bool {
+	return src[i] == '*' && i+1 < len(src) && src[i+1] == '/'
+}
+
 func isIdentByte(c byte) bool {
 	return c == '_' || c == '.' || c == '-' || c == '+' ||
 		(c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
@@ -54,7 +60,7 @@ func lex(src []byte) []token {
 		case c == '/' && i+1 < len(src) && src[i+1] == '*':
 			start, startLine := i, line
 			i += 2
-			for i < len(src) && !(src[i] == '*' && i+1 < len(src) && src[i+1] == '/') {
+			for i < len(src) && !blockCommentEnd(src, i) {
 				if src[i] == '\n' {
 					line++
 				}
