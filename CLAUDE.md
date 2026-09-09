@@ -2,13 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: M1 shipped
+## Status: M1 shipped; M3 in progress
 
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
-`/marginalia:review-doc`). `PRD.md` is the authoritative spec; read it before
-writing anything. This file summarizes it and flags the constraints that are
+`/marginalia:review-doc`). **M3** has started: `.proto` schemas render as a
+folding tree anchored by schema path (issue #15). `PRD.md` is the authoritative
+spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
 this file). M2–M5 are still ahead (see Build order below).
 
@@ -25,6 +26,11 @@ users are agents, not humans.
 - **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
 - HTML template embedded via `go:embed`; one template feeds both server and static modes.
 - Markdown via **goldmark** + an AST walker that assigns each block an ID + hash at render time.
+- Tree inputs (`.proto` now, JSON/YAML/TOML next) share `internal/document`'s
+  `treeBuilder`: pre-ordered flat blocks carrying `Parent`/`Level`, which the
+  one template renders as an indented, foldable list. `.proto` is parsed by
+  `internal/protoschema` — a tolerant, structural proto3 parser (no protoc, no
+  import resolution, unknown constructs preserved as blocks).
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
@@ -56,7 +62,9 @@ These are the design's failure modes — the PRD calls each one out explicitly:
 ## Block anchoring & event schema (PRD §5.2–5.3)
 
 Each block carries `{ block: "5.3/2" (section path + ordinal), quote: first ~90
-chars, hash: sha256(normalized text)[:12] }`. `block` re-locates cheaply, `quote`
+chars, hash: sha256(normalized text)[:12] }`. Tree documents keep the same
+schema and only derive `block` differently — the node's own path
+(`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
 `suggest_edit` (text = replacement), `question`, `approve`, `reject`. A **Done**

@@ -1,6 +1,6 @@
 ---
 name: review-doc
-description: Use when you need a human to review a document you produced (spec, plan, PRD, ADR, report) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
+description: Use when you need a human to review a document you produced (spec, plan, PRD, ADR, report, .proto schema) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
 ---
 
 # Reviewing a document with Marginalia
@@ -29,6 +29,13 @@ This prints the URL and the feedback file path (`<path>.feedback.jsonl`). The
 server writes every comment to that file the instant it is saved — there is no
 export step.
 
+Supported inputs: markdown (`.md`, `.markdown`) and proto3 schemas (`.proto`).
+Markdown blocks are anchored `section/ordinal` (`5.3/2`); proto declarations are
+anchored by schema path (`CreateOrderRequest/customer_id`,
+`CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`,
+`Status/STATUS_UNSPECIFIED`), which is what makes field-level feedback on an API
+contract mechanically applicable.
+
 ## 2. Tell the human what you need
 
 State the URL and exactly what you want reviewed ("I need your take on §3 and the
@@ -52,6 +59,10 @@ Read the JSONL, group events by `block`, and address every one explicitly.
 
 > §5.3/2 ("A registry-backed contract mirroring…") — you asked to simplify this.
 > Done: …
+
+For a proto review, `block` names the declaration directly — quote it as the
+human wrote it (`CreateOrderRequest/customer_id`), and apply a `suggest_edit` by
+replacing that declaration's own line, not the file's.
 
 Event types: `comment`, `suggest_edit` (the `text` is the proposed replacement),
 `question`, `approve`, `reject`. If a `hash` no longer matches the current block

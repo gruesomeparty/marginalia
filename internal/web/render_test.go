@@ -40,3 +40,39 @@ func TestRenderHydratesEvents(t *testing.T) {
 		t.Error("existing event not embedded")
 	}
 }
+
+func TestRenderTreeDocument(t *testing.T) {
+	doc, err := document.ParseBytes("api.proto", []byte("message M {\n  string a = 1;\n}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, doc, nil, "berkay"); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`<main id="doc" class="tree">`,
+		`id="fold"`,
+		`data-block="M"`,
+		`data-kids="1"`,
+		`data-block="M/a"`,
+		`data-level="1"`,
+		`data-parent="M"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tree output missing %q", want)
+		}
+	}
+}
+
+func TestRenderMarkdownHasNoTreeChrome(t *testing.T) {
+	doc, _ := document.ParseBytes("d.md", []byte("# Title\n"))
+	var buf bytes.Buffer
+	if err := Render(&buf, doc, nil, "berkay"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), `id="fold"`) {
+		t.Error("prose documents should not get the fold control")
+	}
+}

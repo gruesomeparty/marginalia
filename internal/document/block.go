@@ -1,20 +1,31 @@
 package document
 
-// Block is a commentable top-level element of a document.
+// Block is a commentable element of a document: a markdown block-level
+// element, or one node of a tree-shaped document (a proto declaration, a
+// JSON/YAML/TOML node).
 type Block struct {
-	ID        string `json:"id"`
-	Section   string `json:"section"`
-	Ordinal   int    `json:"ordinal"`
-	Kind      string `json:"kind"`
-	Level     int    `json:"level"`
-	Quote     string `json:"quote"`
-	Hash      string `json:"hash"`
-	HTML      string `json:"html"`
-	PlainText string `json:"text"`
+	ID      string `json:"id"`
+	Section string `json:"section"`
+	Ordinal int    `json:"ordinal"`
+	Kind    string `json:"kind"`
+	Level   int    `json:"level"`
+	Quote   string `json:"quote"`
+	Hash    string `json:"hash"`
+	HTML    string `json:"html"`
+	// Parent and HasChildren are set for tree documents only; they drive
+	// indentation and the collapse controls.
+	Parent      string `json:"parent,omitempty"`
+	HasChildren bool   `json:"has_children,omitempty"`
+	PlainText   string `json:"text"`
 }
 
 // Document is a parsed source document.
 type Document struct {
 	Path   string  `json:"path"`
+	Format string  `json:"format"`
 	Blocks []Block `json:"blocks"`
 }
+
+// IsTree reports whether the document renders as an indented, collapsible
+// tree rather than as prose.
+func (d *Document) IsTree() bool { return d.Format != FormatMarkdown }
