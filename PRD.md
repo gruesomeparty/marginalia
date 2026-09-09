@@ -72,8 +72,10 @@ Optionally re-renders with resolution states for a second pass.
 
 - **v1 input: Markdown.** Every block-level element (heading, paragraph,
   list, code fence, table, blockquote) becomes a commentable block.
-- **v2 input: JSON/YAML.** Rendered as a collapsible tree; every node path is
-  a commentable block (`$.spec.storage.paths[2]`).
+- **v2 input: JSON/YAML/TOML.** Rendered as a collapsible tree; every node
+  path is a commentable block (`$.spec.storage.paths[2]`). Key order is the
+  author's, not the decoder's, and YAML comments render with the node they
+  document.
 - **v2 input: `.proto` schemas.** The same collapsible tree, walked over the
   schema's own declarations instead of a data tree; every declaration is a
   commentable block anchored by dotted schema path
@@ -196,7 +198,7 @@ Ships with a `SKILL.md` so agents use it uniformly:
 ## 8. Agent feedback loop (the tool improves itself)
 
 Marginalia's primary users are agents. When an agent hits a limitation — an
-unsupported input format (TOML), a missing flag, a customization that doesn't
+unsupported input format (reStructuredText, say), a missing flag, a customization that doesn't
 exist — that moment is the feature-request pipeline. The repo ships the
 tooling to capture it:
 
@@ -204,8 +206,9 @@ tooling to capture it:
 
 - The **binary advertises the path in its error messages**: unsupported input
   or unknown flags exit with a message like
-  `TOML is not supported yet — agents: invoke the marginalia:request-feature
-  skill to file it`, including the tool version. The agent never has to know
+  `.rst is not supported yet — agents: invoke the marginalia:request-feature
+  skill to file it`, including the tool version. (TOML was the original
+  example; the loop closed it — issue #2 shipped it.) The agent never has to know
   in advance that the channel exists; the failure itself routes them there.
 - The main `review-doc` SKILL.md ends with the same pointer for softer gaps
   ("works, but I needed X").

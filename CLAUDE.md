@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
-`/marginalia:review-doc`). **M3** has started: `.proto` schemas render as a
-folding tree anchored by schema path (issue #15). `PRD.md` is the authoritative
-spec; read it before writing anything. This file summarizes it and flags the constraints that are
+`/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
+JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+`PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
 this file). M2–M5 are still ahead (see Build order below).
 
@@ -26,11 +26,16 @@ users are agents, not humans.
 - **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
 - HTML template embedded via `go:embed`; one template feeds both server and static modes.
 - Markdown via **goldmark** + an AST walker that assigns each block an ID + hash at render time.
-- Tree inputs (`.proto` now, JSON/YAML/TOML next) share `internal/document`'s
-  `treeBuilder`: pre-ordered flat blocks carrying `Parent`/`Level`, which the
-  one template renders as an indented, foldable list. `.proto` is parsed by
+- Tree inputs share `internal/document`'s `treeBuilder`: pre-ordered flat
+  blocks carrying `Parent`/`Level`/`HasChildren`, which the one template
+  renders as an indented, foldable list (depth is a CSS variable per
+  `data-level`, so indentation needs no script). `.proto` is parsed by
   `internal/protoschema` — a tolerant, structural proto3 parser (no protoc, no
-  import resolution, unknown constructs preserved as blocks).
+  import resolution, unknown constructs preserved as blocks). JSON/YAML/TOML
+  parse into `dataNode` (`datatree.go`) and share path derivation, rendering
+  and anchoring; only the decoders differ. Key order is always the author's:
+  JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
+  `MetaData.Keys()`.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
@@ -82,8 +87,9 @@ document *structure*, never *content* — no secrets or private text in issues.
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
-feedback scaffold) → M2 revision loop (hash-stale, resolution view) → M3
-JSON/YAML trees → M4 automated implementation pipeline → M5 static share mode.
+feedback scaffold) → M2 revision loop (hash-stale, resolution view) → **M3
+trees: `.proto`, JSON/YAML/TOML — done** → M4 automated implementation pipeline
+→ M5 static share mode.
 
 ## Commands
 

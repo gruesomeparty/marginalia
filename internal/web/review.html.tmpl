@@ -38,8 +38,12 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:0 6px 6px 0}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
 .existing .item.stale{opacity:.65}
-main.tree{max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
-main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem}
+main.tree{--step:1.25rem;max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
+main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
+/* Depth as a variable so indentation needs no inline styles and no script. */
+main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:2}main.tree .block[data-level="3"]{--lvl:3}main.tree .block[data-level="4"]{--lvl:4}main.tree .block[data-level="5"]{--lvl:5}main.tree .block[data-level="6"]{--lvl:6}main.tree .block[data-level="7"]{--lvl:7}main.tree .block[data-level="8"]{--lvl:8}main.tree .block[data-level="9"]{--lvl:9}main.tree .block[data-level="10"]{--lvl:10}main.tree .block[data-level="11"]{--lvl:11}main.tree .block[data-level="12"]{--lvl:12}main.tree .block[data-level="13"]{--lvl:13}main.tree .block[data-level="14"]{--lvl:14}main.tree .block[data-level="15"]{--lvl:15}main.tree .block[data-level="16"]{--lvl:16}main.tree .block[data-level="17"]{--lvl:17}main.tree .block[data-level="18"]{--lvl:18}main.tree .block[data-level="19"]{--lvl:19}main.tree .block[data-level="20"]{--lvl:20}main.tree .block[data-level="21"]{--lvl:21}main.tree .block[data-level="22"]{--lvl:22}main.tree .block[data-level="23"]{--lvl:23}main.tree .block[data-level="24"]{--lvl:24}
+/* Deep trees on a phone: tighten the indent step rather than scroll sideways. */
+@media (max-width:640px){main.tree{--step:.7rem;font-size:.82rem}}
 main.tree .body{flex:1;min-width:0}
 main.tree .cmt{display:block;color:var(--muted);font-style:italic;overflow-wrap:break-word}
 main.tree .body>code{background:none;padding:0;font-size:1em;white-space:pre-wrap;overflow-wrap:break-word}
@@ -177,7 +181,6 @@ window.__MARGINALIA__ = {{.DataJSON}};
     c.setAttribute("aria-label", (open ? "Fold " : "Unfold ") + el.dataset.block);
   }
   function decorateTree(el){
-    el.style.paddingLeft = (0.5 + 1.25 * (+el.dataset.level || 0)) + "rem";
     var body = el.firstElementChild;
     var c = document.createElement("button");
     c.type = "button"; c.className = "caret"; c.tabIndex = -1;

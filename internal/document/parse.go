@@ -16,6 +16,9 @@ import (
 const (
 	FormatMarkdown = "markdown"
 	FormatProto    = "proto"
+	FormatJSON     = "json"
+	FormatYAML     = "yaml"
+	FormatTOML     = "toml"
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -29,6 +32,12 @@ func FormatFor(path string) string {
 		return FormatMarkdown
 	case ".proto":
 		return FormatProto
+	case ".json":
+		return FormatJSON
+	case ".yaml", ".yml":
+		return FormatYAML
+	case ".toml":
+		return FormatTOML
 	}
 	return ""
 }
@@ -51,6 +60,12 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseMarkdown(path, src)
 	case FormatProto:
 		return parseProto(path, src)
+	case FormatJSON:
+		return parseJSON(path, src)
+	case FormatYAML:
+		return parseYAML(path, src)
+	case FormatTOML:
+		return parseTOML(path, src)
 	}
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }

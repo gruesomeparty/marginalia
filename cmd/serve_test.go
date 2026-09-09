@@ -23,7 +23,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 }
 
 func TestBuildServerUnsupportedExtension(t *testing.T) {
-	_, err := buildServer("notes.toml", "127.0.0.1", 0, false, "tester")
+	_, err := buildServer("notes.rst", "127.0.0.1", 0, false, "tester")
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want advertise-on-error, got %v", err)
 	}
@@ -49,7 +49,7 @@ func TestDefaultAuthor(t *testing.T) {
 
 func TestServeCommandUnsupportedExtension(t *testing.T) {
 	root := newRootCmd()
-	root.SetArgs([]string{"serve", "notes.toml"})
+	root.SetArgs([]string{"serve", "notes.rst"})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	err := root.Execute()

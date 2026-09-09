@@ -1,9 +1,9 @@
 # Marginalia
 
-A document-review tool an agent hands to a human. It renders a markdown file or a
-`.proto` schema as a readable page, collects inline comments anchored to blocks,
-and writes them back as append-only JSONL feedback events the agent consumes
-directly.
+A document-review tool an agent hands to a human. It renders a markdown file, a
+`.proto` schema, or a JSON/YAML/TOML tree as a readable page, collects inline
+comments anchored to blocks, and writes them back as append-only JSONL feedback
+events the agent consumes directly.
 
 See `PRD.md` for the full product spec.
 
@@ -48,12 +48,20 @@ is no export step.
 |---|---|
 | `.md`, `.markdown` | `section/ordinal` — `5.3/2` |
 | `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
+| `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
 
-Proto files render as a folding tree: every declaration — message, field,
-`oneof` and its members, enum value, rpc, `reserved` range, option — is its own
-commentable block, so `reject` on "field 4 was reused" and `suggest_edit` on a
-rename land on that exact field. Parsing is structural, not semantic: a schema
-whose imports aren't on disk, or that doesn't compile yet, still reviews fine.
+Everything but markdown renders as a folding tree, one commentable block per
+node, indented by depth, with **Collapse all** for a big file.
+
+- **`.proto`**: every declaration — message, field, `oneof` and its members,
+  enum value, rpc, `reserved` range, option — is its own block, so `reject` on
+  "field 4 was reused" and `suggest_edit` on a rename land on that exact field.
+  Parsing is structural, not semantic: a schema whose imports aren't on disk, or
+  that doesn't compile yet, still reviews fine.
+- **`.json` / `.yaml` / `.toml`**: keys keep the order the author wrote them,
+  scalars show their type (`port: "8080"` reads differently from `port: 8080`,
+  which is the whole point of reviewing a config), and YAML comments render with
+  the node they document.
 
 ## How it works
 
