@@ -339,13 +339,3 @@ func cleanComment(s string) string {
 	}
 	return normalizeSpace(strings.Join(out, " "))
 }
-
-func joinComments(parts ...string) string {
-	var kept []string
-	for _, p := range parts {
-		if p != "" {
-			kept = append(kept, p)
-		}
-	}
-	return strings.Join(kept, " ")
-}
