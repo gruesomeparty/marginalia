@@ -74,6 +74,12 @@ Optionally re-renders with resolution states for a second pass.
   list, code fence, table, blockquote) becomes a commentable block.
 - **v2 input: JSON/YAML.** Rendered as a collapsible tree; every node path is
   a commentable block (`$.spec.storage.paths[2]`).
+- **v2 input: `.proto` schemas.** The same collapsible tree, walked over the
+  schema's own declarations instead of a data tree; every declaration is a
+  commentable block anchored by dotted schema path
+  (`CreateOrderRequest/customer_id`, `OrderService/CreateOrder`). Parsing is
+  structural, not semantic — a file that does not compile, or whose imports
+  are absent, still renders.
 - Readable defaults: ~68ch column, serif body, sans headings, mono code,
   system fonts only (no webfont dependency), responsive down to phone width.
 - The page is fully self-contained (inline CSS/JS) in both modes — static
@@ -247,7 +253,8 @@ approved queue.
    issue form, labels, advertise-on-error messages.
 2. **M2 — revision loop.** Hash-stale detection, resolution view, re-render
    with prior comments displayed.
-3. **M3 — JSON/YAML trees.** Node-path anchoring, collapsible rendering.
+3. **M3 — trees.** Node-path anchoring, collapsible rendering: `.proto`
+   schemas, then JSON/YAML/TOML data.
 4. **M4 — automated implementation.** The `approved-for-agent` pipeline:
    agent picks up triaged issues, implements, opens PRs.
 5. **M5 — share mode.** Static `export` + `import` for handing a review page

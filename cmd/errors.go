@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/gruesomeparty/marginalia/internal/document"
 )
 
-var supportedExts = map[string]bool{".md": true, ".markdown": true}
-
 func checkSupported(path string) error {
-	ext := strings.ToLower(filepath.Ext(path))
-	if !supportedExts[ext] {
-		return unsupportedInputError(ext)
+	if document.FormatFor(path) == "" {
+		return unsupportedInputError(strings.ToLower(filepath.Ext(path)))
 	}
 	return nil
 }

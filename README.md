@@ -1,8 +1,9 @@
 # Marginalia
 
-A document-review tool an agent hands to a human. It renders a markdown file as a
-readable page, collects inline comments anchored to blocks, and writes them back
-as append-only JSONL feedback events the agent consumes directly.
+A document-review tool an agent hands to a human. It renders a markdown file or a
+`.proto` schema as a readable page, collects inline comments anchored to blocks,
+and writes them back as append-only JSONL feedback events the agent consumes
+directly.
 
 See `PRD.md` for the full product spec.
 
@@ -41,11 +42,24 @@ Open the URL, click any block to comment, hit **Done** when finished. Every
 comment is written to `README.md.feedback.jsonl` the instant it is saved — there
 is no export step.
 
+## Supported inputs
+
+| Input | Block ID |
+|---|---|
+| `.md`, `.markdown` | `section/ordinal` — `5.3/2` |
+| `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
+
+Proto files render as a folding tree: every declaration — message, field,
+`oneof` and its members, enum value, rpc, `reserved` range, option — is its own
+commentable block, so `reject` on "field 4 was reused" and `suggest_edit` on a
+rename land on that exact field. Parsing is structural, not semantic: a schema
+whose imports aren't on disk, or that doesn't compile yet, still reviews fine.
+
 ## How it works
 
-- Each block gets a stable ID (`section/ordinal`, e.g. `5.3/2`), a ~90-char
-  quote, and a content hash — so feedback re-anchors on re-render and stale
-  comments are flagged.
+- Each block gets a stable ID (`section/ordinal` for prose, the node's own
+  schema path for trees), a ~90-char quote, and a content hash — so feedback
+  re-anchors on re-render and stale comments are flagged.
 - Feedback events (`comment`, `suggest_edit`, `question`, `approve`, `reject`,
   `review_done`) are append-only JSONL beside the document.
 - The page is fully self-contained (inline CSS/JS, system fonts, no external
