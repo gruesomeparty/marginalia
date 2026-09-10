@@ -39,6 +39,8 @@ type Page struct {
 	Docs       []NavDoc // the review set — one entry means no navigation tree
 	Nested     bool     // group the tree by directory (a discovered set)
 	SetDone    bool     // every document already carries a review_done
+	Watch      bool     // the server re-parses on change: let the page notice
+	Revision   uint64   // the re-parse this render was made from
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -64,6 +66,8 @@ type payload struct {
 	Events     []feedback.Event    `json:"events"`
 	Resolution feedback.Resolution `json:"resolution"`
 	Author     string              `json:"author"`
+	Watch      bool                `json:"watch"`
+	Revision   uint64              `json:"revision"`
 }
 
 // project reduces a document to what the client needs. Kinds, levels and
@@ -115,7 +119,7 @@ func Render(w io.Writer, p Page) error {
 	if events == nil {
 		events = []feedback.Event{}
 	}
-	raw, err := json.Marshal(payload{Doc: project(p.Doc), Events: events, Resolution: p.Resolution, Author: p.Author})
+	raw, err := json.Marshal(payload{Doc: project(p.Doc), Events: events, Resolution: p.Resolution, Author: p.Author, Watch: p.Watch, Revision: p.Revision})
 	if err != nil {
 		return err
 	}

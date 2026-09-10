@@ -13,7 +13,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := buildServer([]string{doc}, "127.0.0.1", 0, false, "tester")
+	srv, err := buildServer([]string{doc}, serveOptions{Host: "127.0.0.1", Author: "tester"})
 	if err != nil {
 		t.Fatalf("buildServer: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 }
 
 func TestBuildServerUnsupportedExtension(t *testing.T) {
-	_, err := buildServer([]string{write(t, "notes.rst")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{write(t, "notes.rst")}, serveOptions{Host: "127.0.0.1", Author: "tester"})
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want advertise-on-error, got %v", err)
 	}
@@ -33,14 +33,14 @@ func TestBuildServerUnsupportedExtension(t *testing.T) {
 // dressed up as one, or the feedback loop fills with requests for files that
 // never existed.
 func TestBuildServerMissingFileIsNotAFeatureRequest(t *testing.T) {
-	_, err := buildServer([]string{filepath.Join(t.TempDir(), "gone.rst")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "gone.rst")}, serveOptions{Host: "127.0.0.1", Author: "tester"})
 	if err == nil || strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want a plain not-found error, got %v", err)
 	}
 }
 
 func TestBuildServerMissingFile(t *testing.T) {
-	_, err := buildServer([]string{filepath.Join(t.TempDir(), "nope.md")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "nope.md")}, serveOptions{Host: "127.0.0.1", Author: "tester"})
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}

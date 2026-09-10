@@ -48,6 +48,16 @@ users are agents, not humans.
   attributes, and the rendered HTML is already in the DOM. Render into a buffer
   before writing: once bytes are on the wire the status is sent, and half a
   document under a 200 is worse than an honest 500.
+- `serve --watch` re-parses a document when its file changes (issue #7):
+  `internal/server/watch.go` polls size+mtime every 500ms — deliberately not
+  fsnotify, which loses the watch when an editor saves by renaming a temp file
+  over the original — swaps the parse behind `Server.mu`, and bumps
+  `Server.Revision()`. Baselines are captured in `New()` so a save between
+  startup and the first tick is still caught. An unreadable or unparseable file
+  keeps the last good render rather than blanking the page. `GET /api/revision`
+  and the payload's `revision` let the page notice it has been outrun; it shows
+  a reload prompt while a composer is open and auto-reloads only when nothing
+  is in progress. Every handler reads documents through `s.docOf(entry)`.
 - `Serve` waits for the shutdown drain before returning, so a comment saved as
   the reviewer closes the tab reaches disk before the process exits. POSTed
   events are capped (`maxFeedbackBody`) and answered with 413 past it.

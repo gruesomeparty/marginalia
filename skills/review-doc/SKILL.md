@@ -108,7 +108,9 @@ with the human before acting.
 
 ## 5. Revise and, if needed, re-review
 
-If you change the document, offer another `marginalia serve` pass. On the second
+If you change the document, offer another `marginalia serve` pass — or serve it
+with `--watch` in the first place, and your edits appear in the reviewer's page
+(with prior notes on changed blocks flagged stale) without a restart. On the second
 pass, read the materialized view rather than replaying the raw log:
 
 ```bash

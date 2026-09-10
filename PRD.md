@@ -302,6 +302,12 @@ default.
   replacement text verbatim when hash still matches)? Leaning yes; the
   resolution view now reports exactly that condition (a non-stale
   `suggest_edit`), so the remaining question is only who applies it (#6).
-- Watch mode (`serve --watch`: re-render on file change mid-review)?
+- ~~Watch mode (`serve --watch`: re-render on file change mid-review)?~~ **Yes**
+  (#7). Polls size+mtime (filesystem notifications miss the temp-file rename
+  editors save with), keeps the last good parse if a save leaves the file
+  unreadable, and re-anchors prior feedback through the resolution view — a note
+  on a block that changed comes back stale for free. The page is told the
+  revision it was rendered from and offers a reload rather than discarding a
+  half-typed comment.
 - ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
   in §5.7: one server, a page per document, per-document and session `review_done`.
