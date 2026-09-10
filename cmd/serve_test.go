@@ -13,7 +13,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := buildServer(doc, "127.0.0.1", 0, false, "tester")
+	srv, err := buildServer([]string{doc}, "127.0.0.1", 0, false, "tester")
 	if err != nil {
 		t.Fatalf("buildServer: %v", err)
 	}
@@ -23,14 +23,24 @@ func TestBuildServerValidDoc(t *testing.T) {
 }
 
 func TestBuildServerUnsupportedExtension(t *testing.T) {
-	_, err := buildServer("notes.toml", "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{write(t, "notes.rst")}, "127.0.0.1", 0, false, "tester")
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want advertise-on-error, got %v", err)
 	}
 }
 
+// A path that isn't there is a typo, not a missing feature — it must not be
+// dressed up as one, or the feedback loop fills with requests for files that
+// never existed.
+func TestBuildServerMissingFileIsNotAFeatureRequest(t *testing.T) {
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "gone.rst")}, "127.0.0.1", 0, false, "tester")
+	if err == nil || strings.Contains(err.Error(), "request-feature") {
+		t.Fatalf("want a plain not-found error, got %v", err)
+	}
+}
+
 func TestBuildServerMissingFile(t *testing.T) {
-	_, err := buildServer(filepath.Join(t.TempDir(), "nope.md"), "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "nope.md")}, "127.0.0.1", 0, false, "tester")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -49,7 +59,7 @@ func TestDefaultAuthor(t *testing.T) {
 
 func TestServeCommandUnsupportedExtension(t *testing.T) {
 	root := newRootCmd()
-	root.SetArgs([]string{"serve", "notes.toml"})
+	root.SetArgs([]string{"serve", write(t, "notes.rst")})
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	err := root.Execute()

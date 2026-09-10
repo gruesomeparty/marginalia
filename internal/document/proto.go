@@ -86,22 +86,3 @@ func protoPath(d *protoschema.Decl, typePath, scopePath string) string {
 	}
 	return id
 }
-
-// nonEmpty drops the parts a declaration doesn't have, so the anchor text
-// never carries padding for a missing comment.
-func nonEmpty(parts ...string) []string {
-	kept := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p != "" {
-			kept = append(kept, p)
-		}
-	}
-	return kept
-}
-
-func join(prefix, sep, name string) string {
-	if prefix == "" {
-		return name
-	}
-	return prefix + sep + name
-}

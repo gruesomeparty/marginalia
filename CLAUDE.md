@@ -7,9 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
-`/marginalia:review-doc`). **M3** has started: `.proto` schemas render as a
-folding tree anchored by schema path (issue #15). `PRD.md` is the authoritative
-spec; read it before writing anything. This file summarizes it and flags the constraints that are
+`/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
+JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+Multi-document sessions (issue #8) serve a set — a directory, several paths, or
+a `.marginalia.yml`-curated list — one page per document.
+`PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
 this file). M2–M5 are still ahead (see Build order below).
 
@@ -24,13 +26,29 @@ users are agents, not humans.
 ## Planned architecture (from PRD §6)
 
 - **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
+- `internal/reviewset` resolves what `serve` was pointed at: one file, several,
+  or a directory (walked, skipping hidden/`node_modules`/`vendor`, capped at 200
+  documents). A `.marginalia.yml` in a served directory is whitelist + order +
+  labels, and is then the *only* tree — so a listed-but-missing path is a hard
+  error and startup reports how many supported files the index excluded.
+- Server routes: `GET /` (first document), `GET /d/{rel...}` (one page per
+  document), `GET /api/doc[?doc=]`, `GET|POST /api/feedback[?doc=]`,
+  `POST /api/session_done`. A posted event names its document and the server
+  only writes to documents in the served set — a stale page must not be able to
+  append elsewhere. Per-document `review_done` comes from the page's Done
+  button; `session_done` writes one to every log with `text: "session"`.
 - HTML template embedded via `go:embed`; one template feeds both server and static modes.
 - Markdown via **goldmark** + an AST walker that assigns each block an ID + hash at render time.
-- Tree inputs (`.proto` now, JSON/YAML/TOML next) share `internal/document`'s
-  `treeBuilder`: pre-ordered flat blocks carrying `Parent`/`Level`, which the
-  one template renders as an indented, foldable list. `.proto` is parsed by
+- Tree inputs share `internal/document`'s `treeBuilder`: pre-ordered flat
+  blocks carrying `Parent`/`Level`/`HasChildren`, which the one template
+  renders as an indented, foldable list (depth is a CSS variable per
+  `data-level`, so indentation needs no script). `.proto` is parsed by
   `internal/protoschema` — a tolerant, structural proto3 parser (no protoc, no
-  import resolution, unknown constructs preserved as blocks).
+  import resolution, unknown constructs preserved as blocks). JSON/YAML/TOML
+  parse into `dataNode` (`datatree.go`) and share path derivation, rendering
+  and anchoring; only the decoders differ. Key order is always the author's:
+  JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
+  `MetaData.Keys()`.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
@@ -62,7 +80,14 @@ These are the design's failure modes — the PRD calls each one out explicitly:
 ## Block anchoring & event schema (PRD §5.2–5.3)
 
 Each block carries `{ block: "5.3/2" (section path + ordinal), quote: first ~90
-chars, hash: sha256(normalized text)[:12] }`. Tree documents keep the same
+chars, hash: sha256(normalized text)[:12] }`. A markdown list item extends its
+list's ID with its position (`5.3/2.1`, nested `5.3/2.1.3`) and is an **inline**
+block: its markup is the `<li>` inside the list's own HTML — annotated with the
+anchor attributes by `internal/document/list.go` — so bullets, numbering and
+nesting stay exactly as the document wrote them and the page renders no separate
+element for it (`Block.Inline`). The list itself keeps its old ID, so notes
+about the shape of a list, and feedback written before item anchoring, still
+anchor. Tree documents keep the same
 schema and only derive `block` differently — the node's own path
 (`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
@@ -82,8 +107,9 @@ document *structure*, never *content* — no secrets or private text in issues.
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
-feedback scaffold) → M2 revision loop (hash-stale, resolution view) → M3
-JSON/YAML trees → M4 automated implementation pipeline → M5 static share mode.
+feedback scaffold) → M2 revision loop (hash-stale, resolution view) → **M3
+trees: `.proto`, JSON/YAML/TOML — done** → M4 automated implementation pipeline
+→ M5 static share mode.
 
 ## Commands
 

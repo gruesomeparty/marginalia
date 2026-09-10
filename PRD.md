@@ -71,9 +71,13 @@ Optionally re-renders with resolution states for a second pass.
 ### 5.1 Rendering
 
 - **v1 input: Markdown.** Every block-level element (heading, paragraph,
-  list, code fence, table, blockquote) becomes a commentable block.
-- **v2 input: JSON/YAML.** Rendered as a collapsible tree; every node path is
-  a commentable block (`$.spec.storage.paths[2]`).
+  list, code fence, table, blockquote) becomes a commentable block, and every
+  **list item** is commentable in its own right (nested items too) — a reviewer
+  should never have to restructure a document to make part of it reviewable.
+- **v2 input: JSON/YAML/TOML.** Rendered as a collapsible tree; every node
+  path is a commentable block (`$.spec.storage.paths[2]`). Key order is the
+  author's, not the decoder's, and YAML comments render with the node they
+  document.
 - **v2 input: `.proto` schemas.** The same collapsible tree, walked over the
   schema's own declarations instead of a data tree; every declaration is a
   commentable block anchored by dotted schema path
@@ -171,6 +175,17 @@ Ships with a `SKILL.md` so agents use it uniformly:
   textarea + manual Cmd+C; downloads wrapped in try/catch. (Server mode avoids
   the whole class: feedback goes to disk, nothing passes through a clipboard.)
 
+### 5.7 Multi-document sessions
+
+One `serve` may hand over a set — a directory, several paths, or a
+`.marginalia.yml`-curated list (title, order, labels; it is also a whitelist, so
+exclusions are reported at startup and a missing entry is a hard error). Each
+document keeps its own `<doc>.feedback.jsonl`; the page shows a navigation tree
+of the set with live comment counts and per-document done ticks. Done is
+per-document, and a session-level Done appends a `review_done` (with
+`text: "session"`) to every log, so an agent watching any one document sees the
+handover close.
+
 ## 6. Architecture
 
 - **Single Go binary**, cobra subcommands (`serve`, `export`, `import`,
@@ -196,7 +211,7 @@ Ships with a `SKILL.md` so agents use it uniformly:
 ## 8. Agent feedback loop (the tool improves itself)
 
 Marginalia's primary users are agents. When an agent hits a limitation — an
-unsupported input format (TOML), a missing flag, a customization that doesn't
+unsupported input format (reStructuredText, say), a missing flag, a customization that doesn't
 exist — that moment is the feature-request pipeline. The repo ships the
 tooling to capture it:
 
@@ -204,8 +219,9 @@ tooling to capture it:
 
 - The **binary advertises the path in its error messages**: unsupported input
   or unknown flags exit with a message like
-  `TOML is not supported yet — agents: invoke the marginalia:request-feature
-  skill to file it`, including the tool version. The agent never has to know
+  `.rst is not supported yet — agents: invoke the marginalia:request-feature
+  skill to file it`, including the tool version. (TOML was the original
+  example; the loop closed it — issue #2 shipped it.) The agent never has to know
   in advance that the channel exists; the failure itself routes them there.
 - The main `review-doc` SKILL.md ends with the same pointer for softer gaps
   ("works, but I needed X").
@@ -265,4 +281,5 @@ approved queue.
 - Should `suggest_edit` events be auto-applicable (agent applies the
   replacement text verbatim when hash still matches)? Leaning yes in M3.
 - Watch mode (`serve --watch`: re-render on file change mid-review)?
-- Multi-document sessions (review a spec + its plan together)?
+- ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
+  in §5.7: one server, a page per document, per-document and session `review_done`.

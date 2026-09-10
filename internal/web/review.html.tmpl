@@ -10,10 +10,30 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,'Times New Roman',serif;line-height:1.6}
-header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;gap:1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .count{color:var(--muted)}
-header button{margin-left:auto;font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
-main{max-width:68ch;margin:2rem auto;padding:0 2.5rem}
+header .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
+header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
+header button.secondary{background:transparent;color:var(--fg);border-color:var(--rule)}
+.layout{display:flex;align-items:flex-start}
+main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
+.nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem;border-right:1px solid var(--rule)}
+.nav summary{cursor:pointer;color:var(--muted);margin-bottom:.5rem}
+.nav ul{list-style:none;margin:.15rem 0;padding-left:.85rem}
+.nav>details>ul{padding-left:0}
+.nav li{margin:.1rem 0}
+.nav a{color:var(--fg);text-decoration:none;padding:.1rem .35rem;border-radius:4px;display:inline-block;overflow-wrap:anywhere}
+.nav a:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.nav a[aria-current="page"]{background:var(--accent);color:#fff}
+.nav .dir{color:var(--muted)}
+.nav .n{display:inline-block;min-width:1.15rem;height:1.15rem;line-height:1.15rem;text-align:center;background:var(--marker);color:#000;border-radius:999px;font-size:.7rem;margin-left:.3rem}
+.nav .tick{margin-left:.3rem;color:var(--accent)}
+/* A phone gets the buttons, not the breadcrumb: the nav already says which
+   file is open, and a header that overflows scrolls the whole page sideways. */
+@media (max-width:640px){header{gap:.5rem}header .where,header .count{display:none}header button{padding:.35rem .55rem}}
+@media (max-width:900px){.layout{flex-direction:column}.nav{position:static;flex:none;width:100%;max-height:none;padding:1rem 2.5rem 0;border-right:0;border-bottom:1px solid var(--rule)}}
 h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.25}
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-size:.9em}
@@ -25,6 +45,9 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 @media (prefers-reduced-motion:reduce){.block,.toast{transition:none}}
 .block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+li.block{list-style-position:outside}
+li.block>.existing,li.block>.composer{font-size:.85rem}
+li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .block[data-count]:not([data-count="0"])::before{content:attr(data-count);position:absolute;left:-2.4rem;top:.3rem;min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--marker);color:#000;border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
 .composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:.8rem;box-shadow:var(--shadow);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem}
 .composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
@@ -38,8 +61,12 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:0 6px 6px 0}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
 .existing .item.stale{opacity:.65}
-main.tree{max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
-main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem}
+main.tree{--step:1.25rem;max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
+main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
+/* Depth as a variable so indentation needs no inline styles and no script. */
+main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:2}main.tree .block[data-level="3"]{--lvl:3}main.tree .block[data-level="4"]{--lvl:4}main.tree .block[data-level="5"]{--lvl:5}main.tree .block[data-level="6"]{--lvl:6}main.tree .block[data-level="7"]{--lvl:7}main.tree .block[data-level="8"]{--lvl:8}main.tree .block[data-level="9"]{--lvl:9}main.tree .block[data-level="10"]{--lvl:10}main.tree .block[data-level="11"]{--lvl:11}main.tree .block[data-level="12"]{--lvl:12}main.tree .block[data-level="13"]{--lvl:13}main.tree .block[data-level="14"]{--lvl:14}main.tree .block[data-level="15"]{--lvl:15}main.tree .block[data-level="16"]{--lvl:16}main.tree .block[data-level="17"]{--lvl:17}main.tree .block[data-level="18"]{--lvl:18}main.tree .block[data-level="19"]{--lvl:19}main.tree .block[data-level="20"]{--lvl:20}main.tree .block[data-level="21"]{--lvl:21}main.tree .block[data-level="22"]{--lvl:22}main.tree .block[data-level="23"]{--lvl:23}main.tree .block[data-level="24"]{--lvl:24}
+/* Deep trees on a phone: tighten the indent step rather than scroll sideways. */
+@media (max-width:640px){main.tree{--step:.7rem;font-size:.82rem}}
 main.tree .body{flex:1;min-width:0}
 main.tree .cmt{display:block;color:var(--muted);font-style:italic;overflow-wrap:break-word}
 main.tree .body>code{background:none;padding:0;font-size:1em;white-space:pre-wrap;overflow-wrap:break-word}
@@ -58,16 +85,31 @@ header #fold+button{margin-left:.5rem}
 </head>
 <body>
 <header>
-  <strong>{{.Doc.Path}}</strong>
+  <strong>{{.Title}}</strong>
+  {{if and .ShowNav (ne .Title .Doc.Path)}}<span class="where">{{.Doc.Path}}</span>{{end}}
   <span class="count" id="count">0 comments</span>
-  {{if .Doc.IsTree}}<button id="fold" type="button" aria-pressed="false">Collapse all</button>{{end}}
-  <button id="done" type="button">Done</button>
+  <span class="actions">
+    {{if .Doc.IsTree}}<button id="fold" type="button" class="secondary" aria-pressed="false">Collapse all</button>{{end}}
+    {{if .ShowNav}}<button id="done" type="button" class="secondary">Done with this file</button>
+    <button id="finish" type="button">Finish review set{{if .SetDone}} ✓{{end}}</button>
+    {{else}}<button id="done" type="button">Done</button>{{end}}
+  </span>
 </header>
+<div class="layout">
+{{if .ShowNav}}
+<aside class="nav">
+  <details open>
+    <summary id="setcount">{{.Total}} documents · {{.DoneN}} done</summary>
+    {{template "navlist" .Nav}}
+  </details>
+</aside>
+{{end}}
 <main id="doc"{{if .Doc.IsTree}} class="tree"{{end}}>
-  {{range .Doc.Blocks}}
+  {{range .Doc.Blocks}}{{if not .Inline}}
   <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
-  {{end}}
+  {{end}}{{end}}
 </main>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 window.__MARGINALIA__ = {{.DataJSON}};
@@ -87,10 +129,30 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
   function marker(el){ el.dataset.count = (byBlock[el.dataset.block]||[]).length; }
+  // A block's comment list and composer go after it — except inside a list
+  // item, where "after" would mean between two <li>s. There they go after the
+  // item's own text and before anything nested under it, so a note about a
+  // bullet never reads as a note about its sub-bullets.
+  function nestedList(el){ return el.querySelector(":scope > ul, :scope > ol"); }
+  function attach(el, box){
+    if(el.tagName !== "LI"){ el.after(box); return; }
+    var nested = nestedList(el);
+    if(nested) el.insertBefore(box, nested); else el.appendChild(box);
+  }
+  function boxAfter(el, cls){
+    var box;
+    if(el.tagName === "LI"){
+      var nested = nestedList(el);
+      box = nested ? nested.previousElementSibling : el.lastElementChild;
+    } else {
+      box = el.nextElementSibling;
+    }
+    return box && box.classList.contains(cls) ? box : null;
+  }
   function renderExisting(el){
     var id=el.dataset.block, list=byBlock[id]||[];
-    var box=el.nextElementSibling;
-    if(box && box.classList.contains("existing")) box.remove();
+    var box=boxAfter(el, "existing");
+    if(box) box.remove();
     if(!list.length) return;
     box=document.createElement("div"); box.className="existing";
     list.forEach(function(e){
@@ -100,7 +162,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var body=document.createElement("div"); body.textContent=e.text||"";
       item.appendChild(t); item.appendChild(body); box.appendChild(item);
     });
-    el.after(box);
+    attach(el, box);
   }
   // The replacement text a suggest_edit starts from: a markdown block's own
   // text, or — for a tree node — just its declaration line, without the
@@ -139,12 +201,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:type,text:text,author:author};
       fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
         .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
-        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push(saved); marker(el); renderExisting(el); count(); closeComposer(); toast("Saved"); })
+        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push(saved); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast("Saved"); })
         .catch(function(err){ toast("Save failed: "+err.message); });
     };
     actions.appendChild(save); actions.appendChild(cancel);
     c.appendChild(chips); c.appendChild(ta); c.appendChild(actions);
-    el.after(c); ta.focus();
+    attach(el, c); ta.focus();
   }
   var isTree = document.getElementById("doc").classList.contains("tree");
   var elOf = {};
@@ -177,7 +239,6 @@ window.__MARGINALIA__ = {{.DataJSON}};
     c.setAttribute("aria-label", (open ? "Fold " : "Unfold ") + el.dataset.block);
   }
   function decorateTree(el){
-    el.style.paddingLeft = (0.5 + 1.25 * (+el.dataset.level || 0)) + "rem";
     var body = el.firstElementChild;
     var c = document.createElement("button");
     c.type = "button"; c.className = "caret"; c.tabIndex = -1;
@@ -197,8 +258,17 @@ window.__MARGINALIA__ = {{.DataJSON}};
     elOf[el.dataset.block] = el;
     if(isTree) decorateTree(el);
     marker(el); renderExisting(el);
-    el.addEventListener("click", function(e){ if(e.target.closest(".composer,.existing,.caret")) return; openComposer(el); });
-    el.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); openComposer(el); } });
+    // Blocks nest — a list item sits inside its list, a sub-item inside it —
+    // so only the innermost block under the pointer answers.
+    el.addEventListener("click", function(e){
+      if(e.target.closest(".composer,.existing,.caret")) return;
+      if(e.target.closest(".block") !== el) return;
+      openComposer(el);
+    });
+    el.addEventListener("keydown", function(e){
+      if(e.key!=="Enter" || e.target !== el) return;
+      e.preventDefault(); openComposer(el);
+    });
   });
   var foldBtn = document.getElementById("fold");
   if(foldBtn) foldBtn.onclick = function(){
@@ -213,12 +283,52 @@ window.__MARGINALIA__ = {{.DataJSON}};
     applyFolds();
   };
   count();
+  // Review-set navigation: the sidebar's counts and done ticks are live, so
+  // marking a file done shows up without a reload.
+  var inSet = !!document.querySelector(".nav");
+  function tickOf(link){ return link && link.parentElement.querySelector(".tick"); }
+  function refreshSetCount(){
+    var el = document.getElementById("setcount");
+    if(!el) return;
+    var total = document.querySelectorAll(".nav a[data-nav]").length, done = 0;
+    Array.prototype.forEach.call(document.querySelectorAll(".nav .tick"), function(t){ if(!t.hidden) done++; });
+    el.textContent = total + " documents · " + done + " done";
+  }
+  function bumpCurrentCount(){
+    var badge = document.querySelector('.nav a[aria-current="page"]');
+    badge = badge && badge.parentElement.querySelector(".n");
+    if(!badge) return;
+    badge.textContent = String((parseInt(badge.textContent, 10) || 0) + 1);
+    badge.hidden = false;
+  }
   document.getElementById("done").onclick=function(){
     fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
-      .then(function(res){ if(!res.ok) throw new Error("failed"); toast("Review marked done — you can close this tab."); })
+      .then(function(res){ if(!res.ok) throw new Error("failed");
+        var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
+        if(t) t.hidden = false;
+        refreshSetCount();
+        toast(inSet ? "This file is marked done." : "Review marked done — you can close this tab."); })
+      .catch(function(err){ toast("Failed: "+err.message); });
+  };
+  var finish = document.getElementById("finish");
+  if(finish) finish.onclick=function(){
+    fetch("/api/session_done",{method:"POST"})
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
+      .then(function(){
+        Array.prototype.forEach.call(document.querySelectorAll(".nav .tick"), function(t){ t.hidden = false; });
+        refreshSetCount();
+        finish.textContent = "Finish review set \u2713";
+        toast("Review set marked done — you can close this tab."); })
       .catch(function(err){ toast("Failed: "+err.message); });
   };
 })();
 </script>
 </body>
 </html>
+
+{{define "navlist"}}<ul>
+  {{range .}}<li>
+    {{if .Dir}}<span class="dir">{{.Label}}/</span>{{template "navlist" .Children}}
+    {{else}}<a href="{{.URL}}" data-nav="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a><span class="n"{{if not .Count}} hidden{{end}}>{{.Count}}</span><span class="tick"{{if not .Done}} hidden{{end}} title="Marked done">✓</span>{{end}}
+  </li>{{end}}
+</ul>{{end}}

@@ -99,3 +99,24 @@ func treeLine(comment, decl, trailing, class string) string {
 	b.WriteString(`</span>`)
 	return b.String()
 }
+
+// nonEmpty drops the parts a node doesn't have, so anchor text never carries
+// padding for a missing comment.
+func nonEmpty(parts ...string) []string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return kept
+}
+
+// join appends name to prefix with sep, treating an empty prefix as no
+// prefix at all rather than as a leading separator.
+func join(prefix, sep, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + sep + name
+}
