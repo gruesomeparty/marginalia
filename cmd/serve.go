@@ -12,16 +12,32 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/server"
 )
 
+// serveOptions is what `serve` was asked for, beyond the paths themselves.
+type serveOptions struct {
+	host   string
+	port   int
+	open   bool
+	author string
+	config string // review config file, "" for the default review
+}
+
 // buildServer resolves the paths into a review set — one document, several, or
 // a directory of them — parses each and wires it to its own feedback log.
-func buildServer(paths []string, host string, port int, open bool, author string) (*server.Server, error) {
+func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 	set, err := reviewset.Load(paths)
 	if err != nil {
 		return nil, routeSetError(err)
+	}
+	cfg := review.Default()
+	if opts.config != "" {
+		if cfg, err = review.Load(opts.config); err != nil {
+			return nil, err
+		}
 	}
 	docs := make([]server.Entry, 0, len(set.Docs))
 	for _, d := range set.Docs {
@@ -36,6 +52,7 @@ func buildServer(paths []string, host string, port int, open bool, author string
 			Rel:   d.Rel,
 		})
 	}
+	author := opts.author
 	if author == "" {
 		author = defaultAuthor()
 	}
@@ -48,10 +65,11 @@ func buildServer(paths []string, host string, port int, open bool, author string
 		// A discovered set mirrors the folders it was found in; a curated one
 		// is exactly the index's list, so its order is the tree.
 		Nested: set.Index == "",
+		Review: cfg,
 		Author: author,
-		Host:   host,
-		Port:   port,
-		Open:   open,
+		Host:   opts.host,
+		Port:   opts.port,
+		Open:   opts.open,
 	}), nil
 }
 
@@ -80,12 +98,7 @@ func defaultAuthor() string {
 }
 
 func newServeCmd() *cobra.Command {
-	var (
-		port   int
-		host   string
-		open   bool
-		author string
-	)
+	var opts serveOptions
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
@@ -102,7 +115,7 @@ func newServeCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			srv, err := buildServer(args, host, port, open, author)
+			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
 			}
@@ -111,9 +124,10 @@ func newServeCmd() *cobra.Command {
 			return srv.Run(ctx)
 		},
 	}
-	cmd.Flags().IntVar(&port, "port", 8787, "port to listen on")
-	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
-	cmd.Flags().BoolVar(&open, "open", false, "open the review page in a browser")
-	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
+	cmd.Flags().IntVar(&opts.port, "port", 8787, "port to listen on")
+	cmd.Flags().StringVar(&opts.host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
+	cmd.Flags().BoolVar(&opts.open, "open", false, "open the review page in a browser")
+	cmd.Flags().StringVar(&opts.author, "author", "", "review author (defaults to $USER)")
+	cmd.Flags().StringVar(&opts.config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
 	return cmd
 }

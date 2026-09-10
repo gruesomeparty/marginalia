@@ -72,9 +72,3 @@ func TestResolveLatestPerBlock(t *testing.T) {
 		t.Error("review_done (empty block) must not appear in resolution")
 	}
 }
-
-func TestValidType(t *testing.T) {
-	if !ValidType("comment") || ValidType("bogus") {
-		t.Fatal("ValidType wrong")
-	}
-}

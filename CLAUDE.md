@@ -9,6 +9,8 @@ for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
 JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+Reviews are configurable (issue #3): `serve --config review.yaml` frames the
+review and defines the vocabulary the reviewer answers in, enforced server-side.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
 a `.marginalia.yml`-curated list — one page per document, and markdown list
 items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
@@ -62,6 +64,12 @@ users are agents, not humans.
   and anchoring; only the decoders differ. Key order is always the author's:
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
   `MetaData.Keys()`.
+- `internal/review` is the review configuration: framing, the action
+  vocabulary (built-ins plus configured ones), structured fields, read-only
+  patterns. It is the **only** authority on which event types exist — there is
+  deliberately no `feedback.ValidType` any more, because a second list would
+  drift. `Config.Validate` and `Config.Locked` run on the server, not just in
+  the page: rendering a rule is not enforcing it.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
@@ -109,8 +117,12 @@ schema and only derive `block` differently — the node's own path
 (`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
-`suggest_edit` (text = replacement), `question`, `approve`, `reject`. A **Done**
-button appends a `review_done` event — the agent's signal to proceed.
+`suggest_edit` (text = replacement), `question`, `approve`, `reject`, plus any
+action the requesting agent configured (`blocker`, `nit`, …) — an action with
+nothing to fill in is one tap, and one that declares `fields` carries them in
+the event's `fields` map. A **Done**
+button appends a `review_done` event — the agent's signal to proceed;
+`require_verdict` withholds it until every commentable block is answered.
 
 ## Agent feedback loop (PRD §8)
 

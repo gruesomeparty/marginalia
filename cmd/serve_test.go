@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := buildServer([]string{doc}, "127.0.0.1", 0, false, "tester")
+	srv, err := buildServer([]string{doc}, serveOptions{host: "127.0.0.1", author: "tester"})
 	if err != nil {
 		t.Fatalf("buildServer: %v", err)
 	}
@@ -23,7 +24,7 @@ func TestBuildServerValidDoc(t *testing.T) {
 }
 
 func TestBuildServerUnsupportedExtension(t *testing.T) {
-	_, err := buildServer([]string{write(t, "notes.rst")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{write(t, "notes.rst")}, serveOptions{host: "127.0.0.1", author: "tester"})
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want advertise-on-error, got %v", err)
 	}
@@ -33,14 +34,14 @@ func TestBuildServerUnsupportedExtension(t *testing.T) {
 // dressed up as one, or the feedback loop fills with requests for files that
 // never existed.
 func TestBuildServerMissingFileIsNotAFeatureRequest(t *testing.T) {
-	_, err := buildServer([]string{filepath.Join(t.TempDir(), "gone.rst")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "gone.rst")}, serveOptions{host: "127.0.0.1", author: "tester"})
 	if err == nil || strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("want a plain not-found error, got %v", err)
 	}
 }
 
 func TestBuildServerMissingFile(t *testing.T) {
-	_, err := buildServer([]string{filepath.Join(t.TempDir(), "nope.md")}, "127.0.0.1", 0, false, "tester")
+	_, err := buildServer([]string{filepath.Join(t.TempDir(), "nope.md")}, serveOptions{host: "127.0.0.1", author: "tester"})
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -85,5 +86,43 @@ func TestServeWithoutArgsExplainsItself(t *testing.T) {
 	}
 	if strings.Contains(msg, "request-feature") {
 		t.Errorf("a usage mistake should not advertise the feature tracker: %q", msg)
+	}
+}
+
+// A review config reaches the server through `serve --config`, and a config
+// that cannot mean what it says fails at startup rather than silently
+// serving the default review.
+func TestBuildServerWithReviewConfig(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "d.md")
+	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(dir, "review.yaml")
+	if err := os.WriteFile(cfg, []byte("instructions: Look at the cap.\nactions:\n  - type: blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := buildServer([]string{doc}, serveOptions{host: "127.0.0.1", author: "tester", config: cfg})
+	if err != nil {
+		t.Fatalf("buildServer: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/", nil))
+	if !strings.Contains(rr.Body.String(), "Look at the cap.") {
+		t.Error("the served page does not carry the review's instructions")
+	}
+	if !strings.Contains(rr.Body.String(), `"type":"blocker"`) {
+		t.Error("the served page does not offer the configured action")
+	}
+
+	bad := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(bad, []byte("actions:\n  - type: Blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildServer([]string{doc}, serveOptions{config: bad}); err == nil {
+		t.Error("a config with an invalid action must fail at startup")
+	}
+	if _, err := buildServer([]string{doc}, serveOptions{config: filepath.Join(dir, "gone.yaml")}); err == nil {
+		t.Error("a config that isn't there must fail at startup")
 	}
 }
