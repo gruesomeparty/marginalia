@@ -45,6 +45,9 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 @media (prefers-reduced-motion:reduce){.block,.toast{transition:none}}
 .block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+li.block{list-style-position:outside}
+li.block>.existing,li.block>.composer{font-size:.85rem}
+li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .block[data-count]:not([data-count="0"])::before{content:attr(data-count);position:absolute;left:-2.4rem;top:.3rem;min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--marker);color:#000;border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
 .composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:.8rem;box-shadow:var(--shadow);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem}
 .composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
@@ -102,9 +105,9 @@ header #fold+button{margin-left:.5rem}
 </aside>
 {{end}}
 <main id="doc"{{if .Doc.IsTree}} class="tree"{{end}}>
-  {{range .Doc.Blocks}}
+  {{range .Doc.Blocks}}{{if not .Inline}}
   <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
-  {{end}}
+  {{end}}{{end}}
 </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -126,10 +129,30 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
   function marker(el){ el.dataset.count = (byBlock[el.dataset.block]||[]).length; }
+  // A block's comment list and composer go after it — except inside a list
+  // item, where "after" would mean between two <li>s. There they go after the
+  // item's own text and before anything nested under it, so a note about a
+  // bullet never reads as a note about its sub-bullets.
+  function nestedList(el){ return el.querySelector(":scope > ul, :scope > ol"); }
+  function attach(el, box){
+    if(el.tagName !== "LI"){ el.after(box); return; }
+    var nested = nestedList(el);
+    if(nested) el.insertBefore(box, nested); else el.appendChild(box);
+  }
+  function boxAfter(el, cls){
+    var box;
+    if(el.tagName === "LI"){
+      var nested = nestedList(el);
+      box = nested ? nested.previousElementSibling : el.lastElementChild;
+    } else {
+      box = el.nextElementSibling;
+    }
+    return box && box.classList.contains(cls) ? box : null;
+  }
   function renderExisting(el){
     var id=el.dataset.block, list=byBlock[id]||[];
-    var box=el.nextElementSibling;
-    if(box && box.classList.contains("existing")) box.remove();
+    var box=boxAfter(el, "existing");
+    if(box) box.remove();
     if(!list.length) return;
     box=document.createElement("div"); box.className="existing";
     list.forEach(function(e){
@@ -139,7 +162,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var body=document.createElement("div"); body.textContent=e.text||"";
       item.appendChild(t); item.appendChild(body); box.appendChild(item);
     });
-    el.after(box);
+    attach(el, box);
   }
   // The replacement text a suggest_edit starts from: a markdown block's own
   // text, or — for a tree node — just its declaration line, without the
@@ -183,7 +206,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     };
     actions.appendChild(save); actions.appendChild(cancel);
     c.appendChild(chips); c.appendChild(ta); c.appendChild(actions);
-    el.after(c); ta.focus();
+    attach(el, c); ta.focus();
   }
   var isTree = document.getElementById("doc").classList.contains("tree");
   var elOf = {};
@@ -235,8 +258,17 @@ window.__MARGINALIA__ = {{.DataJSON}};
     elOf[el.dataset.block] = el;
     if(isTree) decorateTree(el);
     marker(el); renderExisting(el);
-    el.addEventListener("click", function(e){ if(e.target.closest(".composer,.existing,.caret")) return; openComposer(el); });
-    el.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); openComposer(el); } });
+    // Blocks nest — a list item sits inside its list, a sub-item inside it —
+    // so only the innermost block under the pointer answers.
+    el.addEventListener("click", function(e){
+      if(e.target.closest(".composer,.existing,.caret")) return;
+      if(e.target.closest(".block") !== el) return;
+      openComposer(el);
+    });
+    el.addEventListener("keydown", function(e){
+      if(e.key!=="Enter" || e.target !== el) return;
+      e.preventDefault(); openComposer(el);
+    });
   });
   var foldBtn = document.getElementById("fold");
   if(foldBtn) foldBtn.onclick = function(){
