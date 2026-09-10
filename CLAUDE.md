@@ -29,7 +29,15 @@ users are agents, not humans.
 
 ## Planned architecture (from PRD §6)
 
-- **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
+- **Single Go binary**, cobra subcommands: `serve`, `suggestions`, `export`,
+  `import`, `version`. `suggestions` reads a document and its log from disk (no
+  server) and splits `suggest_edit` events into applicable and
+  needs-confirmation via `feedback.Resolution.Suggestions()`. Applying requires
+  all three of: the suggestion is the note that stands for its block, its hash
+  matches the block now, and it has a hash at all — `Materialize` treats a
+  hash-less note as not-stale, which is right for reading and not good enough
+  for editing. The tool never applies anything: *never mutate the source
+  document*.
 - `internal/reviewset` resolves what `serve` was pointed at: one file, several,
   or a directory (walked, skipping hidden/`node_modules`/`vendor`, capped at 200
   documents). A `.marginalia.yml` in a served directory is whitelist + order +
@@ -146,6 +154,7 @@ pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)
 ## Commands
 
 - Build: `go build ./...`  ·  Run: `go run . serve <doc.md> --open`
+- Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
