@@ -108,7 +108,24 @@ with the human before acting.
 
 ## 5. Revise and, if needed, re-review
 
-If you change the document, offer another `marginalia serve` pass.
+If you change the document, offer another `marginalia serve` pass. On the second
+pass, read the materialized view rather than replaying the raw log:
+
+```bash
+curl -s localhost:8787/api/resolution
+```
+
+It gives, per block: the note that stands (`current`), its `history`, and two
+flags that decide what you may act on —
+
+- `stale: true` — the block was edited after that note was written. Do **not**
+  apply it silently: the note quotes what it was written against, so say what
+  changed and re-confirm with the human.
+- `orphaned: true` — the block is gone from the document. The note survives with
+  its `quote`; carry it to wherever that content went, or ask.
+
+A non-stale `suggest_edit` is the one case you can apply verbatim: its `text` is
+the replacement and the block still reads as the reviewer saw it.
 
 ---
 

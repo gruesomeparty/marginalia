@@ -60,7 +60,18 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing{margin:.3rem 0 .6rem;font-family:-apple-system,sans-serif;font-size:.82rem}
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:0 6px 6px 0}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
-.existing .item.stale{opacity:.65}
+.existing .item.current{border-left-width:3px}
+.existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:999px;font-size:.72rem;color:var(--muted);text-transform:none;font-weight:400}
+.existing .item .was{margin-top:.2rem;color:var(--muted);font-style:italic}
+.block[data-state="approve"][data-count]:not([data-count="0"])::before{background:#2f7d32;color:#fff}
+.block[data-state="reject"][data-count]:not([data-count="0"])::before{background:#b3261e;color:#fff}
+.block[data-stale="1"][data-count]:not([data-count="0"])::before{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--muted)}
+.orphans{margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+.orphans h2{font-size:1rem;margin:0 0 .2rem}
+.orphans p{color:var(--muted);margin:0 0 .8rem}
+.orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:0 6px 6px 0}
+.orphans .meta{color:var(--muted)}
+.orphans .was{color:var(--muted);font-style:italic;margin:.15rem 0}
 main.tree{--step:1.25rem;max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
@@ -108,6 +119,19 @@ header #fold+button{margin-left:.5rem}
   {{range .Doc.Blocks}}{{if not .Inline}}
   <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
   {{end}}{{end}}
+  {{if .Orphans}}
+  <section class="orphans" aria-label="Notes that no longer anchor">
+    <h2>{{.OrphanTitle}}</h2>
+    <p>The document no longer has the blocks these were written against.</p>
+    {{range .Orphans}}
+    <div class="item">
+      <div class="meta"><code>{{.Block}}</code> · {{.Current.Event.Type}} · {{.Current.Event.Author}}</div>
+      <div class="was">was: “{{.Current.Event.Quote}}”</div>
+      <div>{{.Current.Event.Text}}</div>
+    </div>
+    {{end}}
+  </section>
+  {{end}}
 </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -118,17 +142,43 @@ window.__MARGINALIA__ = {{.DataJSON}};
   var data = window.__MARGINALIA__;
   var author = data.author || "reviewer";
   var TYPES = [["comment","Comment"],["suggest_edit","Suggest edit"],["question","Question"],["approve","Approve"],["reject","Reject"]];
-  var hashOf = {}; data.doc.blocks.forEach(function(b){ hashOf[b.id]=b.hash; });
   var blockOf = {}; data.doc.blocks.forEach(function(b){ blockOf[b.id]=b; });
+  // Notes come from the server's materialized view: it has compared each
+  // event's hash against the block as it now reads, so the page shows what
+  // still applies rather than guessing.
+  var res = data.resolution || {states:[]};
   var byBlock = {};
-  data.events.filter(function(e){return e.type!=="review_done";}).forEach(function(e){ (byBlock[e.block]=byBlock[e.block]||[]).push(e); });
+  (res.states||[]).forEach(function(st){ if(!st.orphaned) byBlock[st.block] = st.history || []; });
+  var unanchored = res.orphaned || 0;
 
+  function staleCount(){
+    var n=0;
+    Object.keys(byBlock).forEach(function(k){
+      var list=byBlock[k];
+      if(list.length && list[list.length-1].stale) n++;
+    });
+    return n;
+  }
   function count(){
     var n=0; Object.keys(byBlock).forEach(function(k){ n+=byBlock[k].length; });
-    document.getElementById("count").textContent = n+" comment"+(n===1?"":"s");
+    var parts=[n+" comment"+(n===1?"":"s")];
+    var stale=staleCount();
+    if(stale) parts.push(stale+" stale");
+    if(unanchored) parts.push(unanchored+" unanchored");
+    document.getElementById("count").textContent = parts.join(" · ");
   }
   function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
-  function marker(el){ el.dataset.count = (byBlock[el.dataset.block]||[]).length; }
+  // The badge says how much was said about a block; its colour says what was
+  // decided, and a ring says the block has changed since.
+  function marker(el){
+    var list = byBlock[el.dataset.block] || [];
+    el.dataset.count = list.length;
+    var current = list.length ? list[list.length-1] : null;
+    if(current){
+      el.dataset.state = current.event.type;
+      if(current.stale) el.dataset.stale = "1"; else delete el.dataset.stale;
+    }
+  }
   // A block's comment list and composer go after it — except inside a list
   // item, where "after" would mean between two <li>s. There they go after the
   // item's own text and before anything nested under it, so a note about a
@@ -155,12 +205,24 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(box) box.remove();
     if(!list.length) return;
     box=document.createElement("div"); box.className="existing";
-    list.forEach(function(e){
+    list.forEach(function(note, i){
+      var e = note.event;
       var item=document.createElement("div"); item.className="item";
-      if(e.hash && hashOf[id] && e.hash!==hashOf[id]) item.classList.add("stale");
+      if(i === list.length-1) item.classList.add("current");
       var t=document.createElement("span"); t.className="type"; t.textContent=e.type.replace("_"," ");
+      item.appendChild(t);
+      if(note.stale){
+        item.classList.add("stale");
+        var tag=document.createElement("span"); tag.className="tag"; tag.textContent="stale — block edited since";
+        item.appendChild(tag);
+      }
       var body=document.createElement("div"); body.textContent=e.text||"";
-      item.appendChild(t); item.appendChild(body); box.appendChild(item);
+      item.appendChild(body);
+      if(note.stale && e.quote){
+        var was=document.createElement("div"); was.className="was"; was.textContent="was: \u201c"+e.quote+"\u201d";
+        item.appendChild(was);
+      }
+      box.appendChild(item);
     });
     attach(el, box);
   }
@@ -201,7 +263,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:type,text:text,author:author};
       fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
         .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
-        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push(saved); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast("Saved"); })
+        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false}); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast("Saved"); })
         .catch(function(err){ toast("Save failed: "+err.message); });
     };
     actions.appendChild(save); actions.appendChild(cancel);

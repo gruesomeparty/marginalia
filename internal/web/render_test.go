@@ -190,3 +190,57 @@ func TestRenderListItemsAreNotSeparateElements(t *testing.T) {
 		t.Error("item blocks should still be hydrated for the client")
 	}
 }
+
+func TestRenderOrphanPanel(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# Spec\n"))
+	res := feedback.Resolution{
+		Comments: 2,
+		Orphaned: 1,
+		States: []feedback.State{
+			{Block: "1/1", Current: feedback.Note{Event: feedback.Event{Block: "1/1", Type: "approve"}}},
+			{Block: "9/9", Orphaned: true, Current: feedback.Note{Event: feedback.Event{
+				Block: "9/9", Quote: "a paragraph that was deleted", Type: "question", Text: "why?", Author: "berkay",
+			}}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Resolution: res, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"1 note no longer anchored",
+		"a paragraph that was deleted",
+		"why?",
+		"<code>9/9</code>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("orphan panel missing %q", want)
+		}
+	}
+	// The client needs the materialized view, not just the raw log: it is what
+	// tells the page which notes an edit has outrun.
+	if !strings.Contains(out, `"orphaned":true`) {
+		t.Error("resolution should be hydrated for the client")
+	}
+}
+
+func TestRenderNoOrphanPanelWhenNothingLost(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# Spec\n"))
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), `class="orphans"`) {
+		t.Error("a page with nothing unanchored should not show the panel")
+	}
+}
+
+func TestOrphanTitlePlural(t *testing.T) {
+	if got := orphanTitle(1); got != "1 note no longer anchored" {
+		t.Errorf("orphanTitle(1) = %q", got)
+	}
+	if got := orphanTitle(3); got != "3 notes no longer anchored" {
+		t.Errorf("orphanTitle(3) = %q", got)
+	}
+}

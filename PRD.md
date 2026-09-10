@@ -126,6 +126,13 @@ Rules: events are never rewritten or deleted on disk; later events on the same
 block override earlier ones when materializing a resolution view; replay is
 chronological per block.
 
+The resolution view (`GET /api/resolution`, and the page's own rendering) is
+that materialization: per block, the note that stands plus its history, each
+note flagged **stale** when the block's hash has changed since it was written,
+and notes whose block no longer exists surfaced as **orphaned** rather than
+dropped. Staleness and orphaning are readings of the log against the current
+document — never fields written back into it.
+
 ### 5.4 Mode
 
 **Server mode is the product.** `marginalia serve <doc> [--port 8787]
@@ -279,7 +286,9 @@ approved queue.
 ## 10. Open questions
 
 - Should `suggest_edit` events be auto-applicable (agent applies the
-  replacement text verbatim when hash still matches)? Leaning yes in M3.
+  replacement text verbatim when hash still matches)? Leaning yes; the
+  resolution view now reports exactly that condition (a non-stale
+  `suggest_edit`), so the remaining question is only who applies it (#6).
 - Watch mode (`serve --watch`: re-render on file change mid-review)?
 - ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
   in §5.7: one server, a page per document, per-document and session `review_done`.

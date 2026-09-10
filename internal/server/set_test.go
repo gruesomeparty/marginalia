@@ -208,3 +208,105 @@ func TestSetNavShowsProgress(t *testing.T) {
 		t.Errorf("the commented document should show a count badge")
 	}
 }
+
+// The revision loop's API: after a document is edited, the resolution says
+// which notes still apply, which the edit outran, and which lost their block.
+func TestResolutionAfterRevision(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "spec.md")
+	first := "# Spec\n\nCapped at 500.\n\nGone soon.\n"
+	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := document.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := feedback.NewStore(path)
+	hashOf := func(d *document.Document, id string) string {
+		for _, b := range d.Blocks {
+			if b.ID == id {
+				return b.Hash
+			}
+		}
+		t.Fatalf("no block %s", id)
+		return ""
+	}
+	for _, e := range []feedback.Event{
+		{Block: "1/1", Quote: "Spec", Hash: hashOf(doc, "1/1"), Type: feedback.TypeApprove, Ts: "2026-07-03T10:00:00Z"},
+		{Block: "1/2", Quote: "Capped at 500.", Hash: hashOf(doc, "1/2"), Type: feedback.TypeReject, Text: "too low", Ts: "2026-07-03T10:01:00Z"},
+		{Block: "1/3", Quote: "Gone soon.", Hash: hashOf(doc, "1/3"), Type: feedback.TypeQuestion, Text: "why?", Ts: "2026-07-03T10:02:00Z"},
+	} {
+		if err := store.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The author revises: one block edited, one deleted.
+	if err := os.WriteFile(path, []byte("# Spec\n\nCapped at 5000.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	revised, err := document.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Options{Doc: revised, Store: store, Author: "tester"})
+
+	rr := get(t, s, "/api/resolution")
+	if rr.Code != 200 {
+		t.Fatalf("code=%d", rr.Code)
+	}
+	var res feedback.Resolution
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Comments != 3 || res.Stale != 1 || res.Orphaned != 1 {
+		t.Fatalf("resolution = %+v", res)
+	}
+	byBlock := map[string]feedback.State{}
+	for _, st := range res.States {
+		byBlock[st.Block] = st
+	}
+	if st := byBlock["1/1"]; st.Stale || st.Orphaned || st.Current.Event.Type != feedback.TypeApprove {
+		t.Errorf("untouched block = %+v", st)
+	}
+	if st := byBlock["1/2"]; !st.Stale || st.Orphaned {
+		t.Errorf("edited block should be stale: %+v", st)
+	}
+	if st := byBlock["1/3"]; !st.Orphaned || st.Current.Event.Quote != "Gone soon." {
+		t.Errorf("deleted block's note should be surfaced with its quote: %+v", st)
+	}
+
+	// The page says the same thing, including the unanchored note.
+	body := get(t, s, "/").Body.String()
+	for _, want := range []string{"1 note no longer anchored", "Gone soon.", `class="orphans"`, `"stale":true`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+}
+
+func TestResolutionSelectsDocumentAndReportsErrors(t *testing.T) {
+	s, stores := newSetServer(t)
+	_ = stores["api.proto"].Append(feedback.Event{Block: "M/a", Type: feedback.TypeComment, Text: "hi", Ts: "2026-07-03T10:00:00Z"})
+	rr := get(t, s, "/api/resolution?doc=api.proto")
+	if rr.Code != 200 {
+		t.Fatalf("code=%d", rr.Code)
+	}
+	var res feedback.Resolution
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Comments != 1 || len(res.States) != 1 || res.States[0].Block != "M/a" {
+		t.Errorf("resolution = %+v", res)
+	}
+	if rr := get(t, s, "/api/resolution?doc=nope.md"); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown document: code=%d, want 404", rr.Code)
+	}
+	if err := os.WriteFile(stores["spec.md"].Path(), []byte("{not json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rr := get(t, s, "/api/resolution"); rr.Code != http.StatusInternalServerError {
+		t.Errorf("corrupt log: code=%d, want 500", rr.Code)
+	}
+}
