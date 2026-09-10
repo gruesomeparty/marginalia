@@ -30,7 +30,13 @@ Or download a release from the [releases page](https://github.com/gruesomeparty/
 /plugin install marginalia
 ```
 
-Then `/marginalia:review-doc <path>` in any session.
+Then, in any session:
+
+- `/marginalia:review-doc <path>` — hand a document to a human and consume the
+  feedback events.
+- `/marginalia:implement-approved` — drain one issue from this repo's
+  `approved-for-agent` queue into a pull request (the loop that maintains
+  Marginalia itself).
 
 ## Quickstart
 

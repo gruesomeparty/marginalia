@@ -268,6 +268,19 @@ This mirrors the capture/triage split proven in the forge-feedback workflow:
 agents capture freely, the human gates what becomes work, agents execute the
 approved queue.
 
+**Implementation.** The execute stage is a skill, not a bespoke service:
+`skills/implement-approved/SKILL.md`, invocable as
+`/marginalia:implement-approved` or dispatched by
+`.github/workflows/implement-approved.yml`. `scripts/approved-queue.sh` is the
+mechanical triage gate — an issue is workable only if it states an expected
+behaviour and an acceptance criterion, and the gate exits 3 when nothing in the
+queue qualifies, so a run stops and asks instead of inventing a definition of
+done. The pipeline works **one issue at a time, one PR based on `main`**, never
+stacks, never merges, and after a merge verifies the code reached `main` and the
+issue closed rather than trusting the pull request's own state. The scheduled
+trigger ships disarmed: unattended write access is a deliberate choice, not a
+default.
+
 ## 9. Milestones
 
 1. **M1 — server mode for markdown.** `serve` + JSONL + `review_done` +

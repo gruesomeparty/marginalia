@@ -1,0 +1,72 @@
+# Drains the approved-for-agent queue: one issue, one branch off main, one PR
+# for a human to merge. The human merge gate is the point — this workflow never
+# merges anything.
+#
+# NOT ARMED. It runs only when someone dispatches it by hand. To let it run
+# unattended, add an ANTHROPIC_API_KEY repository secret and uncomment the
+# schedule below — that grants an agent write access to this repo on a timer,
+# so it should be a deliberate decision rather than a default.
+name: Implement approved queue
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue to implement (blank: whatever the triage gate names next)"
+        required: false
+        type: string
+  # schedule:
+  #   - cron: '17 6 * * 1-5'   # weekdays 06:17 UTC
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+concurrency:
+  # One run at a time: two concurrent runs would produce two open PRs, which is
+  # the stack this pipeline exists to avoid.
+  group: implement-approved
+  cancel-in-progress: false
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      - name: Install the linter version CI pins
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      - name: Require credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not set; this workflow cannot run unattended without it" >&2
+            exit 1
+          fi
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE: ${{ inputs.issue }}
+
+            Follow skills/implement-approved/SKILL.md in this checkout, exactly.
+
+            In short: stop if a pipeline PR is already open; run the triage gate
+            (scripts/approved-queue.sh) over the approved-for-agent queue; take
+            the issue named above if given and ready, else the one the gate
+            names next; implement the smallest change that satisfies its stated
+            acceptance criterion on a branch off main; run go build, go test
+            -race, the coverage gate and golangci-lint; then open one PR
+            against main with "Closes #<issue>" and stop.
+
+            Never merge or approve. Never implement an issue that lacks the
+            approved-for-agent label or an acceptance criterion — comment on it
+            saying what is missing instead. Read PRD.md and CLAUDE.md first: a
+            change that breaks one of the invariants there is wrong even if the
+            issue asked for it, and saying so on the issue is the right outcome.
+          claude_args: |
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(go:*),Bash(gofmt:*),Bash(golangci-lint:*),Bash(git:*),Bash(gh:*),Bash(./scripts/approved-queue.sh)"
