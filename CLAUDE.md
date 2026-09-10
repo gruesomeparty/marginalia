@@ -117,16 +117,31 @@ button appends a `review_done` event — the agent's signal to proceed.
 The tool improves itself: on an unsupported format or unknown flag, the binary's
 **error message advertises the `request-feature` skill** (with tool version).
 Agents capture freely (file `agent-feedback`-labeled GitHub issues, dedupe
-first); Berkay gates what becomes work via an `approved-for-agent` label; a
-scheduled agent implements the approved queue on branches/PRs. Guardrail: quote
+first); Berkay gates what becomes work via an `approved-for-agent` label; an
+agent session implements the approved queue on branches/PRs. Guardrail: quote
 document *structure*, never *content* — no secrets or private text in issues.
+
+The third stage is `skills/implement-approved/SKILL.md` (`/marginalia:implement-approved`),
+gated by `scripts/approved-queue.sh`: it reads `gh issue list --json` output and
+names the oldest issue that states both an expected behaviour and an acceptance
+criterion (exit 3 when the queue holds nothing implementable, so a run stops and
+asks rather than guessing what "done" means). Rules the pipeline exists to keep:
+**one issue → one PR based on `main` → stop** (never a second open PR, never a
+stack — that is how work gets merged into a dead branch), never merge or approve,
+match CI's pinned `golangci-lint` version (a linter built for an older Go
+toolchain exits with a version error that reads like success), and after a merge
+verify the files are on `main` and the issue actually closed rather than trusting
+the PR's state. `.github/workflows/implement-approved.yml` runs it on
+`workflow_dispatch` only; the cron is commented out because arming it grants an
+agent write access on a timer.
 
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
-**M3 trees: `.proto`, JSON/YAML/TOML — done** → M4 automated implementation
-pipeline → M5 static share mode.
+**M3 trees: `.proto`, JSON/YAML/TOML — done** → **M4 automated implementation
+pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
+→ M5 static share mode.
 
 ## Commands
 
