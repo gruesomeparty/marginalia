@@ -80,7 +80,14 @@ These are the design's failure modes — the PRD calls each one out explicitly:
 ## Block anchoring & event schema (PRD §5.2–5.3)
 
 Each block carries `{ block: "5.3/2" (section path + ordinal), quote: first ~90
-chars, hash: sha256(normalized text)[:12] }`. Tree documents keep the same
+chars, hash: sha256(normalized text)[:12] }`. A markdown list item extends its
+list's ID with its position (`5.3/2.1`, nested `5.3/2.1.3`) and is an **inline**
+block: its markup is the `<li>` inside the list's own HTML — annotated with the
+anchor attributes by `internal/document/list.go` — so bullets, numbering and
+nesting stay exactly as the document wrote them and the page renders no separate
+element for it (`Block.Inline`). The list itself keeps its old ID, so notes
+about the shape of a list, and feedback written before item anchoring, still
+anchor. Tree documents keep the same
 schema and only derive `block` differently — the node's own path
 (`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render

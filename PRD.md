@@ -71,7 +71,9 @@ Optionally re-renders with resolution states for a second pass.
 ### 5.1 Rendering
 
 - **v1 input: Markdown.** Every block-level element (heading, paragraph,
-  list, code fence, table, blockquote) becomes a commentable block.
+  list, code fence, table, blockquote) becomes a commentable block, and every
+  **list item** is commentable in its own right (nested items too) — a reviewer
+  should never have to restructure a document to make part of it reviewable.
 - **v2 input: JSON/YAML/TOML.** Rendered as a collapsible tree; every node
   path is a commentable block (`$.spec.storage.paths[2]`). Key order is the
   author's, not the decoder's, and YAML comments render with the node they

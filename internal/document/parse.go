@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 )
@@ -70,28 +71,51 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }
 
+// mdParser accumulates a markdown document's blocks. Lists add blocks of
+// their own while rendering, so the walk carries state.
+type mdParser struct {
+	src    []byte
+	blocks []Block
+}
+
 func parseMarkdown(path string, src []byte) (*Document, error) {
 	root := md.Parser().Parse(text.NewReader(src))
-	doc := &Document{Path: path, Format: FormatMarkdown}
+	p := &mdParser{src: src}
 	sec := newSectioner()
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
 		section, ordinal := sec.next(n)
+		id := fmt.Sprintf("%s/%d", section, ordinal)
 		plain := normalize(nodeText(n, src))
-		var buf bytes.Buffer
-		if err := md.Renderer().Render(&buf, src, n); err != nil {
-			return nil, fmt.Errorf("render block %s/%d: %w", section, ordinal, err)
-		}
-		doc.Blocks = append(doc.Blocks, Block{
-			ID:        fmt.Sprintf("%s/%d", section, ordinal),
+		block := Block{
+			ID:        id,
 			Section:   section,
 			Ordinal:   ordinal,
 			Kind:      kindOf(n),
 			Level:     headingLevel(n),
 			Quote:     quote(plain, 90),
 			Hash:      hashText(plain),
-			HTML:      buf.String(),
 			PlainText: plain,
-		})
+		}
+		list, isList := n.(*ast.List)
+		if !isList {
+			var buf bytes.Buffer
+			if err := md.Renderer().Render(&buf, src, n); err != nil {
+				return nil, fmt.Errorf("render block %s: %w", id, err)
+			}
+			block.HTML = buf.String()
+			p.blocks = append(p.blocks, block)
+			continue
+		}
+		// The list is appended before its items so blocks stay in document
+		// order; its markup is only known once the items are rendered.
+		block.HasChildren = list.FirstChild() != nil
+		p.blocks = append(p.blocks, block)
+		at := len(p.blocks) - 1
+		html, err := p.renderList(list, section, id, 1)
+		if err != nil {
+			return nil, fmt.Errorf("render block %s: %w", id, err)
+		}
+		p.blocks[at].HTML = html
 	}
-	return doc, nil
+	return &Document{Path: path, Format: FormatMarkdown, Blocks: p.blocks}, nil
 }

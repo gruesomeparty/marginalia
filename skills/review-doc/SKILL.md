@@ -35,7 +35,7 @@ Supported inputs and how their blocks are anchored:
 
 | Input | `block` looks like |
 |---|---|
-| `.md`, `.markdown` | `5.3/2` (section path + ordinal) |
+| `.md`, `.markdown` | `5.3/2` (section path + ordinal); list items add their position, `5.3/2.1` |
 | `.proto` | `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` |
 

@@ -77,9 +77,14 @@ and a mistyped entry fails loudly rather than quietly shrinking the review.
 
 | Input | Block ID |
 |---|---|
-| `.md`, `.markdown` | `section/ordinal` — `5.3/2` |
+| `.md`, `.markdown` | `section/ordinal` — `5.3/2`; a list item adds its position — `5.3/2.1`, nested `5.3/2.1.3` |
 | `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
+
+Markdown lists are anchorable item by item: each bullet or numbered step is its
+own block, nested ones included, so a note about one task lands on that task
+instead of on the whole list. The list keeps its own anchor too, for a note
+about its shape.
 
 Everything but markdown renders as a folding tree, one commentable block per
 node, indented by depth, with **Collapse all** for a big file.

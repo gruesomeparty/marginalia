@@ -160,3 +160,33 @@ func TestRenderSingleDocumentHasNoSetChrome(t *testing.T) {
 		t.Error("a single document titles itself")
 	}
 }
+
+// A list item's markup lives inside its list's HTML, so the page must not
+// render a second element for it — the anchor is the <li> itself.
+func TestRenderListItemsAreNotSeparateElements(t *testing.T) {
+	doc, err := document.ParseBytes("tasks.md", []byte("- one\n- two\n  - nested\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, `<div class="block" data-block="0/1.1"`) {
+		t.Error("a list item should not get a block div of its own")
+	}
+	for _, want := range []string{
+		`<li class="block" data-block="0/1.1"`,
+		`<li class="block" data-block="0/1.2.1"`,
+		`data-block="0/1" data-hash=`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	// The client still needs every item's anchor in the hydration payload.
+	if !strings.Contains(out, `"id":"0/1.2.1"`) {
+		t.Error("item blocks should still be hydrated for the client")
+	}
+}

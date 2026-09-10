@@ -12,11 +12,15 @@ type Block struct {
 	Quote   string `json:"quote"`
 	Hash    string `json:"hash"`
 	HTML    string `json:"html"`
-	// Parent and HasChildren are set for tree documents only; they drive
-	// indentation and the collapse controls.
+	// Parent and HasChildren drive tree indentation and the collapse
+	// controls, and relate a markdown list item to its list.
 	Parent      string `json:"parent,omitempty"`
 	HasChildren bool   `json:"has_children,omitempty"`
-	PlainText   string `json:"text"`
+	// Inline marks a block whose markup already sits inside its parent's
+	// HTML — a markdown list item, anchored where the document put it. The
+	// page renders no element of its own for it.
+	Inline    bool   `json:"inline,omitempty"`
+	PlainText string `json:"text"`
 }
 
 // Document is a parsed source document.
