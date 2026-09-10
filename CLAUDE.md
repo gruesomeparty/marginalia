@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: M1 shipped; M3 in progress
+## Status: M1 + M2 + M3 shipped
 
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
@@ -10,7 +10,11 @@ for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
 JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
-a `.marginalia.yml`-curated list — one page per document.
+a `.marginalia.yml`-curated list — one page per document, and markdown list
+items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
+replays a log against the document as it now reads, so a re-render marks notes
+stale, surfaces ones whose block is gone, and shows the current state per block
+(issue #1).
 `PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
 this file). M2–M5 are still ahead (see Build order below).
@@ -64,7 +68,11 @@ These are the design's failure modes — the PRD calls each one out explicitly:
 - **Feedback events are append-only.** Never rewrite or delete lines in
   `<doc>.feedback.jsonl`. Later events on the same block override earlier ones
   only when *materializing* a resolution view; the log itself is immutable and
-  replayed chronologically per block.
+  replayed chronologically per block. `feedback.Materialize` is that view —
+  events + current block hashes → per-block state, `stale` (the block was edited
+  after the note) and `orphaned` (the block is gone). It never mutates an event:
+  staleness is a reading of the log, not a field in it. Served at
+  `GET /api/resolution` and embedded in the page payload.
 - **No export step in the local agent loop.** In server mode every comment is on
   disk the instant it's saved (`POST /api/feedback` → append). A flow that makes
   the human copy/download/paste is a failure, tolerated only in static share mode.
@@ -107,9 +115,9 @@ document *structure*, never *content* — no secrets or private text in issues.
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
-feedback scaffold) → M2 revision loop (hash-stale, resolution view) → **M3
-trees: `.proto`, JSON/YAML/TOML — done** → M4 automated implementation pipeline
-→ M5 static share mode.
+feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
+**M3 trees: `.proto`, JSON/YAML/TOML — done** → M4 automated implementation
+pipeline → M5 static share mode.
 
 ## Commands
 

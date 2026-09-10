@@ -47,6 +47,19 @@ func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 	s.renderPage(w, e)
 }
 
+// resolution materializes a document's log against the document as it now
+// reads, so a re-render can say which notes still apply, which predate an edit
+// and which have lost their block entirely.
+func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resolution {
+	hashes := make(map[string]string, len(e.Doc.Blocks))
+	order := make([]string, 0, len(e.Doc.Blocks))
+	for _, b := range e.Doc.Blocks {
+		hashes[b.ID] = b.Hash
+		order = append(order, b.ID)
+	}
+	return feedback.Materialize(events, hashes, order)
+}
+
 // renderPage renders one document plus the navigation state of the whole set,
 // which means reading every log: cheap, and it keeps the sidebar's counts and
 // done ticks true on every load.
@@ -67,6 +80,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		}
 		if e == current {
 			page.Events = events
+			page.Resolution = s.resolution(e, events)
 		}
 		nav := web.NavDoc{
 			Label:   e.Label,
@@ -121,10 +135,11 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		events = []feedback.Event{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"doc":    e.Doc,
-		"events": events,
-		"author": s.opts.Author,
-		"docs":   s.docList(),
+		"doc":        e.Doc,
+		"events":     events,
+		"author":     s.opts.Author,
+		"docs":       s.docList(),
+		"resolution": s.resolution(e, events),
 	})
 }
 
@@ -136,6 +151,23 @@ func (s *Server) docList() []map[string]string {
 		out = append(out, map[string]string{"path": e.Doc.Path, "rel": e.Rel, "label": e.Label})
 	}
 	return out
+}
+
+// handleResolution serves the second-pass view an agent needs after revising a
+// document: the current state per block, which notes an edit has outrun, and
+// which have lost their block altogether.
+func (s *Server) handleResolution(w http.ResponseWriter, r *http.Request) {
+	e := s.entry(r)
+	if e == nil {
+		http.NotFound(w, r)
+		return
+	}
+	events, err := e.Store.Load()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.resolution(e, events))
 }
 
 func (s *Server) handleGetFeedback(w http.ResponseWriter, r *http.Request) {

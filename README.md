@@ -99,6 +99,29 @@ node, indented by depth, with **Collapse all** for a big file.
   which is the whole point of reviewing a config), and YAML comments render with
   the node they document.
 
+## Reviewing again after a revision
+
+Reopen a revised document and prior feedback re-anchors by block, with the
+second pass made explicit:
+
+- a note whose block still reads the same **stands** — the badge shows what was
+  decided (green for approve, red for reject);
+- a note written before that block changed is flagged **stale**, with the text it
+  was written against (`was: "…"`) so you can see what moved;
+- a note whose block is gone entirely is listed as **no longer anchored** at the
+  end of the page instead of disappearing.
+
+`GET /api/resolution` returns the same view as JSON — the current state per
+block, its history, and the stale/orphaned flags — which is what an agent reads
+before applying feedback:
+
+```bash
+curl -s localhost:8787/api/resolution | jq '.stale, .orphaned'
+```
+
+Nothing is rewritten to produce it: the log stays append-only and staleness is a
+view over it, not a fact on disk.
+
 ## How it works
 
 - Each block gets a stable ID (`section/ordinal` for prose, the node's own

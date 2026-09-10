@@ -68,6 +68,7 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("GET /d/{doc...}", s.handleDocPage)
 	s.mux.HandleFunc("GET /api/doc", s.handleDoc)
 	s.mux.HandleFunc("GET /api/feedback", s.handleGetFeedback)
+	s.mux.HandleFunc("GET /api/resolution", s.handleResolution)
 	s.mux.HandleFunc("POST /api/feedback", s.handlePostFeedback)
 	s.mux.HandleFunc("POST /api/session_done", s.handleSessionDone)
 	return s
