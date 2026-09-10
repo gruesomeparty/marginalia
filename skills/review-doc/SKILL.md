@@ -1,6 +1,6 @@
 ---
 name: review-doc
-description: Use when you need a human to review a document, schema or config you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML file) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
+description: Use when you need a human to review a document, schema, config or diagram you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML file, mermaid flowchart) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
 ---
 
 # Reviewing a document with Marginalia
@@ -38,10 +38,14 @@ Supported inputs and how their blocks are anchored:
 | `.md`, `.markdown` | `5.3/2` (section path + ordinal); list items add their position, `5.3/2.1` |
 | `.proto` | `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` |
+| `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; inside a fence, under the fence's block — `1/3/client-->api` |
 
-Anchoring by path is what makes feedback on a schema or config mechanically
-applicable: the human's note points at the field or node itself, not at prose
-about it.
+Anchoring by path is what makes feedback on a schema, config or diagram
+mechanically applicable: the human's note points at the field, node or edge
+itself, not at prose about it. A mermaid statement's anchor names what it
+connects and leaves out the line style and any label, so `worker-->queue` is
+the edge to change whether it was written `worker --> queue` or
+`worker -.retry.-> queue`.
 
 ### Handing over several documents at once
 

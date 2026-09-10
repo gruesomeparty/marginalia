@@ -20,6 +20,7 @@ const (
 	FormatJSON     = "json"
 	FormatYAML     = "yaml"
 	FormatTOML     = "toml"
+	FormatMermaid  = "mermaid"
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -39,6 +40,8 @@ func FormatFor(path string) string {
 		return FormatYAML
 	case ".toml":
 		return FormatTOML
+	case ".mmd", ".mermaid":
+		return FormatMermaid
 	}
 	return ""
 }
@@ -67,6 +70,8 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseYAML(path, src)
 	case FormatTOML:
 		return parseTOML(path, src)
+	case FormatMermaid:
+		return parseMermaid(path, src)
 	}
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }
@@ -95,6 +100,21 @@ func parseMarkdown(path string, src []byte) (*Document, error) {
 			Quote:     quote(plain, 90),
 			Hash:      hashText(plain),
 			PlainText: plain,
+		}
+		// A mermaid fence is a diagram, not an opaque wall of source: its
+		// statements anchor individually inside the fence's own markup.
+		if fence, ok := n.(*ast.FencedCodeBlock); ok && isMermaidFence(fence, src) {
+			p.blocks = append(p.blocks, block)
+			at := len(p.blocks) - 1
+			html, kids, ok := p.mermaidFence(fence, section, id)
+			if ok {
+				p.blocks[at].HTML = html
+				p.blocks[at].HasChildren = kids
+				continue
+			}
+			// Not a diagram type we take apart: render it as the code block
+			// it is, with the anchor it already had.
+			p.blocks = p.blocks[:at]
 		}
 		list, isList := n.(*ast.List)
 		if !isList {

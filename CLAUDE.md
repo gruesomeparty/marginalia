@@ -8,7 +8,9 @@ The repo has a working Go module implementing PRD milestone **M1** — server mo
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
-JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path,
+and mermaid flowcharts anchor per statement (issue #25) — in a markdown fence
+and as `.mmd`/`.mermaid` documents.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
 a `.marginalia.yml`-curated list — one page per document, and markdown list
 items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
@@ -69,7 +71,12 @@ users are agents, not humans.
   parse into `dataNode` (`datatree.go`) and share path derivation, rendering
   and anchoring; only the decoders differ. Key order is always the author's:
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
-  `MetaData.Keys()`.
+  `MetaData.Keys()`. Mermaid is parsed by `internal/mermaid` — line-based,
+  bracket-aware and equally tolerant, returning statements with the byte range
+  they occupy so a fence can be annotated in place. Nothing renders the
+  diagram as a picture: that needs JavaScript (a megabyte inlined, and
+  `unsafe-eval` under strict CSP) or headless Chromium, which costs the single
+  Go binary.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
@@ -114,7 +121,14 @@ element for it (`Block.Inline`). The list itself keeps its old ID, so notes
 about the shape of a list, and feedback written before item anchoring, still
 anchor. Tree documents keep the same
 schema and only derive `block` differently — the node's own path
-(`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
+(`CreateOrderRequest/customer_id`, nested types dotted, members after a slash).
+A mermaid statement is anchored by what it connects, with the link style and
+any label left out (`worker -.retry.-> queue` → `worker-->queue`, chains
+joined `a-->b-->c`, subgraph members after a slash). In a markdown fence those
+paths extend the fence's own ID (`1/3/client-->api`) and the statements are
+**inline** blocks, like list items: the `<pre>` is the source the author wrote,
+annotated with anchors in place, and the fence keeps its old ID.
+`block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
 `suggest_edit` (text = replacement), `question`, `approve`, `reject`. A **Done**
@@ -147,7 +161,7 @@ agent write access on a timer.
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
-**M3 trees: `.proto`, JSON/YAML/TOML — done** → **M4 automated implementation
+**M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
 pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
 → M5 static share mode.
 
