@@ -9,6 +9,8 @@ for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
 JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+Multi-document sessions (issue #8) serve a set — a directory, several paths, or
+a `.marginalia.yml`-curated list — one page per document.
 `PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
 this file). M2–M5 are still ahead (see Build order below).
@@ -24,6 +26,17 @@ users are agents, not humans.
 ## Planned architecture (from PRD §6)
 
 - **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
+- `internal/reviewset` resolves what `serve` was pointed at: one file, several,
+  or a directory (walked, skipping hidden/`node_modules`/`vendor`, capped at 200
+  documents). A `.marginalia.yml` in a served directory is whitelist + order +
+  labels, and is then the *only* tree — so a listed-but-missing path is a hard
+  error and startup reports how many supported files the index excluded.
+- Server routes: `GET /` (first document), `GET /d/{rel...}` (one page per
+  document), `GET /api/doc[?doc=]`, `GET|POST /api/feedback[?doc=]`,
+  `POST /api/session_done`. A posted event names its document and the server
+  only writes to documents in the served set — a stale page must not be able to
+  append elsewhere. Per-document `review_done` comes from the page's Done
+  button; `session_done` writes one to every log with `text: "session"`.
 - HTML template embedded via `go:embed`; one template feeds both server and static modes.
 - Markdown via **goldmark** + an AST walker that assigns each block an ID + hash at render time.
 - Tree inputs share `internal/document`'s `treeBuilder`: pre-ordered flat

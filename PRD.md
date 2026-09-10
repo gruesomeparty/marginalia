@@ -173,6 +173,17 @@ Ships with a `SKILL.md` so agents use it uniformly:
   textarea + manual Cmd+C; downloads wrapped in try/catch. (Server mode avoids
   the whole class: feedback goes to disk, nothing passes through a clipboard.)
 
+### 5.7 Multi-document sessions
+
+One `serve` may hand over a set — a directory, several paths, or a
+`.marginalia.yml`-curated list (title, order, labels; it is also a whitelist, so
+exclusions are reported at startup and a missing entry is a hard error). Each
+document keeps its own `<doc>.feedback.jsonl`; the page shows a navigation tree
+of the set with live comment counts and per-document done ticks. Done is
+per-document, and a session-level Done appends a `review_done` (with
+`text: "session"`) to every log, so an agent watching any one document sees the
+handover close.
+
 ## 6. Architecture
 
 - **Single Go binary**, cobra subcommands (`serve`, `export`, `import`,
@@ -268,4 +279,5 @@ approved queue.
 - Should `suggest_edit` events be auto-applicable (agent applies the
   replacement text verbatim when hash still matches)? Leaning yes in M3.
 - Watch mode (`serve --watch`: re-render on file change mid-review)?
-- Multi-document sessions (review a spec + its plan together)?
+- ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
+  in §5.7: one server, a page per document, per-document and session `review_done`.

@@ -22,7 +22,9 @@ go install github.com/gruesomeparty/marginalia@latest
 ## 1. Serve the document
 
 ```bash
-marginalia serve <path> --open
+marginalia serve <path> --open                 # one document
+marginalia serve <dir> --open                  # every supported file beneath it
+marginalia serve spec.md plan.md api.proto     # or name them
 ```
 
 This prints the URL and the feedback file path (`<path>.feedback.jsonl`). The
@@ -41,6 +43,29 @@ Anchoring by path is what makes feedback on a schema or config mechanically
 applicable: the human's note points at the field or node itself, not at prose
 about it.
 
+### Handing over several documents at once
+
+A set is served as one server with a page per document and a navigation tree, so
+the human gets one URL instead of one port per file. Each document still writes
+to its own `<doc>.feedback.jsonl`, and the startup output lists every log — watch
+all of them.
+
+To choose what the reviewer sees and in what order, write a `.marginalia.yml`
+next to the documents before serving:
+
+```yaml
+title: Ingest rework — sign-off
+docs:
+  - path: api/orders.proto
+    label: Order service contract
+  - docs/plan.md
+```
+
+The index is a whitelist: anything unlisted is invisible to the reviewer, and
+startup reports how many supported files it excluded. Keep it in step with the
+files you actually want signed off — a listed path that does not exist stops the
+server rather than shrinking the review silently.
+
 ## 2. Tell the human what you need
 
 State the URL and exactly what you want reviewed ("I need your take on §3 and the
@@ -56,6 +81,12 @@ tail -f <path>.feedback.jsonl
 
 Completion signals, in priority order: a `{"type":"review_done"}` line; the human
 says they're done; or the file goes quiet after activity.
+
+Reviewing a set: poll every document's log. A `review_done` with
+`"text":"session"` means the human pressed **Finish review set** — the whole
+handover is done, so it appears in every log at once. A `review_done` with an
+empty `text` means only that one document was marked done, and the others may
+still be in progress.
 
 ## 4. Address the feedback
 

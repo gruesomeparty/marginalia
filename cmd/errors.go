@@ -1,18 +1,24 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-	"path/filepath"
-	"strings"
 
-	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/reviewset"
 )
 
-func checkSupported(path string) error {
-	if document.FormatFor(path) == "" {
-		return unsupportedInputError(strings.ToLower(filepath.Ext(path)))
+// routeSetError sends the two failures that are really feature requests — a
+// format Marginalia cannot render, and a directory holding nothing it can —
+// to the request-feature skill, and passes everything else through as is.
+func routeSetError(err error) error {
+	var unsupported *reviewset.UnsupportedError
+	if errors.As(err, &unsupported) {
+		return unsupportedInputError(unsupported.Ext)
 	}
-	return nil
+	if errors.Is(err, reviewset.ErrNoDocuments) {
+		return advertise(err)
+	}
+	return err
 }
 
 func unsupportedInputError(ext string) error {

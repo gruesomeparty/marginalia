@@ -1,9 +1,9 @@
 # Marginalia
 
 A document-review tool an agent hands to a human. It renders a markdown file, a
-`.proto` schema, or a JSON/YAML/TOML tree as a readable page, collects inline
-comments anchored to blocks, and writes them back as append-only JSONL feedback
-events the agent consumes directly.
+`.proto` schema, or a JSON/YAML/TOML tree — one document or a whole set — as a
+readable page, collects inline comments anchored to blocks, and writes them back
+as append-only JSONL feedback events the agent consumes directly.
 
 See `PRD.md` for the full product spec.
 
@@ -41,6 +41,37 @@ marginalia serve README.md --open
 Open the URL, click any block to comment, hit **Done** when finished. Every
 comment is written to `README.md.feedback.jsonl` the instant it is saved — there
 is no export step.
+
+## Multi-document reviews
+
+One server, one page per document, feedback in each document's own log:
+
+```bash
+marginalia serve docs/                       # every supported file beneath it
+marginalia serve spec.md plan.md api.proto   # or name them
+```
+
+A sidebar tree mirrors the folders the documents were found in, with a live
+comment count and a tick per finished file. **Done with this file** marks one
+document reviewed; **Finish review set** marks them all — it appends
+`{"type":"review_done","text":"session"}` to every log, so an agent watching any
+one of them sees the handover close.
+
+To curate what the reviewer sees, drop a `.marginalia.yml` in the directory:
+
+```yaml
+title: Ingest rework — sign-off
+docs:
+  - path: api/orders.proto
+    label: Order service contract
+  - path: docs/plan.md
+    label: Rollout plan
+  - deploy.yaml            # a bare path keeps its own name
+```
+
+With an index the list *is* the tree: its order, its labels, nothing else. That
+makes it a whitelist too, so startup says how many supported files it left out —
+and a mistyped entry fails loudly rather than quietly shrinking the review.
 
 ## Supported inputs
 

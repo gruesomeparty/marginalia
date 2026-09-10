@@ -4,34 +4,71 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/server"
 )
 
-func buildServer(path, host string, port int, open bool, author string) (*server.Server, error) {
-	if err := checkSupported(path); err != nil {
-		return nil, err
-	}
-	doc, err := document.Parse(path)
+// buildServer resolves the paths into a review set — one document, several, or
+// a directory of them — parses each and wires it to its own feedback log.
+func buildServer(paths []string, host string, port int, open bool, author string) (*server.Server, error) {
+	set, err := reviewset.Load(paths)
 	if err != nil {
-		return nil, err
+		return nil, routeSetError(err)
+	}
+	docs := make([]server.Entry, 0, len(set.Docs))
+	for _, d := range set.Docs {
+		doc, err := document.Parse(d.Path)
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, server.Entry{
+			Doc:   doc,
+			Store: feedback.NewStore(d.Path),
+			Label: d.Label,
+			Rel:   d.Rel,
+		})
 	}
 	if author == "" {
 		author = defaultAuthor()
 	}
 	return server.New(server.Options{
-		Doc:    doc,
-		Store:  feedback.NewStore(path),
+		Docs:     docs,
+		Title:    sessionTitle(set),
+		Root:     set.Root,
+		Index:    set.Index,
+		Excluded: set.Excluded,
+		// A discovered set mirrors the folders it was found in; a curated one
+		// is exactly the index's list, so its order is the tree.
+		Nested: set.Index == "",
 		Author: author,
 		Host:   host,
 		Port:   port,
 		Open:   open,
 	}), nil
+}
+
+// sessionTitle is what the page header calls the review: the index's title, or
+// the directory the set was found in. A single document titles itself.
+func sessionTitle(set *reviewset.Set) string {
+	if set.Title != "" {
+		return set.Title
+	}
+	if set.Single() {
+		return ""
+	}
+	// A relative root ("." from inside the directory being served) is no kind
+	// of name; use the directory's own.
+	if abs, err := filepath.Abs(set.Root); err == nil {
+		return filepath.Base(abs)
+	}
+	return set.Root
 }
 
 func defaultAuthor() string {
@@ -49,11 +86,11 @@ func newServeCmd() *cobra.Command {
 		author string
 	)
 	cmd := &cobra.Command{
-		Use:   "serve <doc>",
-		Short: "Serve a document for block-anchored human review",
-		Args:  cobra.ExactArgs(1),
+		Use:   "serve <doc|dir>...",
+		Short: "Serve one or more documents for block-anchored human review",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			srv, err := buildServer(args[0], host, port, open, author)
+			srv, err := buildServer(args, host, port, open, author)
 			if err != nil {
 				return err
 			}
