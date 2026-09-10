@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -88,7 +89,18 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
-		Args:  cobra.MinimumNArgs(1),
+		// Deliberately not routed through advertise(): the request-feature
+		// pointer is for capability gaps — a format we cannot render, a flag
+		// that does not exist — and "you forgot the path" is a usage mistake.
+		// Sending those to the feature tracker would fill the queue with
+		// noise, the same reason a missing file does not advertise either.
+		// What it gets instead is an error that says what to type.
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return errors.New("serve needs at least one document or directory — e.g. `marginalia serve spec.md` or `marginalia serve docs/`")
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srv, err := buildServer(args, host, port, open, author)
 			if err != nil {

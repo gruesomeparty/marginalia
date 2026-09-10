@@ -91,3 +91,60 @@ func TestHandlersReturn500OnCorruptStore(t *testing.T) {
 		}
 	}
 }
+
+// Serve waits for the shutdown drain, so a request in flight when the
+// reviewer closes the tab is finished — and its comment written — before the
+// process exits.
+func TestServeDrainsInFlightRequests(t *testing.T) {
+	s, store, _ := newTestServer(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- s.Serve(ctx, ln) }()
+
+	url := "http://" + ln.Addr().String()
+	body, _ := json.Marshal(feedback.Event{Block: "1/1", Type: feedback.TypeComment, Text: "saved on the way out"})
+	resp, err := http.Post(url+"/api/feedback", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	_ = resp.Body.Close()
+	cancel()
+
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("Serve returned error: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve did not return after ctx cancel")
+	}
+	events, err := store.Load()
+	if err != nil || len(events) != 1 || events[0].Text != "saved on the way out" {
+		t.Fatalf("comment not on disk after shutdown: %+v (%v)", events, err)
+	}
+}
+
+// A listener that cannot serve must fail fast rather than wait for a drain
+// that will never come.
+func TestServeReturnsListenerErrorWithoutHanging(t *testing.T) {
+	s, _, _ := newTestServer(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = ln.Close()
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(context.Background(), ln) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error from a closed listener")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve hung on a closed listener")
+	}
+}
