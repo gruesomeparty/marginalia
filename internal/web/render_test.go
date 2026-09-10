@@ -244,3 +244,37 @@ func TestOrphanTitlePlural(t *testing.T) {
 		t.Errorf("orphanTitle(3) = %q", got)
 	}
 }
+
+// The client reads ids, anchors and text; the rendered HTML is already in the
+// DOM, so shipping it in the payload as well doubled the page for nothing.
+func TestRenderPayloadOmitsRenderedHTML(t *testing.T) {
+	doc, err := document.ParseBytes("spec.md", []byte("# Title\n\nA paragraph.\n\n- item\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	script := buf.String()[strings.Index(buf.String(), "window.__MARGINALIA__"):]
+	script = script[:strings.Index(script, "\n")]
+	if strings.Contains(script, `\"html\"`) || strings.Contains(script, `"html"`) {
+		t.Error("payload should not carry rendered HTML")
+	}
+	for _, want := range []string{`"id":"1/1"`, `"hash":`, `"quote":`, `"text":`, `"path":"spec.md"`} {
+		if !strings.Contains(script, want) {
+			t.Errorf("payload missing %q", want)
+		}
+	}
+	// A list item needs its parent and the list its has_children, or the tree
+	// folding and per-item anchoring have nothing to work with.
+	for _, want := range []string{`"parent":"1/3"`, `"has_children":true`} {
+		if !strings.Contains(script, want) {
+			t.Errorf("payload missing %q", want)
+		}
+	}
+	// Kinds and levels live on the block elements, not in the payload.
+	if strings.Contains(script, `"kind"`) || strings.Contains(script, `"level"`) {
+		t.Error("payload should not repeat what the data attributes carry")
+	}
+}

@@ -310,3 +310,41 @@ func TestResolutionSelectsDocumentAndReportsErrors(t *testing.T) {
 		t.Errorf("corrupt log: code=%d, want 500", rr.Code)
 	}
 }
+
+// An oversized body must be refused rather than read into memory, even on a
+// trusted interface.
+func TestPostFeedbackRefusesOversizedBody(t *testing.T) {
+	s, stores := newSetServer(t)
+	huge := bytes.NewReader([]byte(`{"type":"comment","text":"` + strings.Repeat("x", maxFeedbackBody+1) + `"}`))
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/api/feedback", huge))
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("code=%d, want 413", rr.Code)
+	}
+	for rel, store := range stores {
+		if events, _ := store.Load(); len(events) != 0 {
+			t.Errorf("%s should be untouched, got %+v", rel, events)
+		}
+	}
+	// A body under the cap still works.
+	rr = post(t, s, "/api/feedback", feedback.Event{Block: "1/1", Type: feedback.TypeComment, Text: "fine"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+// A failure discovered while rendering must not arrive as a 200 with half a
+// document in it.
+func TestRenderFailureIsNotAPartialPage(t *testing.T) {
+	s, stores := newSetServer(t)
+	if err := os.WriteFile(stores["spec.md"].Path(), []byte("{not json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rr := get(t, s, "/")
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("code=%d, want 500", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "<!doctype") || strings.Contains(rr.Body.String(), "window.__MARGINALIA__") {
+		t.Errorf("500 response leaked page markup: %q", rr.Body.String())
+	}
+}

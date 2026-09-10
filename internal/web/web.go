@@ -41,11 +41,47 @@ type Page struct {
 	SetDone    bool     // every document already carries a review_done
 }
 
+// clientBlock is the projection of a Block the page's script actually reads:
+// enough to build a feedback event and to fold a tree. The rendered HTML is
+// left out — it is already in the DOM, and shipping it twice doubled the page
+// for no one's benefit.
+type clientBlock struct {
+	ID          string `json:"id"`
+	Parent      string `json:"parent,omitempty"`
+	HasChildren bool   `json:"has_children,omitempty"`
+	Hash        string `json:"hash"`
+	Quote       string `json:"quote"`
+	Text        string `json:"text"`
+}
+
+type clientDoc struct {
+	Path   string        `json:"path"`
+	Blocks []clientBlock `json:"blocks"`
+}
+
 type payload struct {
-	Doc        *document.Document  `json:"doc"`
+	Doc        clientDoc           `json:"doc"`
 	Events     []feedback.Event    `json:"events"`
 	Resolution feedback.Resolution `json:"resolution"`
 	Author     string              `json:"author"`
+}
+
+// project reduces a document to what the client needs. Kinds, levels and
+// ordinals are omitted deliberately: the page reads those off the block
+// element's data attributes.
+func project(doc *document.Document) clientDoc {
+	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks))}
+	for _, b := range doc.Blocks {
+		out.Blocks = append(out.Blocks, clientBlock{
+			ID:          b.ID,
+			Parent:      b.Parent,
+			HasChildren: b.HasChildren,
+			Hash:        b.Hash,
+			Quote:       b.Quote,
+			Text:        b.PlainText,
+		})
+	}
+	return out
 }
 
 // navNode is a rendered navigation entry: either a directory heading or a
@@ -65,7 +101,6 @@ type viewData struct {
 	Orphans     []feedback.State
 	OrphanTitle string
 	Title       string
-	Author      string
 	DataJSON    template.JS
 	Nav         []*navNode
 	ShowNav     bool
@@ -80,7 +115,7 @@ func Render(w io.Writer, p Page) error {
 	if events == nil {
 		events = []feedback.Event{}
 	}
-	raw, err := json.Marshal(payload{Doc: p.Doc, Events: events, Resolution: p.Resolution, Author: p.Author})
+	raw, err := json.Marshal(payload{Doc: project(p.Doc), Events: events, Resolution: p.Resolution, Author: p.Author})
 	if err != nil {
 		return err
 	}
@@ -100,7 +135,6 @@ func Render(w io.Writer, p Page) error {
 		Orphans:     lost,
 		OrphanTitle: orphanTitle(len(lost)),
 		Title:       title,
-		Author:      p.Author,
 		DataJSON:    template.JS(raw),
 		Nav:         buildNav(p.Docs, p.Nested),
 		ShowNav:     len(p.Docs) > 1,

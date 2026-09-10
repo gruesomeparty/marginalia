@@ -41,7 +41,16 @@ users are agents, not humans.
   only writes to documents in the served set — a stale page must not be able to
   append elsewhere. Per-document `review_done` comes from the page's Done
   button; `session_done` writes one to every log with `text: "session"`.
-- HTML template embedded via `go:embed`; one template feeds both server and static modes.
+- HTML template embedded via `go:embed`; one template feeds both server and
+  static modes. The page's `window.__MARGINALIA__` payload is a *projection*
+  (`web.project`), not the whole `Document`: ids, anchors, text, parent and
+  has-children only — kinds and levels are read off the block elements' data
+  attributes, and the rendered HTML is already in the DOM. Render into a buffer
+  before writing: once bytes are on the wire the status is sent, and half a
+  document under a 200 is worse than an honest 500.
+- `Serve` waits for the shutdown drain before returning, so a comment saved as
+  the reviewer closes the tab reaches disk before the process exits. POSTed
+  events are capped (`maxFeedbackBody`) and answered with 413 past it.
 - Markdown via **goldmark** + an AST walker that assigns each block an ID + hash at render time.
 - Tree inputs share `internal/document`'s `treeBuilder`: pre-ordered flat
   blocks carrying `Parent`/`Level`/`HasChildren`, which the one template

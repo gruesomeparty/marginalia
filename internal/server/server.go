@@ -87,24 +87,37 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.Serve(ctx, ln)
 }
 
-// Serve runs the HTTP server on ln until ctx is cancelled, then shuts down gracefully.
+// Serve runs the HTTP server on ln until ctx is cancelled, then shuts down
+// gracefully — and waits for the drain to finish before returning, so a
+// comment saved as the reviewer closes the tab is on disk before the process
+// exits.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	httpSrv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
+	stopped := make(chan struct{})
+	defer close(stopped)
+	drained := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
+		select {
+		case <-ctx.Done():
+		case <-stopped:
+			return // Serve failed on its own; there is nothing to drain
+		}
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = httpSrv.Shutdown(shutCtx)
+		drained <- httpSrv.Shutdown(shutCtx)
 	}()
 	url := fmt.Sprintf("http://%s", ln.Addr().String())
 	s.announce(url)
 	if s.opts.Open {
 		_ = openBrowser(url)
 	}
-	if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err := httpSrv.Serve(ln)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
-	return nil
+	// ErrServerClosed means Shutdown was called, which only happens above:
+	// wait for the in-flight requests it is draining.
+	return <-drained
 }
 
 // announce prints where the review is and where feedback lands. A curated set

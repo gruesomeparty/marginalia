@@ -1,13 +1,21 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/web"
 )
+
+// maxFeedbackBody caps a POSTed event. The largest legitimate one is a
+// suggest_edit carrying a replacement block, so a megabyte is generous; the
+// point is that an unbounded body should not be readable into memory even on
+// a trusted interface.
+const maxFeedbackBody = 1 << 20
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -62,7 +70,9 @@ func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resoluti
 
 // renderPage renders one document plus the navigation state of the whole set,
 // which means reading every log: cheap, and it keeps the sidebar's counts and
-// done ticks true on every load.
+// done ticks true on every load. The page is rendered into memory first: once
+// bytes are on the wire the status is already sent, and a half-written
+// document under a 200 is worse than an honest 500.
 func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 	page := web.Page{
 		Doc:    current.Doc,
@@ -95,10 +105,13 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		page.Docs = append(page.Docs, nav)
 	}
 	page.SetDone = setDone && len(s.docs) > 1
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := web.Render(w, page); err != nil {
+	var buf bytes.Buffer
+	if err := web.Render(&buf, page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = buf.WriteTo(w)
 }
 
 func countComments(events []feedback.Event) int {
@@ -189,7 +202,13 @@ func (s *Server) handleGetFeedback(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 	var e feedback.Event
+	r.Body = http.MaxBytesReader(w, r.Body, maxFeedbackBody)
 	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}

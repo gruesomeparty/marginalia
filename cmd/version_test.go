@@ -7,6 +7,10 @@ import (
 )
 
 func TestVersionCommand(t *testing.T) {
+	// version is package-level state the release build sets via ldflags;
+	// restore it so a later test cannot read this one's value.
+	original := version
+	t.Cleanup(func() { version = original })
 	version = "1.2.3"
 	root := newRootCmd()
 	var out bytes.Buffer
