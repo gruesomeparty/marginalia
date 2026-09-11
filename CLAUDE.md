@@ -95,6 +95,12 @@ users are agents, not humans.
   diagram as a picture: that needs JavaScript (a megabyte inlined, and
   `unsafe-eval` under strict CSP) or headless Chromium, which costs the single
   Go binary.
+- A requester note carries the document it is about (`review.Note.Doc`), and
+  `web.ReviewInfo` filters notes to the document being rendered: block ids are
+  per-document, so `1/2` exists in every markdown file of a set and an
+  unscoped note would be rendered beside the wrong block and reported as
+  unanchored on every other page. A note naming a document the set does not
+  serve is named at startup rather than dropped.
 - `internal/review` is the review configuration: framing, the action
   vocabulary (built-ins plus configured ones), structured fields, read-only
   patterns. It is the **only** authority on which event types exist — there is

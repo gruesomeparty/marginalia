@@ -290,3 +290,93 @@ func TestSkippedBlocks(t *testing.T) {
 		t.Errorf("requester notes must never be events: %+v", events)
 	}
 }
+
+// A requester's note must reach the document it is about and no other: block
+// ids repeat across a set, so a note for spec.md's `1/2` would otherwise be
+// rendered beside plan.md's `1/2`, and be reported as unanchored on every
+// other page.
+func TestNotesDoNotLeakAcrossASet(t *testing.T) {
+	s, _ := newSetServer(t)
+	s.opts.Review = config(t, `
+notes:
+  - doc: spec.md
+    block: "1/2"
+    text: why this number?
+  - doc: docs/plan.md
+    block: "1/1"
+    text: still the plan?
+`)
+	page := get(t, s, "/d/spec.md").Body.String()
+	if !strings.Contains(page, "why this number?") {
+		t.Error("spec.md should carry its own note")
+	}
+	if strings.Contains(page, "still the plan?") {
+		t.Error("another document's note leaked onto spec.md")
+	}
+	// api.proto is addressed by neither note, so it sees no notes at all —
+	// not even as unanchored, which is what made the bug visible.
+	proto := get(t, s, "/d/api.proto").Body.String()
+	for _, leaked := range []string{"why this number?", "still the plan?"} {
+		if strings.Contains(proto, leaked) {
+			t.Errorf("api.proto should not mention %q", leaked)
+		}
+	}
+	var doc struct {
+		Review struct {
+			Notes []review.Note `json:"notes"`
+		} `json:"review"`
+	}
+	if err := json.Unmarshal(get(t, s, "/api/doc?doc=api.proto").Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Review.Notes) != 0 {
+		t.Errorf("the API should scope notes too: %+v", doc.Review.Notes)
+	}
+	// The document that is addressed sees exactly its own note.
+	if err := json.Unmarshal(get(t, s, "/api/doc?doc=docs/plan.md").Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Review.Notes) != 1 || doc.Review.Notes[0].Text != "still the plan?" {
+		t.Errorf("plan's notes = %+v", doc.Review.Notes)
+	}
+}
+
+// A note that names its document but not a block it has still reaches the
+// page, so the reviewer sees the question rather than the agent losing it.
+func TestNoteForAMissingBlockIsSurfaced(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.md")
+	if err := os.WriteFile(path, []byte(framedDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := document.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config(t, "notes:\n  - doc: "+path+"\n    block: \"9/9\"\n    text: what happened to the cap?\n")
+	s := New(Options{Doc: doc, Store: feedback.NewStore(path), Author: "tester", Review: cfg})
+	if !strings.Contains(get(t, s, "/").Body.String(), "what happened to the cap?") {
+		t.Error("a note whose block is gone should still be shown")
+	}
+}
+
+// A note naming a document the review does not serve would render nowhere, so
+// startup says so rather than dropping the agent's question in silence.
+func TestStrayNotesAreNamed(t *testing.T) {
+	s, _ := newSetServer(t)
+	s.opts.Review = config(t, `
+notes:
+  - doc: spec.md
+    block: "1/1"
+    text: fine, this document is served
+  - doc: gone.md
+    block: "1/1"
+    text: nowhere to land
+  - doc: gone.md
+    block: "1/2"
+    text: also nowhere
+`)
+	got := s.strayNotes()
+	if len(got) != 1 || got[0] != "gone.md" {
+		t.Errorf("stray notes = %v, want [gone.md] once", got)
+	}
+}

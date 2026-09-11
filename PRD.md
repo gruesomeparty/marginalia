@@ -283,7 +283,8 @@ The same channel carries the requester's own guidance:
 
 ```yaml
 notes:
-  - block: "1/2"
+  - doc: spec.md   # which document; block ids repeat across a set
+    block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 skip:
   - "2"      # generated appendix: folded, and refused if something posts anyway

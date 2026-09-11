@@ -84,6 +84,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Title:    s.opts.Title,
 		Nested:   s.opts.Nested,
 		Review:   s.opts.Review,
+		Rel:      current.Rel,
 		Theme:    s.opts.Theme,
 	}
 	setDone := true
@@ -162,7 +163,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		// The vocabulary is part of the answer: an agent reading `blocker`
 		// out of the log needs to see that it was asked for, and what it was
 		// labelled when the human tapped it.
-		"review": web.ReviewInfo(s.opts.Review),
+		"review": web.ReviewInfo(s.opts.Review, s.docOf(e), e.Rel),
 		// Resolved against this document, so a consuming agent can see which
 		// blocks were deliberately not reviewed rather than re-deriving it
 		// from the patterns.

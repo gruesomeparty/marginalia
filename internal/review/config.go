@@ -66,8 +66,12 @@ type Config struct {
 	Skip []string `yaml:"skip"`
 }
 
-// Note is one piece of requester guidance, anchored to a block.
+// Note is one piece of requester guidance, anchored to a block — and, in a
+// review set, to a document. Doc matters more than it looks: block ids are
+// per-document, so `1/2` exists in every markdown file served, and a note
+// without a document would follow that id into documents it was never about.
 type Note struct {
+	Doc   string `yaml:"doc,omitempty" json:"doc,omitempty"`
 	Block string `yaml:"block" json:"block"`
 	Text  string `yaml:"text" json:"text"`
 }
@@ -188,6 +192,7 @@ func (c *Config) validate() error {
 	}
 	for i := range c.Notes {
 		n := &c.Notes[i]
+		n.Doc = strings.TrimSpace(n.Doc)
 		n.Block = strings.TrimSpace(n.Block)
 		n.Text = strings.TrimSpace(n.Text)
 		if n.Block == "" {
@@ -265,15 +270,48 @@ func (c *Config) Locked(block string) bool {
 // is not part of this review.
 func (c *Config) Skipped(block string) bool { return matches(c.Skip, block) }
 
-// NotesFor returns the requester's guidance anchored to a block.
-func (c *Config) NotesFor(block string) []Note {
+// NotesFor returns the requester's guidance for one block of one document.
+// doc is matched against the note's own Doc — pass every name the document
+// answers to (its path and its path relative to the set root), since that is
+// what an agent would have written.
+func (c *Config) NotesFor(block string, doc ...string) []Note {
 	var out []Note
 	for _, n := range c.Notes {
-		if n.Block == block {
+		if n.Block == block && n.addresses(doc) {
 			out = append(out, n)
 		}
 	}
 	return out
+}
+
+// Unanchored returns the notes addressed to this document whose block it does
+// not have. A note that names its document and misses is worth surfacing: the
+// agent asked about something that is not there. A note with no document is
+// not — it is matched by block id alone, so missing here means "meant for
+// another document", which is silence, not an error.
+func (c *Config) Unanchored(blocks map[string]bool, doc ...string) []Note {
+	var out []Note
+	for _, n := range c.Notes {
+		if n.Doc != "" && n.addresses(doc) && !blocks[n.Block] {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// addresses reports whether a note applies to a document. A note with no Doc
+// applies wherever its block exists — the single-document case, where naming
+// the document would be noise.
+func (n Note) addresses(doc []string) bool {
+	if n.Doc == "" {
+		return true
+	}
+	for _, name := range doc {
+		if n.Doc == name {
+			return true
+		}
+	}
+	return false
 }
 
 // matches reports whether a block is named by one of the patterns. A pattern

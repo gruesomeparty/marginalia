@@ -240,3 +240,66 @@ func TestLoadRejectsBadGuidance(t *testing.T) {
 		}
 	}
 }
+
+// Block ids are per-document — `1/2` exists in every markdown file of a set —
+// so a note has to say which document it is about, or it follows its id into
+// documents it was never written for.
+func TestNotesAreScopedToTheirDocument(t *testing.T) {
+	c := mustLoad(t, `
+notes:
+  - doc: spec.md
+    block: "1/2"
+    text: why 500?
+  - doc: plan.md
+    block: "1/2"
+    text: is this still the plan?
+  - block: "1/9"
+    text: no document named, so wherever this block lives
+`)
+	if got := c.NotesFor("1/2", "spec.md"); len(got) != 1 || got[0].Text != "why 500?" {
+		t.Errorf("spec.md's note = %+v", got)
+	}
+	if got := c.NotesFor("1/2", "plan.md"); len(got) != 1 || got[0].Text != "is this still the plan?" {
+		t.Errorf("plan.md's note = %+v", got)
+	}
+	// A document answers to more than one name: its path and its path in the
+	// set, since either is what an agent would have written.
+	if got := c.NotesFor("1/2", "docs/spec.md", "spec.md"); len(got) != 1 {
+		t.Errorf("either name should match: %+v", got)
+	}
+	if got := c.NotesFor("1/2", "deploy.yaml"); len(got) != 0 {
+		t.Errorf("a third document should see neither note: %+v", got)
+	}
+	// A note with no document is matched by block alone.
+	for _, doc := range []string{"spec.md", "plan.md", "anything.md"} {
+		if got := c.NotesFor("1/9", doc); len(got) != 1 {
+			t.Errorf("unaddressed note on %s = %+v", doc, got)
+		}
+	}
+}
+
+// A note that names its document and misses its block is the agent asking
+// about something that is not there — worth surfacing. One that names no
+// document and misses is just a note for another document: silence.
+func TestUnanchoredNotes(t *testing.T) {
+	c := mustLoad(t, `
+notes:
+  - doc: spec.md
+    block: "9/9"
+    text: this block is gone
+  - block: "9/9"
+    text: meant for some other document
+`)
+	blocks := map[string]bool{"1/1": true}
+	got := c.Unanchored(blocks, "spec.md")
+	if len(got) != 1 || got[0].Text != "this block is gone" {
+		t.Errorf("unanchored = %+v", got)
+	}
+	if got := c.Unanchored(blocks, "other.md"); len(got) != 0 {
+		t.Errorf("another document should see nothing: %+v", got)
+	}
+	// And nothing is unanchored once the block is there.
+	if got := c.Unanchored(map[string]bool{"9/9": true}, "spec.md"); len(got) != 0 {
+		t.Errorf("anchored note reported as lost: %+v", got)
+	}
+}
