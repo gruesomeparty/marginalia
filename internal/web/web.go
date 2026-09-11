@@ -46,6 +46,9 @@ type Page struct {
 	// reviewer, the vocabulary they answer in, and which blocks are
 	// read-only. Nil means the default review.
 	Review *review.Config
+	// Rel is what this document is called in the set — the other name a
+	// requester note may address it by.
+	Rel string
 	// Theme is the palette the page is served in; the reviewer can still
 	// switch light/dark for themselves.
 	Theme Theme
@@ -108,12 +111,19 @@ type Review struct {
 	RequireVerdict bool            `json:"require_verdict,omitempty"`
 }
 
-// ReviewInfo projects a review config for the page and for GET /api/doc.
-func ReviewInfo(c *review.Config) Review {
+// ReviewInfo projects a review config for one document — the page it is about
+// and GET /api/doc for that document. The notes are filtered to it: block ids
+// are per-document, so `1/2` exists in every markdown file of a set, and
+// shipping every note to every page would render the requester's question
+// about one document beside a block of another.
+//
+// doc may be nil, which means "no document in particular" and keeps every
+// note.
+func ReviewInfo(c *review.Config, doc *document.Document, rel string) Review {
 	if c == nil {
 		c = review.Default()
 	}
-	return Review{
+	info := Review{
 		Title:          c.Title,
 		Instructions:   c.Instructions,
 		Actions:        c.Actions(),
@@ -122,12 +132,32 @@ func ReviewInfo(c *review.Config) Review {
 		Notes:          c.Notes,
 		RequireVerdict: c.RequireVerdict,
 	}
+	if doc == nil {
+		return info
+	}
+	names := []string{doc.Path}
+	if rel != "" {
+		names = append(names, rel)
+	}
+	blocks := make(map[string]bool, len(doc.Blocks))
+	for _, b := range doc.Blocks {
+		blocks[b.ID] = true
+	}
+	info.Notes = nil
+	for _, b := range doc.Blocks {
+		info.Notes = append(info.Notes, c.NotesFor(b.ID, names...)...)
+	}
+	// A note that names this document and misses its block is the one worth
+	// surfacing; the page shows those in the banner rather than dropping the
+	// agent's question.
+	info.Notes = append(info.Notes, c.Unanchored(blocks, names...)...)
+	return info
 }
 
 // project reduces a document to what the client needs. Kinds, levels and
 // ordinals are omitted deliberately: the page reads those off the block
 // element's data attributes.
-func project(doc *document.Document, cfg *review.Config) clientDoc {
+func project(doc *document.Document, cfg *review.Config, names []string) clientDoc {
 	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks))}
 	for _, b := range doc.Blocks {
 		out.Blocks = append(out.Blocks, clientBlock{
@@ -139,7 +169,7 @@ func project(doc *document.Document, cfg *review.Config) clientDoc {
 			Text:        b.PlainText,
 			ReadOnly:    cfg.Locked(b.ID),
 			Skipped:     cfg.Skipped(b.ID),
-			Notes:       cfg.NotesFor(b.ID),
+			Notes:       cfg.NotesFor(b.ID, names...),
 		})
 	}
 	return out
@@ -183,16 +213,20 @@ func Render(w io.Writer, p Page) error {
 	if cfg == nil {
 		cfg = review.Default()
 	}
-	info := ReviewInfo(cfg)
 	doc := p.Doc
 	if p.Static {
 		// The page has to load nothing at all, and the blocks were rendered
 		// for a server that could serve images.
 		doc = offlineDoc(doc)
 	}
+	info := ReviewInfo(cfg, doc, p.Rel)
+	names := []string{doc.Path}
+	if p.Rel != "" {
+		names = append(names, p.Rel)
+	}
 	raw, err := json.Marshal(payload{
 		Static: p.Static,
-		Doc:    project(doc, cfg), Events: events, Resolution: p.Resolution,
+		Doc:    project(doc, cfg, names), Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
 	})
 	if err != nil {

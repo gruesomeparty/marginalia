@@ -106,14 +106,18 @@ The same file carries your own questions and the parts you are not asking about:
 
 ```yaml
 notes:
-  - block: "1/2"
+  - doc: spec.md            # which document, when you serve a set
+    block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 skip:
   - "2"                  # folded on the page, and refused if anything posts to it
 ```
 
 A note renders beside that block, labelled as yours; the human's reply comes
-back as an ordinary event on the same block. Prefer a note on the block over a
+back as an ordinary event on the same block. **Name the document** when you
+serve more than one: block ids are per-document (`1/2` exists in every markdown
+file), so an unnamed note follows its id into every document that has one, and
+startup warns you if a note names a document the review does not serve. Prefer a note on the block over a
 paragraph in `instructions` when the question is *about* something specific —
 that is the whole point of anchoring. Your notes never enter the feedback log.
 

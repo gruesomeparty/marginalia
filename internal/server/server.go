@@ -179,6 +179,27 @@ func (s *Server) announce(url string) {
 	}
 }
 
+// strayNotes names the documents that requester notes address but this server
+// does not serve, in the order they were configured.
+func (s *Server) strayNotes() []string {
+	served := make(map[string]bool, 2*len(s.docs))
+	for i := range s.docs {
+		e := &s.docs[i]
+		served[e.Rel] = true
+		served[s.docOf(e).Path] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, n := range s.opts.Review.Notes {
+		if n.Doc == "" || served[n.Doc] || seen[n.Doc] {
+			continue
+		}
+		seen[n.Doc] = true
+		out = append(out, n.Doc)
+	}
+	return out
+}
+
 // announceReview says what the review asks for, when it asks for anything
 // beyond the default: the words the reviewer will answer in are the words the
 // agent has to read back out of the log.
@@ -201,6 +222,12 @@ func (s *Server) announceReview() {
 	}
 	if n := len(cfg.Notes); n > 0 {
 		fmt.Printf("marginalia: %d note(s) from the requester on the page\n", n)
+	}
+	// A note that names a document this server does not serve would render
+	// nowhere at all. Say so: silently dropping the agent's own question is
+	// the one outcome worse than a wrong anchor.
+	for _, name := range s.strayNotes() {
+		fmt.Printf("marginalia: note for %q — no such document in this review\n", name)
 	}
 	if cfg.RequireVerdict {
 		fmt.Println("marginalia: every block needs a verdict before the review can be marked done")

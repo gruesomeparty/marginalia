@@ -114,7 +114,8 @@ about:
 
 ```yaml
 notes:
-  - block: "1/2"
+  - doc: spec.md           # which document — required in a set, optional for one
+    block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 skip:
   - "2"                  # generated appendix: folded, and refused if posted to
@@ -122,7 +123,9 @@ skip:
 
 A note renders beside its block, labelled as coming from the requester;
 answering it is an ordinary feedback event on that block, so nothing needs a
-second channel. Notes never enter `<doc>.feedback.jsonl` — that log is the
+second channel. Give each note a `doc` when the review serves a set — block ids
+are per-document, so an unnamed note follows its id into every document that
+happens to have one; startup names any note whose document is not in the set. Notes never enter `<doc>.feedback.jsonl` — that log is the
 human's answers, not your questions.
 
 The instructions render as a banner above the document, so the framing survives
