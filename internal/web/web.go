@@ -49,6 +49,10 @@ type Page struct {
 	// Theme is the palette the page is served in; the reviewer can still
 	// switch light/dark for themselves.
 	Theme Theme
+	// Static renders the share-mode page: no server to save to, so comments
+	// live in the reviewer's browser and leave by an explicit export. It is
+	// the one place in Marginalia where a human has to copy something.
+	Static bool
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -81,6 +85,7 @@ type clientDoc struct {
 }
 
 type payload struct {
+	Static     bool                `json:"static,omitempty"`
 	Doc        clientDoc           `json:"doc"`
 	Events     []feedback.Event    `json:"events"`
 	Resolution feedback.Resolution `json:"resolution"`
@@ -165,6 +170,7 @@ type viewData struct {
 	SetDone     bool
 	Review      Review
 	Theme       Theme
+	Static      bool
 }
 
 // Render writes the self-contained review page.
@@ -178,8 +184,15 @@ func Render(w io.Writer, p Page) error {
 		cfg = review.Default()
 	}
 	info := ReviewInfo(cfg)
+	doc := p.Doc
+	if p.Static {
+		// The page has to load nothing at all, and the blocks were rendered
+		// for a server that could serve images.
+		doc = offlineDoc(doc)
+	}
 	raw, err := json.Marshal(payload{
-		Doc: project(p.Doc, cfg), Events: events, Resolution: p.Resolution,
+		Static: p.Static,
+		Doc:    project(doc, cfg), Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
 	})
 	if err != nil {
@@ -202,7 +215,7 @@ func Render(w io.Writer, p Page) error {
 	}
 	lost := orphans(p.Resolution)
 	return tmpl.Execute(w, viewData{
-		Doc:         p.Doc,
+		Doc:         doc,
 		Orphans:     lost,
 		OrphanTitle: orphanTitle(len(lost)),
 		Title:       title,
@@ -214,7 +227,21 @@ func Render(w io.Writer, p Page) error {
 		SetDone:     p.SetDone,
 		Review:      info,
 		Theme:       p.Theme,
+		Static:      p.Static,
 	})
+}
+
+// offlineDoc copies a document with every block rewritten to load nothing,
+// leaving the parsed document itself untouched — the source is read-only and
+// so is what was made from it.
+func offlineDoc(doc *document.Document) *document.Document {
+	out := *doc
+	out.Blocks = make([]document.Block, len(doc.Blocks))
+	for i, b := range doc.Blocks {
+		b.HTML = offline(b.HTML)
+		out.Blocks[i] = b
+	}
+	return &out
 }
 
 // orphans are the notes whose block no longer exists in the document. They

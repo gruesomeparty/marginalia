@@ -124,6 +124,21 @@ page, so do not try to serve those for them.
 Startup prints the actions it accepted, and `GET /api/doc` echoes them, so you
 can confirm the review was framed the way you asked.
 
+### Sharing with someone who cannot reach your machine
+
+Only then — server mode has no export step, and this one does:
+
+```bash
+marginalia export spec.md -o review.html   # one file, loads nothing
+marginalia import their-review.json        # merges onto spec.md.feedback.jsonl
+```
+
+Send the file, and treat what comes back like any other feedback: `import`
+appends it to the same `<doc>.feedback.jsonl` you would have watched, skipping
+anything already there, so the rest of this skill is unchanged. Prefer `serve`
+whenever the human can open a URL on your machine or over Tailscale — a review
+where someone has to copy JSON around is a review that stalls.
+
 ## 2. Tell the human what you need
 
 State the URL and exactly what you want reviewed ("I need your take on §3 and the

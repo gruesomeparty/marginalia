@@ -209,6 +209,29 @@ the temp-file-and-rename that editors save with.
   Code or Iosevka if the reviewer already has one, and falls back to the
   system mono otherwise.
 
+## Sharing a review with someone off your machine
+
+Server mode needs no export step — every comment is on disk the moment it is
+saved — but it needs the reviewer to reach your machine. When they can't:
+
+```bash
+marginalia export spec.md -o review.html    # one self-contained file
+# send review.html; they comment in their browser and send back a .json
+marginalia import their-review.json         # merges onto spec.md.feedback.jsonl
+```
+
+The shared page loads **nothing**: inline CSS and JS, and every image reference
+in the document is rewritten to say what it was rather than fetch it, so opening
+the file makes no request at all. Comments live in that browser
+(`localStorage`) until the reviewer hands them over through a pre-selected
+textarea — no Clipboard API, which hosted contexts block — or the download
+button, which says so if the viewer refuses it.
+
+`import` is append-only and idempotent: it skips events already in the log, so
+merging the same file twice changes nothing, and a malformed file is refused
+before anything is written. Feedback already on disk travels with the exported
+page, so a second round shows the thread so far.
+
 ## Reviewing again after a revision
 
 Reopen a revised document and prior feedback re-anchors by block, with the

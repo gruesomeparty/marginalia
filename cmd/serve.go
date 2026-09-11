@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -120,10 +121,18 @@ func defaultAuthor() string {
 // missing file does not advertise either.
 func requirePaths(verb string) cobra.PositionalArgs {
 	return func(_ *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			return fmt.Errorf("%s needs at least one document or directory — e.g. `marginalia %s spec.md` or `marginalia %s docs/`", verb, verb, verb)
+		if len(args) > 0 {
+			return nil
 		}
-		return nil
+		// Share mode's two verbs take something other than a set of
+		// documents, so they say so rather than inheriting the wrong shape.
+		switch verb {
+		case "export":
+			return errors.New("export needs a document — e.g. `marginalia export spec.md -o review.html`")
+		case "import":
+			return errors.New("import needs a review file — e.g. `marginalia import review.json`")
+		}
+		return fmt.Errorf("%s needs at least one document or directory — e.g. `marginalia %s spec.md` or `marginalia %s docs/`", verb, verb, verb)
 	}
 }
 
