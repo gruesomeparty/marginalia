@@ -1,0 +1,10 @@
+flowchart LR
+  client[Client] --> api[Ingest API]
+  api --> queue[(Queue)]
+  queue --> worker --> sink
+  worker -.retry.-> queue
+  db[(Postgres)]
+  subgraph payments
+    charge --> invoice
+  end
+  sink --> charge
