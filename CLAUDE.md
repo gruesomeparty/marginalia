@@ -27,7 +27,8 @@ stale, surfaces ones whose block is gone, and shows the current state per block
 (issue #1).
 `PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
-this file). M2–M5 are still ahead (see Build order below).
+this file). Every milestone in the build order below has shipped; what is open
+is in the tracker, not in the roadmap.
 
 ## What Marginalia is
 
