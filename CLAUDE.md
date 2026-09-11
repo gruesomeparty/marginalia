@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: M1 + M2 + M3 shipped
+## Status: M1–M5 shipped
 
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
@@ -16,6 +16,9 @@ review and defines the vocabulary the reviewer answers in, enforced server-side,
 and carries the requester's per-block notes and the parts it is not asking about
 (issue #18). Presentation is themed (`--theme`, Catppuccin included), code is
 highlighted server-side, and the reviewer owns light/dark and ligatures.
+Share mode (issue #5) is in: `export` writes a one-file review page that loads
+nothing and saves into the reviewer's browser, `import` merges what they send
+back onto the canonical log, append-only and idempotent.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
 a `.marginalia.yml`-curated list — one page per document, and markdown list
 items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
@@ -197,7 +200,7 @@ M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
 **M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
 pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
-→ M5 static share mode.
+→ **M5 static share mode (`export`/`import`) — done**.
 
 ## Commands
 

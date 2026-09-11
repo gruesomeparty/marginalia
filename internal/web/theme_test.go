@@ -100,3 +100,47 @@ func TestPageMakesNoExternalRequests(t *testing.T) {
 		}
 	}
 }
+
+// Static mode's own no-request test: the offline page is the one that will be
+// opened somewhere with a strict CSP and no network at all.
+func TestStaticPageLoadsNothing(t *testing.T) {
+	doc, err := document.ParseBytes("d.md", []byte("# T\n\n![arch](https://example.com/a.png)\n\n![data](data:image/gif;base64,R0lGOD)\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Static: true}); err != nil {
+		t.Fatal(err)
+	}
+	page := buf.String()
+	if strings.Contains(page, `src="https://example.com/a.png"`) {
+		t.Error("an external image would be fetched on load")
+	}
+	if !strings.Contains(page, `data:image/gif;base64,R0lGOD`) {
+		t.Error("a data: URI is already self-contained and should be left alone")
+	}
+	if !strings.Contains(page, `"static":true`) {
+		t.Error("the page does not know it has no server")
+	}
+	// And the parsed document itself is untouched: the source is read-only,
+	// and so is what was made from it.
+	if !strings.Contains(doc.Blocks[1].HTML, `src="https://example.com/a.png"`) {
+		t.Error("rendering the offline page mutated the document")
+	}
+}
+
+func TestOfflineRewrites(t *testing.T) {
+	cases := map[string]string{
+		`<p><img src="https://x/y.png" alt="a plan"></p>`: `a plan`,
+		`<p><img src="local.png"></p>`:                    `image`,
+		`<p>no images here</p>`:                           `no images here`,
+	}
+	for in, want := range cases {
+		if got := offline(in); !strings.Contains(got, want) {
+			t.Errorf("offline(%q) = %q, want it to mention %q", in, got, want)
+		}
+	}
+	if got := offline(`<img src="data:image/png;base64,AAA">`); !strings.Contains(got, "<img") {
+		t.Errorf("a data: image should survive: %q", got)
+	}
+}

@@ -184,8 +184,29 @@ interface and the phone opens the same URL. No second implementation.
 who isn't on your mesh and doesn't run the tool — a colleague reviewing a
 spec, the CTO reading a proposal. It's the one place a manual export button
 exists (their comments come back as a `.json` you feed to `marginalia import
-feedback.json --doc <doc>`, converging on the canonical JSONL). The
-agent-facing local loop never uses it.
+review.json`, converging on the canonical JSONL). The agent-facing local loop
+never uses it.
+
+What the shared page has to survive, and how:
+
+- **It loads nothing.** One file, inline CSS and JS, and every image
+  reference in the document rewritten to say what it was rather than fetch it
+  — an `![](https://…)` would otherwise call out on open, from a machine and
+  to a host neither side chose. A `data:` URI is already self-contained and
+  is left alone.
+- **No Clipboard API, ever.** Hosted and embedded contexts block it, so the
+  export path is a pre-selected textarea (⌘C/Ctrl+C) plus a download wrapped
+  in try/catch that says so when the viewer refuses it.
+- **The browser is the store.** Comments live in `localStorage` under a key
+  naming the document, replayed on load, with every access guarded: storage
+  throws in a private window, and the page still has to work — just without
+  remembering, and it says so.
+- **Import is append-only and idempotent.** `import` skips events already in
+  the log (block, type, text, author, timestamp), so merging the same file
+  twice changes nothing, and an event with nothing to anchor to is refused
+  before anything is written rather than half-merged.
+- **The document is never touched**, in either direction: export renders a
+  copy, import only appends to the log beside it.
 
 ### 5.5 Skill interface
 

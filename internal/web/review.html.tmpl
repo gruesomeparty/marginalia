@@ -154,6 +154,16 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .block[data-state="approve"]{--badge:#2f7d32;--badge-fg:#fff}
 .block[data-state="reject"]{--badge:#b3261e;--badge-fg:#fff}
 .block[data-stale="1"][data-count]:not([data-count="0"])::before,pre .block[data-stale="1"][data-count]:not([data-count="0"])::after{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--muted)}
+/* Share mode: the one place a human has to copy something out. */
+.share{margin:2rem 0 1rem;padding:.8rem 1rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+.share h2{font-size:.95rem;margin:0 0 .3rem}
+.share p{color:var(--muted);margin:0 0 .5rem}
+.share textarea{width:100%;min-height:8rem;font-family:var(--mono);font-size:.8rem;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg)}
+.share .row{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;flex-wrap:wrap}
+.share .row button{font:inherit;padding:.35rem .8rem;border-radius:6px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff}
+.share .hint{color:var(--muted)}
+.offline{color:var(--muted);font-style:italic}
+.offline code{font-style:normal;font-size:.9em}
 .orphans{margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
 .orphans h2{font-size:1rem;margin:0 0 .2rem}
 .orphans p{color:var(--muted);margin:0 0 .8rem}
@@ -208,9 +218,10 @@ header #fold+button{margin-left:.5rem}
       </div>
     </details>
     {{if .Doc.IsTree}}<button id="fold" type="button" class="secondary" aria-pressed="false">Collapse all</button>{{end}}
+    {{if .Static}}<button id="reveal" type="button" class="secondary">Export…</button>{{end}}
     {{if .ShowNav}}<button id="done" type="button" class="secondary">Done with this file</button>
     <button id="finish" type="button">Finish review set{{if .SetDone}} ✓{{end}}</button>
-    {{else}}<button id="done" type="button">Done</button>{{end}}
+    {{else}}<button id="done" type="button">{{if .Static}}Mark done{{else}}Done{{end}}</button>{{end}}
   </span>
 </header>
 <div class="layout">
@@ -232,6 +243,19 @@ header #fold+button{margin-left:.5rem}
   {{range .Doc.Blocks}}{{if not .Inline}}
   <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
   {{end}}{{end}}
+  {{if .Static}}
+  <section class="share" id="share" hidden aria-label="Send your review back">
+    <h2>Send this back</h2>
+    <p>There is no server here, so your comments live in this browser until you
+      hand them over. The text below is already selected — press ⌘C / Ctrl+C —
+      or download it as a file.</p>
+    <textarea id="sharejson" readonly spellcheck="false" aria-label="Your review as JSON"></textarea>
+    <div class="row">
+      <button id="download" type="button">Download JSON</button>
+      <span class="hint" id="sharehint"></span>
+    </div>
+  </section>
+  {{end}}
   {{if .Orphans}}
   <section class="orphans" aria-label="Notes that no longer anchor">
     <h2>{{.OrphanTitle}}</h2>
@@ -407,15 +431,44 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return blk ? blk.text : "";
   }
   function closeComposer(){ var c=document.querySelector(".composer"); if(c) c.remove(); }
-  // save appends one event and folds it into the page without a reload.
+  // save appends one event and folds it into the page without a reload. In
+  // share mode there is no server to append to, so the browser is the store
+  // and the reviewer hands the result over themselves — the one place in
+  // Marginalia where a human has to copy something.
   function save(el, action, text, fields){
     var id=el.dataset.block, blk=blockOf[id]||{};
     var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:action.type,text:text,author:author};
     if(fields && Object.keys(fields).length) ev.fields=fields;
+    function landed(saved){
+      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false});
+      marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer();
+      toast((labelOf[action.type]||"Note")+" saved");
+    }
+    if(data.static){ landed(keep(ev)); refreshShare(); return; }
     fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
-      .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false}); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast((labelOf[action.type]||"Note")+" saved"); })
+      .then(landed)
       .catch(function(err){ toast("Save failed: "+err.message); });
+  }
+  // Share mode's store: this browser, under a key naming the document, so two
+  // reviews open in the same browser do not overwrite each other. Storage can
+  // throw or come back empty — a private window, cleared site data — so every
+  // access is wrapped and the page still works, just without remembering.
+  var localKey = "marginalia.review." + (data.doc && data.doc.path);
+  var kept = [];
+  function loadKept(){
+    try{
+      var raw = localStorage.getItem(localKey);
+      if(raw) kept = JSON.parse(raw) || [];
+    }catch(e){ kept = []; }
+    if(!Array.isArray(kept)) kept = [];
+  }
+  function keep(ev){
+    ev.ts = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    kept.push(ev);
+    try{ localStorage.setItem(localKey, JSON.stringify(kept)); }
+    catch(e){ toast("This browser will not remember it — export before closing the tab."); }
+    return ev;
   }
   // openComposer offers the review's vocabulary for one block. want is the
   // action to start on — a keyboard shortcut that needs words arrives here
@@ -651,6 +704,50 @@ window.__MARGINALIA__ = {{.DataJSON}};
     });
     close();
   })();
+  // Share mode: replay what this browser remembers, then keep the export in
+  // step with it. No Clipboard API anywhere near this — hosted contexts block
+  // it — so the textarea is pre-selected and the download is wrapped.
+  function refreshShare(){}
+  function revealShare(){}
+  if(data.static){
+    var panel = document.getElementById("share");
+    var out = document.getElementById("sharejson");
+    var hint = document.getElementById("sharehint");
+    refreshShare = function(){
+      out.value = JSON.stringify({marginalia: 1, doc: data.doc.path, events: kept}, null, 2);
+    };
+    revealShare = function(){
+      panel.hidden = false;
+      refreshShare();
+      out.focus(); out.select();
+      panel.scrollIntoView({block: "nearest"});
+    };
+    loadKept();
+    kept.forEach(function(ev){
+      if(ev.type === "review_done") return;
+      var el = elOf[ev.block];
+      if(!el) return;
+      (byBlock[ev.block] = byBlock[ev.block] || []).push({event: ev, stale: false});
+      marker(el); renderExisting(el);
+    });
+    refreshShare();
+    document.getElementById("reveal").onclick = revealShare;
+    document.getElementById("download").onclick = function(){
+      // Downloads are wrapped: an embedded or sandboxed viewer may refuse
+      // them, and the copy path above still works when it does.
+      try{
+        var url = URL.createObjectURL(new Blob([out.value], {type: "application/json"}));
+        var a = document.createElement("a");
+        a.href = url; a.download = (data.doc.path.split("/").pop() || "review") + ".feedback.json";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+        hint.textContent = "Downloaded.";
+      }catch(e){
+        hint.textContent = "Download blocked here — copy the text above instead.";
+        out.focus(); out.select();
+      }
+    };
+  }
   count();
   // Display settings live in this browser only: a preference about the room
   // the document is read in has no business on the agent's disk.
@@ -704,6 +801,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
     badge.hidden = false;
   }
   document.getElementById("done").onclick=function(){
+    if(data.static){
+      keep({doc:data.doc.path,block:"",quote:"",hash:"",type:"review_done",text:"",author:author});
+      revealShare();
+      toast("Marked done — now send it back with Export.");
+      return;
+    }
     fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());});
         var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
