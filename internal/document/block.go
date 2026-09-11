@@ -19,7 +19,15 @@ type Block struct {
 	// Inline marks a block whose markup already sits inside its parent's
 	// HTML — a markdown list item, anchored where the document put it. The
 	// page renders no element of its own for it.
-	Inline    bool   `json:"inline,omitempty"`
+	Inline bool `json:"inline,omitempty"`
+	// Source is a diagram block's own source, verbatim — the one place a
+	// block's exact bytes matter, because a renderer needs the newlines the
+	// anchor text throws away.
+	Source string `json:"-"`
+	// SVG is the rendered diagram, filled in after parsing when a renderer
+	// is available (internal/diagram). Kept out of the client payload: the
+	// markup is already in the page, and shipping it twice doubles it.
+	SVG       string `json:"-"`
 	PlainText string `json:"text"`
 }
 

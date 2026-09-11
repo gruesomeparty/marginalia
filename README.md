@@ -172,11 +172,18 @@ node, indented by depth, with **Collapse all** for a big file.
   retry edge should go to a dead-letter queue" lands on that edge and an agent
   can apply it mechanically. In markdown the fence's own `<pre>` is what you
   see — the diagram exactly as written, annotated in place — and the fence
-  keeps its anchor for a note about the diagram as a whole. Nothing is drawn as
-  a picture: mermaid renders in JavaScript, which would mean a megabyte inlined
-  into every page and `unsafe-eval` under strict CSP. A diagram type the parser
-  does not take apart (a sequence diagram, say) stays reviewable as one source
-  block rather than failing.
+  keeps its anchor for a note about the diagram as a whole. With
+  [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) installed
+  the diagram is also **drawn**: rendered to SVG on the server, inlined into
+  the page, and carrying the same anchors on its shapes, so clicking the retry
+  arrow in the picture opens the composer for that statement — `Show source`
+  flips back, and the choice sticks. No script and no request reach the page,
+  which is what lets a shared file keep its picture under a strict CSP, and the
+  drawing takes the reviewer's theme and light/dark. Without `mmdc` you get the
+  anchored source, exactly as before — `--diagrams=off` asks for it on a
+  machine that has one. A diagram type the parser does not take apart (a
+  sequence diagram, say) stays reviewable as one source block rather than
+  failing.
 
 ## Revising while the review is open
 
@@ -203,6 +210,17 @@ the temp-file-and-rename that editors save with.
   the reviewer picks are the same mechanism. The **Display** menu on the page
   lets the reviewer choose System / Light / Dark and turn code ligatures off;
   those choices live in their browser, never on your disk.
+- **Diagrams.** A mermaid diagram is drawn when
+  [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) is installed
+  (`npm i -g @mermaid-js/mermaid-cli`, or point `--mmdc` at the binary), and
+  shows its anchored source when it is not. The picture carries the anchors:
+  hovering an arrow lights it up, clicking it comments on that statement, and a
+  shape that already has notes wears the marker colour — the same badge the
+  source shows. `Show source` flips every diagram on the page and the choice
+  sticks in the reviewer's browser. `--diagrams=off` skips drawing entirely;
+  renders are cached by content, so `--watch` does not restart a browser per
+  keystroke, and a diagram that fails to draw falls back to its source instead
+  of failing the page.
 - **Code.** Fenced code blocks and `.proto` declarations are highlighted at
   render time, on the server — comments recede, strings and numbers stand out.
   Go, Rust, JS/TS, Python, shell, SQL, JSON, YAML, TOML, proto and HTTP are

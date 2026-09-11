@@ -47,6 +47,15 @@ connects and leaves out the line style and any label, so `worker-->queue` is
 the edge to change whether it was written `worker --> queue` or
 `worker -.retry.-> queue`.
 
+A mermaid diagram is also drawn as a picture when
+[mermaid-cli](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) is on the
+machine, and the drawing carries those same anchors: the human clicks the arrow
+that is wrong and the event lands on that statement, so read the feedback
+exactly as before. Nothing changes if `mmdc` is missing — the page shows the
+anchored source — and `--diagrams=off` asks for the source even when it is
+present. Mention it if the human says the picture is missing; do not make the
+review conditional on it.
+
 ### Handing over several documents at once
 
 A set is served as one server with a page per document and a navigation tree, so

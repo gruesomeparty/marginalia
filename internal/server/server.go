@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gruesomeparty/marginalia/internal/diagram"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
@@ -45,6 +46,9 @@ type Options struct {
 	Review *review.Config
 	// Theme is the palette the pages are painted in (web.ThemeFor).
 	Theme web.Theme
+	// Diagrams renders mermaid to SVG when one is available; nil or
+	// unavailable leaves every diagram as the anchored source it parses to.
+	Diagrams *diagram.Renderer
 
 	Author string
 	Host   string
@@ -55,11 +59,13 @@ type Options struct {
 
 // Server serves the review pages and feedback API.
 type Server struct {
-	opts   Options
-	docs   []Entry
-	byRel  map[string]*Entry
-	byPath map[string]*Entry
-	mux    *http.ServeMux
+	opts    Options
+	drawn   int   // diagrams rendered, for the startup notice
+	drawErr error // the first render failure, if any
+	docs    []Entry
+	byRel   map[string]*Entry
+	byPath  map[string]*Entry
+	mux     *http.ServeMux
 
 	// mu guards each entry's parsed document, which --watch replaces while
 	// handlers are reading it.
@@ -90,6 +96,11 @@ func New(opts Options) *Server {
 		if st, ok := stampOf(e.Doc.Path); ok {
 			s.stamps[e.Doc.Path] = st
 		}
+	}
+	// Draw the diagrams once up front, so the first page load is not the
+	// thing that waits for a browser to start.
+	for i := range s.docs {
+		s.drawDiagrams(s.docs[i].Doc)
 	}
 	s.mux.HandleFunc("GET /{$}", s.handleIndex)
 	s.mux.HandleFunc("GET /d/{doc...}", s.handleDocPage)
@@ -158,6 +169,7 @@ func (s *Server) announce(url string) {
 	// The review's own vocabulary last, so it is the line above the prompt:
 	// an agent that configured actions needs to see they took.
 	defer s.announceReview()
+	defer s.announceDiagrams()
 	if s.opts.Watch {
 		defer fmt.Println("marginalia: watching for changes; the page offers a reload when a document moves on")
 	}
@@ -176,6 +188,20 @@ func (s *Server) announce(url string) {
 			fmt.Printf("; %d supported file(s) under %s excluded by it", s.opts.Excluded, s.opts.Root)
 		}
 		fmt.Println()
+	}
+}
+
+// drawDiagrams renders a document's diagrams in place. A failure is not the
+// page's problem — the block keeps its anchored source — but it is worth
+// saying once, so the first one is remembered for the startup notice.
+func (s *Server) drawDiagrams(doc *document.Document) {
+	if !s.opts.Diagrams.Available() {
+		return
+	}
+	n, failures := diagram.Attach(doc, s.opts.Diagrams)
+	s.drawn += n
+	if len(failures) > 0 && s.drawErr == nil {
+		s.drawErr = failures[0]
 	}
 }
 
@@ -198,6 +224,36 @@ func (s *Server) strayNotes() []string {
 		out = append(out, n.Doc)
 	}
 	return out
+}
+
+// announceDiagrams says whether diagrams are pictures or source, once. An
+// agent handing a document over should know which one the human is looking
+// at, and a reviewer who expected a picture should know why they got text.
+func (s *Server) announceDiagrams() {
+	if !s.opts.Diagrams.Available() {
+		if s.hasDiagrams() {
+			fmt.Println("marginalia: mermaid diagrams render as anchored source — install @mermaid-js/mermaid-cli (mmdc) for pictures")
+		}
+		return
+	}
+	if s.drawn > 0 {
+		fmt.Printf("marginalia: %d diagram(s) drawn\n", s.drawn)
+	}
+	if s.drawErr != nil {
+		fmt.Printf("marginalia: a diagram could not be drawn, showing its source: %v\n", s.drawErr)
+	}
+}
+
+// hasDiagrams reports whether any served document contains one.
+func (s *Server) hasDiagrams() bool {
+	for i := range s.docs {
+		for _, b := range s.docOf(&s.docs[i]).Blocks {
+			if b.Source != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // announceReview says what the review asks for, when it asks for anything

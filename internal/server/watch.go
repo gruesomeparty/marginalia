@@ -75,6 +75,10 @@ func (s *Server) rescan(seen map[string]stamp) {
 		if err != nil {
 			continue
 		}
+		// A re-parse throws the rendered diagrams away with the old blocks,
+		// so draw them again before the page can ask. The renderer caches by
+		// content, so an edit elsewhere in the document costs nothing.
+		s.drawDiagrams(doc)
 		s.setDoc(e, doc)
 		s.revision.Add(1)
 	}

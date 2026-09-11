@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -308,5 +309,129 @@ func TestExportImportUsageErrors(t *testing.T) {
 		if !strings.Contains(err.Error(), "marginalia "+verb) {
 			t.Errorf("%s error should show the shape: %v", verb, err)
 		}
+	}
+}
+
+// isolateCache keeps rendered diagrams out of the real user cache directory:
+// the renderer caches by source content, so tests would otherwise both dirty
+// the developer's cache and answer each other's renders.
+func isolateCache(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", dir)
+	t.Setenv("MARGINALIA_MMDC", "")
+	t.Setenv("MARGINALIA_MMDC_ARGS", "")
+}
+
+// stubMMDC writes a stand-in for mermaid-cli: the real one starts a headless
+// browser, which no test may depend on.
+func stubMMDC(t *testing.T, svg string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub is POSIX-only")
+	}
+	dir := t.TempDir()
+	body := filepath.Join(dir, "body.svg")
+	if err := os.WriteFile(body, []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "mmdc")
+	script := "#!/bin/sh\nout=\"\"\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) out=\"$2\"; shift 2;;\n    *) shift;;\n  esac\ndone\ncat " + body + " > \"$out\"\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+const diagramDoc = "# Flow\n\n```mermaid\nflowchart LR\n  client --> api\n```\n"
+
+// A shared page carries its pictures as SVG. That is the whole reason the
+// renderer runs here and not in the reviewer's browser: an SVG needs no
+// script and makes no request, so the file still opens under a strict CSP.
+func TestExportCarriesTheDrawnDiagram(t *testing.T) {
+	isolateCache(t)
+	svg := `<svg id="my-svg" xmlns="http://www.w3.org/2000/svg"><path id="my-svg-L_client_api_0" data-id="L_client_api_0"/></svg>`
+	src := doc(t, "flow.md", diagramDoc)
+	_, page, err := buildExport([]string{src}, exportOptions{author: "tester", mmdc: stubMMDC(t, svg)})
+	if err != nil {
+		t.Fatalf("buildExport: %v", err)
+	}
+	html := string(page)
+	if !strings.Contains(html, `<figure class="diagram">`) {
+		t.Fatal("the shared page shows no picture")
+	}
+	if !strings.Contains(html, `data-anchor="1/2/client-->api"`) {
+		t.Error("the shared picture is not anchored, so its shapes cannot be commented on")
+	}
+	for _, bad := range []string{`src="http`, `href="http`, "url(http", "@import", "<script src"} {
+		if strings.Contains(html, bad) {
+			t.Errorf("the shared page fetches something: %s", bad)
+		}
+	}
+}
+
+// --diagrams=off shares the source instead, on a machine that has a renderer.
+func TestExportDiagramsOff(t *testing.T) {
+	isolateCache(t)
+	src := doc(t, "flow.md", diagramDoc)
+	_, page, err := buildExport([]string{src}, exportOptions{
+		author: "tester", diagrams: "off", mmdc: stubMMDC(t, "<svg/>"),
+	})
+	if err != nil {
+		t.Fatalf("buildExport: %v", err)
+	}
+	html := string(page)
+	if strings.Contains(html, `<figure class="diagram">`) {
+		t.Error("--diagrams=off still drew a picture")
+	}
+	if !strings.Contains(html, `data-block="1/2/client--&gt;api"`) {
+		t.Error("the anchored source is gone")
+	}
+}
+
+// A failed render is a loud error here, not a silent fallback: the file is
+// about to be handed to someone who cannot re-run the command.
+func TestExportReportsAFailedDiagram(t *testing.T) {
+	isolateCache(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub is POSIX-only")
+	}
+	bin := filepath.Join(t.TempDir(), "mmdc")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'Parse error' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := doc(t, "broken.md", "# Flow\n\n```mermaid\nflowchart LR\n  ???\n```\n")
+	_, _, err := buildExport([]string{src}, exportOptions{author: "tester", mmdc: bin})
+	if err == nil {
+		t.Fatal("a failed render exported anyway")
+	}
+	for _, want := range []string{"Parse error", "--diagrams=off"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q: %v", want, err)
+		}
+	}
+}
+
+func TestDiagramModes(t *testing.T) {
+	isolateCache(t)
+	bin := stubMMDC(t, "<svg/>")
+	if r, err := diagrams("auto", bin); err != nil || !r.Available() {
+		t.Errorf("auto with a renderer: %v, available=%v", err, r.Available())
+	}
+	if r, err := diagrams("", bin); err != nil || !r.Available() {
+		t.Errorf("default with a renderer: %v, available=%v", err, r.Available())
+	}
+	if r, err := diagrams("off", bin); err != nil || r.Available() {
+		t.Errorf("off: %v, available=%v", err, r.Available())
+	}
+	_, err := diagrams("maybe", bin)
+	if err == nil {
+		t.Fatal("an unknown mode was accepted")
+	}
+	// An unknown flag value is where the tool advertises the way to ask for
+	// better behaviour.
+	if !strings.Contains(err.Error(), "auto, off") || !strings.Contains(err.Error(), "request-feature") {
+		t.Errorf("unhelpful error: %v", err)
 	}
 }

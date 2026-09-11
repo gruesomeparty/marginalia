@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/gruesomeparty/marginalia/internal/diagram"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
@@ -18,10 +19,12 @@ import (
 
 // exportOptions is what `export` was asked for beyond the document.
 type exportOptions struct {
-	out    string
-	config string
-	theme  string
-	author string
+	out      string
+	config   string
+	theme    string
+	author   string
+	diagrams string // "auto" or "off", as for serve
+	mmdc     string
 }
 
 // buildExport renders the share-mode page for one document: the document as
@@ -53,6 +56,16 @@ func buildExport(paths []string, opts exportOptions) (path string, page []byte, 
 	theme, err := web.ThemeFor(opts.theme)
 	if err != nil {
 		return "", nil, advertise(err)
+	}
+	// A shared page carries its pictures as SVG: that is the one rendering
+	// route that needs no script on the other side, which is the whole point
+	// of share mode.
+	drawer, err := diagrams(opts.diagrams, opts.mmdc)
+	if err != nil {
+		return "", nil, err
+	}
+	if _, failures := diagram.Attach(doc, drawer); len(failures) > 0 {
+		return "", nil, fmt.Errorf("a diagram could not be drawn: %w (use --diagrams=off to share the source instead)", failures[0])
 	}
 	events, err := feedback.NewStore(src).Load()
 	if err != nil {
@@ -129,5 +142,7 @@ func newExportCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
 	cmd.Flags().StringVar(&opts.theme, "theme", "", "page palette: "+themeList())
 	cmd.Flags().StringVar(&opts.author, "author", "", "review author (defaults to $USER)")
+	cmd.Flags().StringVar(&opts.diagrams, "diagrams", "auto", "draw mermaid diagrams into the file: auto (when mermaid-cli is installed), off")
+	cmd.Flags().StringVar(&opts.mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
 }
