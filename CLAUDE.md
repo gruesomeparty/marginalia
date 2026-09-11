@@ -121,7 +121,13 @@ users are agents, not humans.
   split ambiguous, so every split is tried and the one naming a real statement
   wins. Each anchored edge also carries an invisible wide copy of itself
   (`.mg-hit`) so a two-pixel arrow is a clickable target, and a box no
-  statement declares answers for the statement that named it.
+  statement declares answers for the statement that named it. Because those
+  names are mermaid's internals and not API, `internal/diagram/testdata` holds
+  a **real** `mmdc` output for `flowchart.mmd`, its version in the filename,
+  and `fixture_test.go` drives it through the whole pipeline: a mermaid
+  upgrade that renames a shape fails a test naming it, instead of leaving a
+  picture that draws, looks right, and silently cannot be clicked. Adopting a
+  new version means re-rendering that one file and extending the matcher.
 - `serve` and `export` take `--diagrams=auto|off` and `--mmdc <path>`;
   `MARGINALIA_MMDC` and `MARGINALIA_MMDC_ARGS` name the binary and extra
   arguments (a puppeteer config, say) without a flag. `export` *fails* when a
