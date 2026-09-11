@@ -1,7 +1,8 @@
 # Marginalia
 
 A document-review tool an agent hands to a human. It renders a markdown file, a
-`.proto` schema, or a JSON/YAML/TOML tree — one document or a whole set — as a
+`.proto` schema, a JSON/YAML/TOML tree or a mermaid diagram — one document or a
+whole set — as a
 readable page, collects inline comments anchored to blocks, and writes them back
 as append-only JSONL feedback events the agent consumes directly.
 
@@ -127,6 +128,7 @@ asked for.
 | `.md`, `.markdown` | `section/ordinal` — `5.3/2`; a list item adds its position — `5.3/2.1`, nested `5.3/2.1.3` |
 | `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
+| `.mmd`, `.mermaid`, and `mermaid` fences in markdown | what the statement connects — `client-->api`, `payments/worker-->queue`; in a fence, under the fence's own ID — `1/3/client-->api` |
 
 Markdown lists are anchorable item by item: each bullet or numbered step is its
 own block, nested ones included, so a note about one task lands on that task
@@ -145,6 +147,17 @@ node, indented by depth, with **Collapse all** for a big file.
   scalars show their type (`port: "8080"` reads differently from `port: 8080`,
   which is the whole point of reviewing a config), and YAML comments render with
   the node they document.
+- **mermaid**: every statement of a flowchart — node, edge, subgraph — is its
+  own block, anchored by what it connects with the line style and any label
+  left out (`worker -.retry.-> queue` anchors as `worker-->queue`). So "the
+  retry edge should go to a dead-letter queue" lands on that edge and an agent
+  can apply it mechanically. In markdown the fence's own `<pre>` is what you
+  see — the diagram exactly as written, annotated in place — and the fence
+  keeps its anchor for a note about the diagram as a whole. Nothing is drawn as
+  a picture: mermaid renders in JavaScript, which would mean a megabyte inlined
+  into every page and `unsafe-eval` under strict CSP. A diagram type the parser
+  does not take apart (a sequence diagram, say) stays reviewable as one source
+  block rather than failing.
 
 ## Reviewing again after a revision
 
@@ -168,6 +181,23 @@ curl -s localhost:8787/api/resolution | jq '.stale, .orphaned'
 
 Nothing is rewritten to produce it: the log stays append-only and staleness is a
 view over it, not a fact on disk.
+
+## Applying the feedback
+
+After a review, ask which `suggest_edit` replacements are safe to apply:
+
+```bash
+marginalia suggestions spec.md          # or a directory
+marginalia suggestions spec.md --json   # for an agent to consume
+```
+
+A suggestion is **applicable** only when it is the note that stands for its
+block, its hash still matches the block as the document now reads, and it
+carries a hash at all. Everything else comes back under `needs_confirmation`
+with the reason — the block changed since, a later note supersedes it, the block
+is gone, or there is no hash to check.
+
+Marginalia never edits your document: this reports, you apply.
 
 ## How it works
 

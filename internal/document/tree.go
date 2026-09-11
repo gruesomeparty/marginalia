@@ -58,15 +58,22 @@ func (t *treeBuilder) add(n node) string {
 // declarations are both legal enough to reach us — without disturbing the
 // common case, where the derived path is already unique.
 func (t *treeBuilder) unique(id string) string {
+	return uniqueID(id, func(id string) bool { _, taken := t.index[id]; return taken })
+}
+
+// uniqueID returns id, or id with a counter appended until taken says it is
+// free. Markdown mermaid fences anchor their statements without a
+// treeBuilder, so the rule lives here rather than on it.
+func uniqueID(id string, taken func(string) bool) string {
 	if id == "" {
 		id = "node"
 	}
-	if _, taken := t.index[id]; !taken {
+	if !taken(id) {
 		return id
 	}
 	for n := 2; ; n++ {
 		alt := fmt.Sprintf("%s#%d", id, n)
-		if _, taken := t.index[alt]; !taken {
+		if !taken(alt) {
 			return alt
 		}
 	}

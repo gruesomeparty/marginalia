@@ -33,7 +33,10 @@ main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
 /* A phone gets the buttons, not the breadcrumb: the nav already says which
    file is open, and a header that overflows scrolls the whole page sideways. */
 @media (max-width:640px){header{gap:.5rem}header .where,header .count{display:none}header button{padding:.35rem .55rem}}
-@media (max-width:900px){.layout{flex-direction:column}.nav{position:static;flex:none;width:100%;max-height:none;padding:1rem 2.5rem 0;border-right:0;border-bottom:1px solid var(--rule)}}
+/* Stacked layout: a flex-start column shrink-wraps its children, so main
+   would keep its 68ch reading width and scroll the whole page sideways on a
+   phone. Both children take the width they are given instead. */
+@media (max-width:900px){.layout{flex-direction:column}main{width:100%}.nav{position:static;flex:none;width:100%;max-height:none;padding:1rem 2.5rem 0;border-right:0;border-bottom:1px solid var(--rule)}}
 h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.25}
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-size:.9em}
@@ -56,9 +59,21 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 li.block{list-style-position:outside}
+/* A mermaid fence anchors statement by statement, so its anchors are inline
+   spans over the source itself: no box, no margin, nothing that would move a
+   character of the diagram the author wrote. */
+pre .block{display:inline;margin:0;padding:0 .1rem;border-radius:3px}
+/* Its comment badge therefore follows the statement instead of sitting in the
+   margin, which inside a <pre> would push the line sideways. */
+pre .block[data-count]:not([data-count="0"])::before{content:none}
+pre .block[data-count]:not([data-count="0"])::after{display:inline-block;margin-left:.4rem;min-width:1.15rem;height:1.15rem;line-height:1.15rem;font-size:.68rem;vertical-align:.05rem}
+.existing .on,.composer .on{color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;margin-bottom:.35rem;overflow-wrap:anywhere}
 li.block>.existing,li.block>.composer{font-size:.85rem}
 li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
-.block[data-count]:not([data-count="0"])::before{content:attr(data-count);position:absolute;left:-2.4rem;top:.3rem;min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--marker);color:#000;border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
+/* One badge, two places it can sit: in the margin beside a block, or after a
+   statement inside a diagram, where the margin belongs to the source. */
+.block[data-count]:not([data-count="0"])::before,pre .block[data-count]:not([data-count="0"])::after{content:attr(data-count);min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--badge,var(--marker));color:var(--badge-fg,#000);border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
+.block[data-count]:not([data-count="0"])::before{position:absolute;left:-2.4rem;top:.3rem}
 .composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:.8rem;box-shadow:var(--shadow);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem}
 .composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
 .composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:999px;background:transparent;color:var(--fg);cursor:pointer;font:inherit}
@@ -78,9 +93,10 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing .item.current{border-left-width:3px}
 .existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:999px;font-size:.72rem;color:var(--muted);text-transform:none;font-weight:400}
 .existing .item .was{margin-top:.2rem;color:var(--muted);font-style:italic}
-.block[data-state="approve"][data-count]:not([data-count="0"])::before{background:#2f7d32;color:#fff}
-.block[data-state="reject"][data-count]:not([data-count="0"])::before{background:#b3261e;color:#fff}
-.block[data-stale="1"][data-count]:not([data-count="0"])::before{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--muted)}
+/* What was decided colours the badge, wherever it sits. */
+.block[data-state="approve"]{--badge:#2f7d32;--badge-fg:#fff}
+.block[data-state="reject"]{--badge:#b3261e;--badge-fg:#fff}
+.block[data-stale="1"][data-count]:not([data-count="0"])::before,pre .block[data-stale="1"][data-count]:not([data-count="0"])::after{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--muted)}
 .orphans{margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
 .orphans h2{font-size:1rem;margin:0 0 .2rem}
 .orphans p{color:var(--muted);margin:0 0 .8rem}
@@ -96,7 +112,7 @@ main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:
 main.tree .body{flex:1;min-width:0}
 main.tree .cmt{display:block;color:var(--muted);font-style:italic;overflow-wrap:break-word}
 main.tree .body>code{background:none;padding:0;font-size:1em;white-space:pre-wrap;overflow-wrap:break-word}
-main.tree .block[data-kind="message"] code,main.tree .block[data-kind="service"] code,main.tree .block[data-kind="enum"] code,main.tree .block[data-kind="oneof"] code,main.tree .block[data-kind="object"] code,main.tree .block[data-kind="array"] code{font-weight:600}
+main.tree .block[data-kind="message"] code,main.tree .block[data-kind="service"] code,main.tree .block[data-kind="enum"] code,main.tree .block[data-kind="oneof"] code,main.tree .block[data-kind="object"] code,main.tree .block[data-kind="array"] code,main.tree .block[data-kind="diagram"] code,main.tree .block[data-kind="subgraph"] code{font-weight:600}
 main.tree .key{color:var(--accent)}
 main.tree .punct,main.tree .meta{color:var(--muted)}
 main.tree .caret{flex:0 0 1.1rem;font:inherit;line-height:1.5;width:1.1rem;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;text-align:left}
@@ -217,13 +233,44 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // item's own text and before anything nested under it, so a note about a
   // bullet never reads as a note about its sub-bullets.
   function nestedList(el){ return el.querySelector(":scope > ul, :scope > ol"); }
+  // Inside a mermaid fence "after the statement" would mean inside the <pre>,
+  // which would break the diagram's own layout — so those boxes sit under the
+  // whole fence, each after the statement above it, so they read in the order
+  // the diagram does however they were added.
+  function afterInPre(pre, el){
+    var anchor = pre, spans = pre.querySelectorAll(".block");
+    for(var i = 0; i < spans.length; i++){
+      var box = spans[i].mg_existing;
+      if(box && box.isConnected) anchor = box;
+      if(spans[i] === el) break;
+    }
+    return anchor;
+  }
   function attach(el, box){
+    var pre = el.closest("pre");
+    if(pre){
+      label(el, box);
+      afterInPre(pre, el).after(box);
+      return;
+    }
     if(el.tagName !== "LI"){ el.after(box); return; }
     var nested = nestedList(el);
     if(nested) el.insertBefore(box, nested); else el.appendChild(box);
   }
+  // Several statements of one diagram share the space below it, so each box
+  // says which statement it is about.
+  function label(el, box){
+    var parts = el.dataset.block.split("/");
+    var on = document.createElement("div");
+    on.className = "on"; on.textContent = parts[parts.length-1];
+    box.insertBefore(on, box.firstChild);
+  }
   function boxAfter(el, cls){
     var box;
+    if(el.closest("pre")){
+      box = el["mg_"+cls];
+      return box && box.isConnected ? box : null;
+    }
     if(el.tagName === "LI"){
       var nested = nestedList(el);
       box = nested ? nested.previousElementSibling : el.lastElementChild;
@@ -265,6 +312,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       }
       box.appendChild(item);
     });
+    el.mg_existing = box;
     attach(el, box);
   }
   // The replacement text a suggest_edit starts from: a markdown block's own
@@ -273,6 +321,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
   function editableText(id, el){
     var code = isTree && el.querySelector("code");
     if(code) return code.textContent;
+    // A diagram statement: the span holds the source, indentation and all.
+    if(el.closest("pre")) return el.textContent.trim();
     var blk = blockOf[id];
     return blk ? blk.text : "";
   }
@@ -362,6 +412,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     };
     row.appendChild(saveBtn); row.appendChild(cancel);
     c.appendChild(chips); c.appendChild(fieldBox); c.appendChild(ta); c.appendChild(row);
+    el.mg_composer = c;
     renderFields();
     attach(el, c); ta.focus();
   }

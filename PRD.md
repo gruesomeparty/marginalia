@@ -84,6 +84,17 @@ Optionally re-renders with resolution states for a second pass.
   (`CreateOrderRequest/customer_id`, `OrderService/CreateOrder`). Parsing is
   structural, not semantic — a file that does not compile, or whose imports
   are absent, still renders.
+- **v2 input: mermaid diagrams.** A `mermaid` code fence in markdown, or a
+  `.mmd`/`.mermaid` file on its own, is taken apart statement by statement:
+  every node, edge and subgraph of a flowchart is a commentable block anchored
+  by what it connects (`client-->api`, `payments/worker-->queue`), so a note
+  lands on the edge that is wrong instead of on the diagram that contains it.
+  Nothing is rendered as a picture — mermaid renders in JavaScript, which
+  either costs a megabyte inlined into every page or `unsafe-eval` under
+  strict CSP, and a picture nobody can attach a note to is worth less here
+  than an anchored list. A fence keeps its own block, so a note about the
+  diagram as a whole still has somewhere to live, and a diagram type the
+  parser does not take apart stays reviewable as the source block it is.
 - Readable defaults: ~68ch column, serif body, sans headings, mono code,
   system fonts only (no webfont dependency), responsive down to phone width.
 - The page is fully self-contained (inline CSS/JS) in both modes — static
@@ -350,10 +361,14 @@ default.
 
 ## 10. Open questions
 
-- Should `suggest_edit` events be auto-applicable (agent applies the
-  replacement text verbatim when hash still matches)? Leaning yes; the
-  resolution view now reports exactly that condition (a non-stale
-  `suggest_edit`), so the remaining question is only who applies it (#6).
+- ~~Should `suggest_edit` events be auto-applicable (agent applies the
+  replacement text verbatim when hash still matches)?~~ **Yes, and the tool
+  never applies them itself** (#6). `marginalia suggestions <doc|dir>[--json]`
+  reports the replacements that are provably safe — the note that stands for its
+  block, with a hash that still matches, and a hash present at all — and reports
+  everything else with the reason it needs confirmation. Applying belongs to
+  whoever owns the document, because *never mutate the source document* (§5.6)
+  outranks the convenience of doing it here.
 - Watch mode (`serve --watch`: re-render on file change mid-review)?
 - ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
   in §5.7: one server, a page per document, per-document and session `review_done`.

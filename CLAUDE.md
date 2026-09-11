@@ -8,7 +8,9 @@ The repo has a working Go module implementing PRD milestone **M1** — server mo
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `review_done`) — plus full CI/CD and the installable Claude plugin (skills +
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
-JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path.
+JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path,
+and mermaid flowcharts anchor per statement (issue #25) — in a markdown fence
+and as `.mmd`/`.mermaid` documents.
 Reviews are configurable (issue #3): `serve --config review.yaml` frames the
 review and defines the vocabulary the reviewer answers in, enforced server-side.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
@@ -31,7 +33,15 @@ users are agents, not humans.
 
 ## Planned architecture (from PRD §6)
 
-- **Single Go binary**, cobra subcommands: `serve`, `export`, `import`, `version`.
+- **Single Go binary**, cobra subcommands: `serve`, `suggestions`, `export`,
+  `import`, `version`. `suggestions` reads a document and its log from disk (no
+  server) and splits `suggest_edit` events into applicable and
+  needs-confirmation via `feedback.Resolution.Suggestions()`. Applying requires
+  all three of: the suggestion is the note that stands for its block, its hash
+  matches the block now, and it has a hash at all — `Materialize` treats a
+  hash-less note as not-stale, which is right for reading and not good enough
+  for editing. The tool never applies anything: *never mutate the source
+  document*.
 - `internal/reviewset` resolves what `serve` was pointed at: one file, several,
   or a directory (walked, skipping hidden/`node_modules`/`vendor`, capped at 200
   documents). A `.marginalia.yml` in a served directory is whitelist + order +
@@ -63,7 +73,12 @@ users are agents, not humans.
   parse into `dataNode` (`datatree.go`) and share path derivation, rendering
   and anchoring; only the decoders differ. Key order is always the author's:
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
-  `MetaData.Keys()`.
+  `MetaData.Keys()`. Mermaid is parsed by `internal/mermaid` — line-based,
+  bracket-aware and equally tolerant, returning statements with the byte range
+  they occupy so a fence can be annotated in place. Nothing renders the
+  diagram as a picture: that needs JavaScript (a megabyte inlined, and
+  `unsafe-eval` under strict CSP) or headless Chromium, which costs the single
+  Go binary.
 - `internal/review` is the review configuration: framing, the action
   vocabulary (built-ins plus configured ones), structured fields, read-only
   patterns. It is the **only** authority on which event types exist — there is
@@ -114,7 +129,14 @@ element for it (`Block.Inline`). The list itself keeps its old ID, so notes
 about the shape of a list, and feedback written before item anchoring, still
 anchor. Tree documents keep the same
 schema and only derive `block` differently — the node's own path
-(`CreateOrderRequest/customer_id`, nested types dotted, members after a slash). `block` re-locates cheaply, `quote`
+(`CreateOrderRequest/customer_id`, nested types dotted, members after a slash).
+A mermaid statement is anchored by what it connects, with the link style and
+any label left out (`worker -.retry.-> queue` → `worker-->queue`, chains
+joined `a-->b-->c`, subgraph members after a slash). In a markdown fence those
+paths extend the fence's own ID (`1/3/client-->api`) and the statements are
+**inline** blocks, like list items: the `<pre>` is the source the author wrote,
+annotated with anchors in place, and the fence keeps its old ID.
+`block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
 `suggest_edit` (text = replacement), `question`, `approve`, `reject`, plus any
@@ -151,13 +173,14 @@ agent write access on a timer.
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
-**M3 trees: `.proto`, JSON/YAML/TOML — done** → **M4 automated implementation
+**M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
 pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
 → M5 static share mode.
 
 ## Commands
 
 - Build: `go build ./...`  ·  Run: `go run . serve <doc.md> --open`
+- Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`

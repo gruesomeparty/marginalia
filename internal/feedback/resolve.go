@@ -117,3 +117,70 @@ func state(block string, notes []Note, orphaned bool) State {
 		Orphaned: orphaned,
 	}
 }
+
+// Suggestion is a suggest_edit as an applier sees it: which block, the text it
+// was written against, and the replacement.
+type Suggestion struct {
+	Block       string `json:"block"`
+	Quote       string `json:"quote"`
+	Hash        string `json:"hash"`
+	Replacement string `json:"replacement"`
+	Author      string `json:"author"`
+	Ts          string `json:"ts"`
+	// Reason is why a suggestion needs confirmation before it is applied;
+	// empty for an applicable one.
+	Reason string `json:"reason,omitempty"`
+}
+
+// Reasons a suggestion cannot be applied unread.
+const (
+	ReasonStale      = "the block changed after this was written"
+	ReasonNoHash     = "written without a hash, so the match cannot be proven"
+	ReasonOrphaned   = "the block no longer exists in the document"
+	ReasonSuperseded = "a later note on this block supersedes it"
+)
+
+// Suggestions splits the log's suggest_edit notes into the ones that may be
+// applied verbatim and the ones a human has to confirm first.
+//
+// Applying requires all three of: the suggestion is the note that stands for
+// its block, its hash matches the block as the document now reads, and it
+// carries a hash at all. Materialize treats a hash-less note as not-stale
+// rather than suspect, which is right for reading but not for editing — "cannot
+// be proven to match" is not good enough to change a document unread.
+//
+// Nothing here mutates anything: the caller owns the document, and the source
+// document is never written by Marginalia.
+func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
+	for _, st := range r.States {
+		for _, note := range st.History {
+			if note.Event.Type != TypeSuggestEdit || note.Event.Text == "" {
+				continue
+			}
+			s := Suggestion{
+				Block:       st.Block,
+				Quote:       note.Event.Quote,
+				Hash:        note.Event.Hash,
+				Replacement: note.Event.Text,
+				Author:      note.Event.Author,
+				Ts:          note.Event.Ts,
+			}
+			switch {
+			case st.Orphaned:
+				s.Reason = ReasonOrphaned
+			case note.Event.Ts != st.Current.Event.Ts || st.Current.Event.Type != TypeSuggestEdit:
+				s.Reason = ReasonSuperseded
+			case note.Stale:
+				s.Reason = ReasonStale
+			case note.Event.Hash == "":
+				s.Reason = ReasonNoHash
+			}
+			if s.Reason == "" {
+				applicable = append(applicable, s)
+			} else {
+				needsConfirmation = append(needsConfirmation, s)
+			}
+		}
+	}
+	return applicable, needsConfirmation
+}
