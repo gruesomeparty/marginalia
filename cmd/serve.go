@@ -16,9 +16,19 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/server"
 )
 
+// serveOptions is what `serve` was asked for. A struct rather than a row of
+// positional booleans, which is how open and watch get swapped by accident.
+type serveOptions struct {
+	Host   string
+	Port   int
+	Open   bool
+	Watch  bool
+	Author string
+}
+
 // buildServer resolves the paths into a review set — one document, several, or
 // a directory of them — parses each and wires it to its own feedback log.
-func buildServer(paths []string, host string, port int, open bool, author string) (*server.Server, error) {
+func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 	set, err := reviewset.Load(paths)
 	if err != nil {
 		return nil, routeSetError(err)
@@ -36,6 +46,7 @@ func buildServer(paths []string, host string, port int, open bool, author string
 			Rel:   d.Rel,
 		})
 	}
+	author := opts.Author
 	if author == "" {
 		author = defaultAuthor()
 	}
@@ -49,9 +60,10 @@ func buildServer(paths []string, host string, port int, open bool, author string
 		// is exactly the index's list, so its order is the tree.
 		Nested: set.Index == "",
 		Author: author,
-		Host:   host,
-		Port:   port,
-		Open:   open,
+		Host:   opts.Host,
+		Port:   opts.Port,
+		Open:   opts.Open,
+		Watch:  opts.Watch,
 	}), nil
 }
 
@@ -96,9 +108,11 @@ func requirePaths(verb string) cobra.PositionalArgs {
 
 func newServeCmd() *cobra.Command {
 	var (
+		opts   serveOptions
 		port   int
 		host   string
 		open   bool
+		watch  bool
 		author string
 	)
 	cmd := &cobra.Command{
@@ -106,7 +120,8 @@ func newServeCmd() *cobra.Command {
 		Short: "Serve one or more documents for block-anchored human review",
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			srv, err := buildServer(args, host, port, open, author)
+			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author}
+			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
 			}
@@ -118,6 +133,7 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 8787, "port to listen on")
 	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
 	cmd.Flags().BoolVar(&open, "open", false, "open the review page in a browser")
+	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
 	return cmd
 }
