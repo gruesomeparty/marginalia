@@ -127,7 +127,19 @@ flags that decide what you may act on —
   its `quote`; carry it to wherever that content went, or ask.
 
 A non-stale `suggest_edit` is the one case you can apply verbatim: its `text` is
-the replacement and the block still reads as the reviewer saw it.
+the replacement and the block still reads as the reviewer saw it. Ask the tool
+which those are rather than working it out yourself:
+
+```bash
+marginalia suggestions <path> --json
+```
+
+It reads the document and its log from disk — no server needed — and splits the
+`suggest_edit` events into `applicable` (the note that stands, with a hash that
+still matches: apply the `replacement` verbatim over the `current` text) and
+`needs_confirmation`, each with a `reason` — the block changed, the note has no
+hash to check, a later note supersedes it, or the block is gone. Marginalia
+never edits the document; applying is yours.
 
 ---
 

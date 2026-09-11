@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -91,6 +91,21 @@ func defaultAuthor() string {
 	return "reviewer"
 }
 
+// requirePaths rejects an empty argument list with an error that says what to
+// type. Deliberately not routed through advertise(): the request-feature
+// pointer is for capability gaps — a format we cannot render, a flag that does
+// not exist — and "you forgot the path" is a usage mistake. Sending those to
+// the feature tracker would fill the queue with noise, the same reason a
+// missing file does not advertise either.
+func requirePaths(verb string) cobra.PositionalArgs {
+	return func(_ *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("%s needs at least one document or directory — e.g. `marginalia %s spec.md` or `marginalia %s docs/`", verb, verb, verb)
+		}
+		return nil
+	}
+}
+
 func newServeCmd() *cobra.Command {
 	var (
 		opts   serveOptions
@@ -103,18 +118,7 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
-		// Deliberately not routed through advertise(): the request-feature
-		// pointer is for capability gaps — a format we cannot render, a flag
-		// that does not exist — and "you forgot the path" is a usage mistake.
-		// Sending those to the feature tracker would fill the queue with
-		// noise, the same reason a missing file does not advertise either.
-		// What it gets instead is an error that says what to type.
-		Args: func(_ *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return errors.New("serve needs at least one document or directory — e.g. `marginalia serve spec.md` or `marginalia serve docs/`")
-			}
-			return nil
-		},
+		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author}
 			srv, err := buildServer(args, opts)

@@ -298,10 +298,14 @@ default.
 
 ## 10. Open questions
 
-- Should `suggest_edit` events be auto-applicable (agent applies the
-  replacement text verbatim when hash still matches)? Leaning yes; the
-  resolution view now reports exactly that condition (a non-stale
-  `suggest_edit`), so the remaining question is only who applies it (#6).
+- ~~Should `suggest_edit` events be auto-applicable (agent applies the
+  replacement text verbatim when hash still matches)?~~ **Yes, and the tool
+  never applies them itself** (#6). `marginalia suggestions <doc|dir>[--json]`
+  reports the replacements that are provably safe — the note that stands for its
+  block, with a hash that still matches, and a hash present at all — and reports
+  everything else with the reason it needs confirmation. Applying belongs to
+  whoever owns the document, because *never mutate the source document* (§5.6)
+  outranks the convenience of doing it here.
 - ~~Watch mode (`serve --watch`: re-render on file change mid-review)?~~ **Yes**
   (#7). Polls size+mtime (filesystem notifications miss the temp-file rename
   editors save with), keeps the last good parse if a save leaves the file

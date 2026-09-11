@@ -20,7 +20,7 @@ func newRootCmd() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return advertise(err)
 	})
-	root.AddCommand(newServeCmd(), newVersionCmd())
+	root.AddCommand(newServeCmd(), newSuggestionsCmd(), newVersionCmd())
 	return root
 }
 

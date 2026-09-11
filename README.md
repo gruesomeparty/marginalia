@@ -145,6 +145,23 @@ curl -s localhost:8787/api/resolution | jq '.stale, .orphaned'
 Nothing is rewritten to produce it: the log stays append-only and staleness is a
 view over it, not a fact on disk.
 
+## Applying the feedback
+
+After a review, ask which `suggest_edit` replacements are safe to apply:
+
+```bash
+marginalia suggestions spec.md          # or a directory
+marginalia suggestions spec.md --json   # for an agent to consume
+```
+
+A suggestion is **applicable** only when it is the note that stands for its
+block, its hash still matches the block as the document now reads, and it
+carries a hash at all. Everything else comes back under `needs_confirmation`
+with the reason — the block changed since, a later note supersedes it, the block
+is gone, or there is no hash to check.
+
+Marginalia never edits your document: this reports, you apply.
+
 ## How it works
 
 - Each block gets a stable ID (`section/ordinal` for prose, the node's own
