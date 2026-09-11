@@ -81,6 +81,9 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 type mdParser struct {
 	src    []byte
 	blocks []Block
+	// diagram is the source of the fence currently being rendered, so the
+	// fence's block can carry it for a renderer to pick up later.
+	diagram string
 }
 
 func parseMarkdown(path string, src []byte) (*Document, error) {
@@ -107,10 +110,12 @@ func parseMarkdown(path string, src []byte) (*Document, error) {
 			if isMermaidFence(fence, src) {
 				p.blocks = append(p.blocks, block)
 				at := len(p.blocks) - 1
+				p.diagram = ""
 				html, kids, ok := p.mermaidFence(fence, section, id)
 				if ok {
 					p.blocks[at].HTML = html
 					p.blocks[at].HasChildren = kids
+					p.blocks[at].Source = p.diagram
 					continue
 				}
 				// Not a diagram type we take apart: render it as the code

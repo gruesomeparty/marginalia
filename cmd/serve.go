@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/gruesomeparty/marginalia/internal/diagram"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
@@ -30,6 +31,10 @@ type serveOptions struct {
 	Author string
 	Config string // review config file, "" for the default review
 	Theme  string // palette name, "" for the default
+	// Diagrams is "auto" (draw mermaid when a renderer is installed) or
+	// "off" (always show the anchored source).
+	Diagrams string
+	MMDC     string // explicit mermaid-cli path
 }
 
 // buildServer resolves the paths into a review set — one document, several, or
@@ -49,6 +54,10 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 	theme, err := web.ThemeFor(opts.Theme)
 	if err != nil {
 		return nil, advertise(err)
+	}
+	drawer, err := diagrams(opts.Diagrams, opts.MMDC)
+	if err != nil {
+		return nil, err
 	}
 	docs := make([]server.Entry, 0, len(set.Docs))
 	for _, d := range set.Docs {
@@ -75,15 +84,29 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		Excluded: set.Excluded,
 		// A discovered set mirrors the folders it was found in; a curated one
 		// is exactly the index's list, so its order is the tree.
-		Nested: set.Index == "",
-		Review: cfg,
-		Theme:  theme,
-		Author: author,
-		Host:   opts.Host,
-		Port:   opts.Port,
-		Open:   opts.Open,
-		Watch:  opts.Watch,
+		Nested:   set.Index == "",
+		Review:   cfg,
+		Theme:    theme,
+		Diagrams: drawer,
+		Author:   author,
+		Host:     opts.Host,
+		Port:     opts.Port,
+		Open:     opts.Open,
+		Watch:    opts.Watch,
 	}), nil
+}
+
+// diagrams resolves the diagram-rendering choice. "auto" draws mermaid when
+// mermaid-cli is installed and shows the anchored source when it is not, so a
+// machine without Node still serves every review; "off" never draws.
+func diagrams(mode, bin string) (*diagram.Renderer, error) {
+	switch mode {
+	case "", "auto":
+		return diagram.Find(bin), nil
+	case "off":
+		return &diagram.Renderer{}, nil
+	}
+	return nil, advertise(fmt.Errorf("unknown --diagrams %q — available: auto, off", mode))
 }
 
 // themeList names the palettes, for flag help.
@@ -138,21 +161,26 @@ func requirePaths(verb string) cobra.PositionalArgs {
 
 func newServeCmd() *cobra.Command {
 	var (
-		opts   serveOptions
-		port   int
-		host   string
-		open   bool
-		watch  bool
-		author string
-		config string
-		theme  string
+		opts        serveOptions
+		port        int
+		host        string
+		open        bool
+		watch       bool
+		author      string
+		config      string
+		theme       string
+		diagramMode string
+		mmdc        string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author, Config: config, Theme: theme}
+			opts = serveOptions{
+				Host: host, Port: port, Open: open, Watch: watch, Author: author,
+				Config: config, Theme: theme, Diagrams: diagramMode, MMDC: mmdc,
+			}
 			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
@@ -169,5 +197,7 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
 	cmd.Flags().StringVar(&config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
 	cmd.Flags().StringVar(&theme, "theme", "", "page palette: "+themeList())
+	cmd.Flags().StringVar(&diagramMode, "diagrams", "auto", "draw mermaid diagrams: auto (when mermaid-cli is installed), off")
+	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
 }

@@ -31,7 +31,16 @@ func parseMermaid(path string, src []byte) (*Document, error) {
 	}
 	tb := newTreeBuilder()
 	addMermaidStmts(tb, dia.Stmts, "", 0)
-	return &Document{Path: path, Format: FormatMermaid, Blocks: tb.blocks}, nil
+	doc := &Document{Path: path, Format: FormatMermaid, Blocks: tb.blocks}
+	// The whole file is the diagram, so its header block is what a rendered
+	// picture hangs on — it is the statement that opens the drawing.
+	for i := range doc.Blocks {
+		if doc.Blocks[i].Kind == mermaid.KindDiagram {
+			doc.Blocks[i].Source = string(src)
+			break
+		}
+	}
+	return doc, nil
 }
 
 // addMermaidStmts walks statements in source order; a subgraph's contents hang
@@ -94,6 +103,7 @@ func (p *mdParser) mermaidFence(fence *ast.FencedCodeBlock, section, parentID st
 	if err != nil {
 		return "", false, false
 	}
+	p.diagram = code
 	taken := map[string]bool{}
 	var b strings.Builder
 	b.WriteString(`<pre><code class="language-mermaid">`)

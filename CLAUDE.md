@@ -10,7 +10,9 @@ for markdown (`serve`, block anchoring, append-only JSONL feedback,
 `/marginalia:review-doc`). **M3** is in: `.proto` schemas (issue #15) and
 JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path,
 and mermaid flowcharts anchor per statement (issue #25) — in a markdown fence
-and as `.mmd`/`.mermaid` documents.
+and as `.mmd`/`.mermaid` documents — and are **drawn** as anchored SVG when
+mermaid-cli is installed (issue #36): the shape you click in the picture is the
+statement your note lands on, source one toggle away.
 Reviews are configurable (issue #3): `serve --config review.yaml` frames the
 review and defines the vocabulary the reviewer answers in, enforced server-side,
 and carries the requester's per-block notes and the parts it is not asking about
@@ -92,10 +94,32 @@ users are agents, not humans.
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
   `MetaData.Keys()`. Mermaid is parsed by `internal/mermaid` — line-based,
   bracket-aware and equally tolerant, returning statements with the byte range
-  they occupy so a fence can be annotated in place. Nothing renders the
-  diagram as a picture: that needs JavaScript (a megabyte inlined, and
-  `unsafe-eval` under strict CSP) or headless Chromium, which costs the single
-  Go binary.
+  they occupy so a fence can be annotated in place. `internal/diagram` draws the
+  diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
+  (scripts, handlers, external refs, `@import` — the page runs no code it did
+  not write), stamps the page's block ids onto the shapes as `data-anchor`, and
+  caches by source hash in the user cache dir, never beside the document. That
+  reverses the earlier "no picture" decision *on the rendering route only*: an
+  inlined SVG needs no script and makes no request, so share mode and strict
+  CSP still hold, and the single Go binary still works with no Node installed —
+  an unavailable renderer means the page shows the anchored source, as it
+  always did. The reviewer's theme colours the drawing in CSS (with
+  `!important`, because mermaid inlines its own id-keyed stylesheet), since a
+  server-side render cannot know which mode they will pick. Mermaid names its
+  own parts (`L_<from>_<to>_<n>` on edge paths and their labels,
+  `…-flowchart-<id>-<n>` on nodes, the svg id plus the name on clusters), which
+  is what makes a picture anchorable; an identifier containing `_` makes the
+  split ambiguous, so every split is tried and the one naming a real statement
+  wins. Each anchored edge also carries an invisible wide copy of itself
+  (`.mg-hit`) so a two-pixel arrow is a clickable target, and a box no
+  statement declares answers for the statement that named it.
+- `serve` and `export` take `--diagrams=auto|off` and `--mmdc <path>`;
+  `MARGINALIA_MMDC` and `MARGINALIA_MMDC_ARGS` name the binary and extra
+  arguments (a puppeteer config, say) without a flag. `export` *fails* when a
+  diagram cannot be drawn — the file is about to be handed to someone who
+  cannot re-run the command — while `serve` says so once and serves the source.
+  `rescan` re-draws after a watch re-parse, because a re-parse throws the SVG
+  away with the old blocks.
 - A requester note carries the document it is about (`review.Note.Doc`), and
   `web.ReviewInfo` filters notes to the document being rendered: block ids are
   per-document, so `1/2` exists in every markdown file of a set and an
@@ -167,7 +191,9 @@ any label left out (`worker -.retry.-> queue` → `worker-->queue`, chains
 joined `a-->b-->c`, subgraph members after a slash). In a markdown fence those
 paths extend the fence's own ID (`1/3/client-->api`) and the statements are
 **inline** blocks, like list items: the `<pre>` is the source the author wrote,
-annotated with anchors in place, and the fence keeps its old ID.
+annotated with anchors in place, and the fence keeps its old ID. The drawn SVG
+carries the same ids as `data-anchor` on its shapes, so picture and source are
+one surface and a note from either is the same event.
 `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,

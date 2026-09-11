@@ -96,6 +96,46 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .framing .text{white-space:pre-wrap}
 .framing h2{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;font-weight:600}
 .block{position:relative;border-radius:6px;padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
+/* A drawn diagram. The picture is the review surface: its own shapes carry
+   the anchors, so the arrow that is wrong is the thing you click. The source
+   is a toggle away, with the same anchors on the same statements. */
+.diagram{margin:0;padding:0}
+.diagram .pic{overflow-x:auto;padding:.6rem 0}
+.diagram svg{max-width:100%;height:auto}
+.diagram figcaption{margin:.1rem 0 .2rem}
+.diagram .flip{font:inherit;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--rule);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.diagram .flip:hover{color:var(--fg)}
+.diagram figcaption .hint{margin-left:.5rem;color:var(--muted);font-size:.74rem}
+/* The drawing is rendered by mermaid's own CLI, with mermaid's own palette
+   and its own stylesheet inlined in the SVG — selectors keyed on the svg's id,
+   so nothing but !important reaches them. These rules dress the picture in the
+   page's colours instead: the reviewer's theme and mode, whichever they
+   picked, because the render happens on the server and cannot know which one
+   that is, and a picture that ignores dark mode is dark text on a dark page.
+   Colour only; mermaid keeps every position it computed. */
+.diagram .pic svg .node rect,.diagram .pic svg .node circle,.diagram .pic svg .node ellipse,.diagram .pic svg .node polygon,.diagram .pic svg .node path{fill:var(--card)!important;stroke:var(--rule)!important}
+.diagram .pic svg .cluster rect{fill:transparent!important;stroke:var(--rule)!important}
+.diagram .pic svg text,.diagram .pic svg span,.diagram .pic svg .label,.diagram .pic svg .nodeLabel,.diagram .pic svg .edgeLabel,.diagram .pic svg .cluster-label{fill:var(--fg)!important;color:var(--fg)!important}
+.diagram .pic svg .edgeLabel,.diagram .pic svg .edgeLabel p,.diagram .pic svg .labelBkg{background-color:var(--bg)!important}
+.diagram .pic svg .edgeLabel rect{fill:var(--bg)!important}
+.diagram .pic svg .flowchart-link{stroke:var(--muted)!important}
+.diagram .pic svg .marker,.diagram .pic svg marker path{fill:var(--muted)!important;stroke:var(--muted)!important}
+/* An anchored shape: hoverable, clickable, and marked when it carries notes.
+   An arrow is two pixels wide, so each anchored edge also carries an
+   invisible, wide copy of itself that takes the click (.mg-hit). Highlighting
+   follows data-hover, set on every shape sharing the anchor, because the copy
+   is what the pointer is actually over and the drawn arrow is what should
+   light up. The copy itself never paints. */
+.diagram [data-anchor]{cursor:pointer}
+.diagram .mg-hit{stroke:transparent}
+.diagram [data-anchor][data-hover]{filter:brightness(1.08) saturate(1.4)}
+/* !important again, and for the same reason: these override the palette rules
+   above, which had to shout to be heard over mermaid's own. */
+.diagram g[data-anchor][data-hover] rect,.diagram g[data-anchor][data-hover] polygon,.diagram g[data-anchor][data-hover] circle,.diagram g[data-anchor][data-hover] path{stroke:var(--accent)!important;stroke-width:2.5px!important}
+.diagram g[data-anchor][data-count]:not([data-count="0"]) rect,.diagram g[data-anchor][data-count]:not([data-count="0"]) polygon,.diagram g[data-anchor][data-count]:not([data-count="0"]) circle{stroke:var(--marker)!important;stroke-width:3px!important}
+.diagram path[data-anchor]:not(.mg-hit)[data-hover]{stroke:var(--accent)!important;stroke-width:3px!important}
+.diagram path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke:var(--marker)!important;stroke-width:3px!important}
+.diagram [data-anchor][data-hover] .edgeLabel,.diagram [data-anchor][data-hover] .nodeLabel{color:var(--accent)!important;fill:var(--accent)!important}
 /* The requester's own note about a block — the agent asking, not the human
    answering, so it reads differently from a feedback item. */
 .sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:0 6px 6px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.83rem;white-space:pre-wrap}
@@ -241,7 +281,11 @@ header #fold+button{margin-left:.5rem}
   </section>
   {{end}}
   {{range .Doc.Blocks}}{{if not .Inline}}
-  <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
+  <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{if .SVG}}<figure class="diagram">
+    <div class="pic">{{safe .SVG}}</div>
+    <div class="src" hidden>{{safe .HTML}}</div>
+    <figcaption><button class="flip" type="button" aria-pressed="false">Show source</button><span class="hint">click a shape to comment on it</span></figcaption>
+  </figure>{{else}}{{safe .HTML}}{{end}}</div>
   {{end}}{{end}}
   {{if .Static}}
   <section class="share" id="share" hidden aria-label="Send your review back">
@@ -331,6 +375,31 @@ window.__MARGINALIA__ = {{.DataJSON}};
       el.dataset.state = current.event.type;
       if(current.stale) el.dataset.stale = "1"; else delete el.dataset.stale;
     }
+    mirror(el);
+  }
+  // The picture and the source are one surface, so a drawn shape wears the
+  // badge state of the statement it is: how much was said, what was decided,
+  // whether the diagram moved on since. Nothing to do for a block no diagram
+  // drew.
+  function mirror(el){
+    Array.prototype.forEach.call(shapesOf(el.dataset.block), function(s){
+      carry(s, "count", el.dataset.count);
+      carry(s, "state", el.dataset.state);
+      carry(s, "stale", el.dataset.stale);
+    });
+  }
+  function carry(to, key, v){ if(v) to.dataset[key] = v; else delete to.dataset[key]; }
+  // shapesOf finds every drawn shape standing for one block: the arrow and
+  // the invisible copy that takes its clicks, or a box and its cluster.
+  function shapesOf(block){
+    return document.querySelectorAll('.diagram .pic [data-anchor="' + block + '"]');
+  }
+  function hover(target, on){
+    var shape = target.closest && target.closest("[data-anchor]");
+    if(!shape) return;
+    Array.prototype.forEach.call(shapesOf(shape.dataset.anchor), function(s){
+      carry(s, "hover", on ? "1" : "");
+    });
   }
   // A block's comment list and composer go after it — except inside a list
   // item, where "after" would mean between two <li>s. There they go after the
@@ -351,6 +420,16 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return anchor;
   }
   function attach(el, box){
+    // A statement of a drawn diagram: its notes belong under the whole
+    // figure, where they are visible in both the picture and the source.
+    var fig = el.closest("figure.diagram");
+    if(fig){
+      label(el, box);
+      var last = fig;
+      while(isBoxEl(last.nextElementSibling)) last = last.nextElementSibling;
+      last.after(box);
+      return;
+    }
     var pre = el.closest("pre");
     if(pre){
       label(el, box);
@@ -369,6 +448,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     on.className = "on"; on.textContent = parts[parts.length-1];
     box.insertBefore(on, box.firstChild);
   }
+  function isBoxEl(el){ return !!el && (el.classList.contains("existing") || el.classList.contains("composer")); }
   function boxAfter(el, cls){
     var box;
     if(el.closest("pre")){
@@ -630,6 +710,52 @@ window.__MARGINALIA__ = {{.DataJSON}};
       if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
     });
   });
+  // A drawn diagram is the review surface and its source is one tap away.
+  // Both carry the same anchors, so the reviewer picks the one they think in;
+  // the choice sticks, like mode and ligatures, and applies to every diagram
+  // on the page at once — flipping them one by one is not a feature.
+  (function(){
+    var figs = document.querySelectorAll("figure.diagram");
+    if(!figs.length) return;
+    var key = "marginalia.diagram";
+    function wanted(){ try{ return localStorage.getItem(key) === "source"; }catch(e){ return false; } }
+    function show(fig, src){
+      fig.querySelector(".pic").hidden = src;
+      fig.querySelector(".src").hidden = !src;
+      var b = fig.querySelector(".flip");
+      b.setAttribute("aria-pressed", src ? "true" : "false");
+      b.textContent = src ? "Show diagram" : "Show source";
+    }
+    function showAll(src){
+      try{ localStorage.setItem(key, src ? "source" : "picture"); }catch(e){}
+      Array.prototype.forEach.call(figs, function(f){ show(f, src); });
+    }
+    Array.prototype.forEach.call(figs, function(fig){
+      show(fig, wanted());
+      fig.querySelector(".flip").addEventListener("click", function(e){
+        e.stopPropagation();
+        showAll(fig.querySelector(".src").hidden);
+      });
+      // Hovering the invisible click target lights up the shape it stands
+      // for — every shape with that anchor, so an edge and the copy that
+      // catches its clicks behave as the one thing they are.
+      var pic = fig.querySelector(".pic");
+      pic.addEventListener("mouseover", function(e){ hover(e.target, true); });
+      pic.addEventListener("mouseout", function(e){ hover(e.target, false); });
+      // A shape the renderer anchored answers for its statement. The click
+      // stops here: the diagram block around it would otherwise claim it and
+      // open a composer about the whole picture.
+      pic.addEventListener("click", function(e){
+        var shape = e.target.closest && e.target.closest("[data-anchor]");
+        if(!shape) return;
+        var el = elOf[shape.dataset.anchor];
+        if(!el) return;
+        e.stopPropagation();
+        if((blockOf[el.dataset.block]||{}).readonly){ toast("This block is read-only in this review."); return; }
+        openComposer(el);
+      });
+    });
+  })();
   var foldBtn = document.getElementById("fold");
   if(foldBtn) foldBtn.onclick = function(){
     var collapse = foldBtn.getAttribute("aria-pressed") !== "true";
