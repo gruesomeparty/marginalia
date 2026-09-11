@@ -13,6 +13,7 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
+	"github.com/gruesomeparty/marginalia/internal/web"
 )
 
 // Entry is one document of the served review set: its parsed blocks, its own
@@ -42,6 +43,8 @@ type Options struct {
 	// reviewer answers in, any instructions, and which blocks are read-only.
 	// Nil means the default review — the built-in actions and nothing else.
 	Review *review.Config
+	// Theme is the palette the pages are painted in (web.ThemeFor).
+	Theme web.Theme
 
 	Author string
 	Host   string
@@ -181,7 +184,8 @@ func (s *Server) announce(url string) {
 // agent has to read back out of the log.
 func (s *Server) announceReview() {
 	cfg := s.opts.Review
-	if len(cfg.Custom) == 0 && len(cfg.ReadOnly) == 0 && !cfg.RequireVerdict && cfg.Instructions == "" {
+	if len(cfg.Custom) == 0 && len(cfg.ReadOnly) == 0 && len(cfg.Skip) == 0 &&
+		len(cfg.Notes) == 0 && !cfg.RequireVerdict && cfg.Instructions == "" {
 		return
 	}
 	var says []string
@@ -189,8 +193,14 @@ func (s *Server) announceReview() {
 		says = append(says, a.Type)
 	}
 	fmt.Printf("marginalia: review actions: %s\n", strings.Join(says, ", "))
-	if n := len(cfg.ReadOnly); n > 0 {
+	if len(cfg.ReadOnly) > 0 {
 		fmt.Printf("marginalia: read-only: %s\n", strings.Join(cfg.ReadOnly, ", "))
+	}
+	if len(cfg.Skip) > 0 {
+		fmt.Printf("marginalia: skipped: %s\n", strings.Join(cfg.Skip, ", "))
+	}
+	if n := len(cfg.Notes); n > 0 {
+		fmt.Printf("marginalia: %d note(s) from the requester on the page\n", n)
 	}
 	if cfg.RequireVerdict {
 		fmt.Println("marginalia: every block needs a verdict before the review can be marked done")

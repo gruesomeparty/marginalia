@@ -46,6 +46,9 @@ type Page struct {
 	// reviewer, the vocabulary they answer in, and which blocks are
 	// read-only. Nil means the default review.
 	Review *review.Config
+	// Theme is the palette the page is served in; the reviewer can still
+	// switch light/dark for themselves.
+	Theme Theme
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -64,6 +67,12 @@ type clientBlock struct {
 	// statement — has its markup written by the parser, so the page marks
 	// those elements itself.
 	ReadOnly bool `json:"readonly,omitempty"`
+	// Skipped blocks open folded: the requester said they are not part of
+	// this review.
+	Skipped bool `json:"skipped,omitempty"`
+	// Notes are the requester's guidance for this block — the agent asking,
+	// not the human answering.
+	Notes []review.Note `json:"notes,omitempty"`
 }
 
 type clientDoc struct {
@@ -89,6 +98,8 @@ type Review struct {
 	Instructions   string          `json:"instructions,omitempty"`
 	Actions        []review.Action `json:"actions"`
 	ReadOnly       []string        `json:"readonly,omitempty"`
+	Skip           []string        `json:"skip,omitempty"`
+	Notes          []review.Note   `json:"notes,omitempty"`
 	RequireVerdict bool            `json:"require_verdict,omitempty"`
 }
 
@@ -102,6 +113,8 @@ func ReviewInfo(c *review.Config) Review {
 		Instructions:   c.Instructions,
 		Actions:        c.Actions(),
 		ReadOnly:       c.ReadOnly,
+		Skip:           c.Skip,
+		Notes:          c.Notes,
 		RequireVerdict: c.RequireVerdict,
 	}
 }
@@ -120,6 +133,8 @@ func project(doc *document.Document, cfg *review.Config) clientDoc {
 			Quote:       b.Quote,
 			Text:        b.PlainText,
 			ReadOnly:    cfg.Locked(b.ID),
+			Skipped:     cfg.Skipped(b.ID),
+			Notes:       cfg.NotesFor(b.ID),
 		})
 	}
 	return out
@@ -149,6 +164,7 @@ type viewData struct {
 	DoneN       int
 	SetDone     bool
 	Review      Review
+	Theme       Theme
 }
 
 // Render writes the self-contained review page.
@@ -197,6 +213,7 @@ func Render(w io.Writer, p Page) error {
 		DoneN:       done,
 		SetDone:     p.SetDone,
 		Review:      info,
+		Theme:       p.Theme,
 	})
 }
 

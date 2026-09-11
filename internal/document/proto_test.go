@@ -1,6 +1,7 @@
 package document
 
 import (
+	"html"
 	"strings"
 	"testing"
 )
@@ -104,7 +105,12 @@ func TestProtoBlockAnchorFields(t *testing.T) {
 	if len(f.Hash) != 12 {
 		t.Errorf("hash = %q, want 12 hex chars", f.Hash)
 	}
-	if !strings.Contains(f.HTML, "string customer_id = 1;") || !strings.Contains(f.HTML, `class="cmt"`) {
+	// The declaration is highlighted, so read it back through the spans: the
+	// text a reviewer sees must still be exactly what the schema says.
+	if got := textOf(f.HTML); !strings.Contains(got, "string customer_id = 1;") {
+		t.Errorf("HTML renders %q", got)
+	}
+	if !strings.Contains(f.HTML, `class="cmt"`) || !strings.Contains(f.HTML, `class="tok kw"`) {
 		t.Errorf("HTML = %q", f.HTML)
 	}
 	if f.HasChildren {
@@ -158,9 +164,33 @@ func TestProtoHTMLEscapesSource(t *testing.T) {
 	if strings.Contains(html, "<script>") {
 		t.Error("comment text was not escaped")
 	}
-	if !strings.Contains(html, "map&lt;string, string&gt; m = 1;") {
-		t.Errorf("declaration not escaped as expected: %q", html)
+	if got := textOf(html); !strings.Contains(got, "map<string, string> m = 1;") {
+		t.Errorf("declaration lost or altered: %q", html)
 	}
+	// The source's own angle brackets came through as text, not markup.
+	if got := textOf(html); !strings.Contains(got, "<script>alert(1)</script>") {
+		t.Errorf("comment text lost: %q", got)
+	}
+}
+
+// textOf reads the text out of rendered markup, so a test can assert on what
+// the reviewer sees rather than on how it is marked up.
+func textOf(markup string) string {
+	var b strings.Builder
+	depth := 0
+	for i := 0; i < len(markup); i++ {
+		switch c := markup[i]; {
+		case c == '<':
+			depth++
+		case c == '>':
+			if depth > 0 {
+				depth--
+			}
+		case depth == 0:
+			b.WriteByte(c)
+		}
+	}
+	return html.UnescapeString(b.String())
 }
 
 func TestParseUnknownFormat(t *testing.T) {

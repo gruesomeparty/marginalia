@@ -1,12 +1,37 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{{with .Theme.Palette}} data-palette="{{.}}"{{end}}{{with .Theme.Mode}} data-mode="{{.}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Marginalia — {{.Doc.Path}}</title>
+<script>
+// Before first paint: the reviewer's own display choices, so a page served
+// light does not flash white at someone who chose dark. Wrapped because
+// storage throws in a private window, and a display preference is never
+// worth an error.
+(function(){
+  try{
+    var mode = localStorage.getItem("marginalia.mode");
+    if(mode === "light" || mode === "dark") document.documentElement.dataset.mode = mode;
+    else if(mode === "system") delete document.documentElement.dataset.mode;
+    if(localStorage.getItem("marginalia.ligatures") === "off") document.documentElement.dataset.ligatures = "off";
+  }catch(e){}
+})();
+</script>
 <style>
-:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:0 1px 3px rgba(0,0,0,.12)}
-@media (prefers-color-scheme:dark){:root{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5)}}
+/* A palette is a set of variables and light/dark is a mode, so the theme the
+   agent served and the one the reviewer picked are the same mechanism. Order
+   matters here: the palette blocks come after the default ones. */
+:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:0 1px 3px rgba(0,0,0,.12);--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#8a8a84}
+:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}
+@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}}
+/* Catppuccin Latte / Mocha, as a named option beside the default. */
+:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#6c6f85;--rule:#ccd0da;--accent:#1e66f5;--marker:#df8e1d;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--ok:#40a02b;--bad:#d20f39;--tok-kw:#8839ef;--tok-str:#40a02b;--tok-num:#fe640b;--tok-com:#9ca0b0}
+:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
+@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
+/* Mono stack: prefer a programming font the reviewer may already have — no
+   webfont may be fetched — and ligate =>, != and -> where one is present. */
+:root{--mono:"JetBrains Mono","Fira Code","Cascadia Code","Iosevka","Victor Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,'Times New Roman',serif;line-height:1.6}
@@ -17,6 +42,21 @@ header .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-sp
 header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
 header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
 header button.secondary{background:transparent;color:var(--fg);border-color:var(--rule)}
+/* Display settings: the reviewer's, not the agent's — theme and ligatures,
+   remembered in this browser and nowhere else. */
+.display{position:relative;font-size:.85rem}
+.display summary{list-style:none;cursor:pointer;padding:.4rem .9rem;border:1px solid var(--rule);border-radius:6px}
+.display summary::-webkit-details-marker{display:none}
+.display[open] summary{background:var(--card)}
+.display .panel{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow);padding:.6rem;display:grid;gap:.5rem;min-width:13rem}
+.display .group{display:flex;align-items:center;gap:.35rem;justify-content:space-between}
+.display .group>span{color:var(--muted)}
+.display .opts{display:flex}
+.display .opts button{font:inherit;font-size:.8rem;padding:.2rem .5rem;border:1px solid var(--rule);background:transparent;color:var(--fg);cursor:pointer;border-radius:0}
+.display .opts button:first-child{border-radius:6px 0 0 6px}
+.display .opts button:last-child{border-radius:0 6px 6px 0}
+.display .opts button+button{border-left:0}
+.display .opts button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
 .layout{display:flex;align-items:flex-start}
 main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
 .nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem;border-right:1px solid var(--rule)}
@@ -38,7 +78,14 @@ main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
    phone. Both children take the width they are given instead. */
 @media (max-width:900px){.layout{flex-direction:column}main{width:100%}.nav{position:static;flex:none;width:100%;max-height:none;padding:1rem 2.5rem 0;border-right:0;border-bottom:1px solid var(--rule)}}
 h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.25}
-code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code,pre{font-family:var(--mono);font-variant-ligatures:contextual;font-feature-settings:"calt" 1}
+/* Ligatures are opt-outable: they can hide a real `!`, and some readers
+   simply dislike them. */
+:root[data-ligatures="off"] code,:root[data-ligatures="off"] pre{font-variant-ligatures:none;font-feature-settings:"calt" 0}
+.tok.kw{color:var(--tok-kw)}
+.tok.str{color:var(--tok-str)}
+.tok.num{color:var(--tok-num)}
+.tok.com{color:var(--tok-com);font-style:italic}
 pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-size:.9em}
 :not(pre)>code{background:var(--card);padding:.1em .35em;border-radius:4px;font-size:.9em}
 table{border-collapse:collapse;width:100%}
@@ -49,6 +96,16 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .framing .text{white-space:pre-wrap}
 .framing h2{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;font-weight:600}
 .block{position:relative;border-radius:6px;padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
+/* The requester's own note about a block — the agent asking, not the human
+   answering, so it reads differently from a feedback item. */
+.sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:0 6px 6px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.83rem;white-space:pre-wrap}
+.sidenote .who{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.03em}
+.framing .unanchored{margin-top:.5rem;color:var(--muted);font-size:.83rem}
+/* Skipped blocks: collapsed behind one summary so the page opens on the part
+   that is actually under review. */
+.skipped{margin:.6rem 0;border:1px dashed var(--rule);border-radius:8px;padding:0 .7rem}
+.skipped>summary{cursor:pointer;color:var(--muted);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.82rem;padding:.45rem 0}
+.skipped[open]{padding-bottom:.5rem}
 /* Read-only blocks are context, not questions: they read normally and do
    nothing when tapped. */
 .block[data-readonly="1"]:hover{background:none}
@@ -103,7 +160,7 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:0 6px 6px 0}
 .orphans .meta{color:var(--muted)}
 .orphans .was{color:var(--muted);font-style:italic;margin:.15rem 0}
-main.tree{--step:1.25rem;max-width:110ch;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;line-height:1.5}
+main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:.88rem;line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
 main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:2}main.tree .block[data-level="3"]{--lvl:3}main.tree .block[data-level="4"]{--lvl:4}main.tree .block[data-level="5"]{--lvl:5}main.tree .block[data-level="6"]{--lvl:6}main.tree .block[data-level="7"]{--lvl:7}main.tree .block[data-level="8"]{--lvl:8}main.tree .block[data-level="9"]{--lvl:9}main.tree .block[data-level="10"]{--lvl:10}main.tree .block[data-level="11"]{--lvl:11}main.tree .block[data-level="12"]{--lvl:12}main.tree .block[data-level="13"]{--lvl:13}main.tree .block[data-level="14"]{--lvl:14}main.tree .block[data-level="15"]{--lvl:15}main.tree .block[data-level="16"]{--lvl:16}main.tree .block[data-level="17"]{--lvl:17}main.tree .block[data-level="18"]{--lvl:18}main.tree .block[data-level="19"]{--lvl:19}main.tree .block[data-level="20"]{--lvl:20}main.tree .block[data-level="21"]{--lvl:21}main.tree .block[data-level="22"]{--lvl:22}main.tree .block[data-level="23"]{--lvl:23}main.tree .block[data-level="24"]{--lvl:24}
@@ -133,6 +190,23 @@ header #fold+button{margin-left:.5rem}
   {{if and .ShowNav (ne .Title .Doc.Path)}}<span class="where">{{.Doc.Path}}</span>{{end}}
   <span class="count" id="count">0 comments</span>
   <span class="actions">
+    <details class="display" id="display">
+      <summary>Display</summary>
+      <div class="panel">
+        <div class="group" role="group" aria-label="Colour theme">
+          <span>Theme</span>
+          <span class="opts" id="modes">
+            <button type="button" data-mode="system">System</button><button type="button" data-mode="light">Light</button><button type="button" data-mode="dark">Dark</button>
+          </span>
+        </div>
+        <div class="group" role="group" aria-label="Code ligatures">
+          <span>Ligatures</span>
+          <span class="opts" id="ligs">
+            <button type="button" data-lig="on">On</button><button type="button" data-lig="off">Off</button>
+          </span>
+        </div>
+      </div>
+    </details>
     {{if .Doc.IsTree}}<button id="fold" type="button" class="secondary" aria-pressed="false">Collapse all</button>{{end}}
     {{if .ShowNav}}<button id="done" type="button" class="secondary">Done with this file</button>
     <button id="finish" type="button">Finish review set{{if .SetDone}} ✓{{end}}</button>
@@ -515,7 +589,102 @@ window.__MARGINALIA__ = {{.DataJSON}};
     foldBtn.textContent = collapse ? "Expand all" : "Collapse all";
     applyFolds();
   };
+  // The requester's guidance, rendered where it applies. A note whose block
+  // is gone is not dropped: it moves to the banner, because a question the
+  // agent asked is worth more than tidy markup.
+  (function(){
+    var stray = [];
+    ((data.review && data.review.notes) || []).forEach(function(note){
+      var el = elOf[note.block];
+      if(!el){ stray.push(note); return; }
+      var box = document.createElement("aside");
+      box.className = "sidenote";
+      var who = document.createElement("span");
+      who.className = "who"; who.textContent = "note from the requester";
+      box.appendChild(who);
+      box.appendChild(document.createTextNode(note.text));
+      if(el.tagName === "LI" || el.closest("pre")) attach(el, box); else el.before(box);
+    });
+    if(!stray.length) return;
+    var banner = document.querySelector(".framing") || (function(){
+      var s = document.createElement("section"); s.className = "framing";
+      document.getElementById("doc").prepend(s);
+      return s;
+    })();
+    var list = document.createElement("div");
+    list.className = "unanchored";
+    list.textContent = "Notes for blocks this document no longer has: " +
+      stray.map(function(n){ return n.block + " — " + n.text; }).join(" · ");
+    banner.appendChild(list);
+  })();
+  // Blocks the requester marked as skipped open collapsed, in runs, so a long
+  // document does not ask for attention it does not want.
+  (function(){
+    var run = [];
+    function close(){
+      if(!run.length) return;
+      var box = document.createElement("details");
+      box.className = "skipped";
+      var head = document.createElement("summary");
+      head.textContent = run.length + (run.length === 1 ? " block" : " blocks") +
+        " the requester left out of this review";
+      box.appendChild(head);
+      run[0].before(box);
+      run.forEach(function(el){ box.appendChild(el); });
+      run = [];
+    }
+    data.doc.blocks.forEach(function(b){
+      var el = elOf[b.id];
+      // An inline block — a list item, a diagram statement — has no element
+      // of its own to move; its parent carries it.
+      if(!el || el.tagName === "LI" || el.closest("pre")) return;
+      if(!b.skipped){ close(); return; }
+      // A note the requester left on a skipped block belongs inside the
+      // collapsed group with it, not stranded above it.
+      var before = el.previousElementSibling;
+      if(before && before.classList.contains("sidenote")) run.push(before);
+      run.push(el);
+      var box = el.nextElementSibling;
+      while(box && (box.classList.contains("existing") || box.classList.contains("sidenote"))){
+        run.push(box); box = box.nextElementSibling;
+      }
+    });
+    close();
+  })();
   count();
+  // Display settings live in this browser only: a preference about the room
+  // the document is read in has no business on the agent's disk.
+  (function(){
+    var root = document.documentElement;
+    function remember(key, value){ try{ localStorage.setItem("marginalia."+key, value); }catch(e){} }
+    function mark(box, attr, value){
+      Array.prototype.forEach.call(box.querySelectorAll("button"), function(b){
+        b.setAttribute("aria-pressed", b.dataset[attr] === value ? "true" : "false");
+      });
+    }
+    var modes = document.getElementById("modes"), ligs = document.getElementById("ligs");
+    function syncModes(){ mark(modes, "mode", root.dataset.mode || "system"); }
+    function syncLigs(){ mark(ligs, "lig", root.dataset.ligatures === "off" ? "off" : "on"); }
+    Array.prototype.forEach.call(modes.querySelectorAll("button"), function(b){
+      b.onclick = function(){
+        var mode = b.dataset.mode;
+        if(mode === "system") delete root.dataset.mode; else root.dataset.mode = mode;
+        remember("mode", mode); syncModes();
+      };
+    });
+    Array.prototype.forEach.call(ligs.querySelectorAll("button"), function(b){
+      b.onclick = function(){
+        if(b.dataset.lig === "off") root.dataset.ligatures = "off"; else delete root.dataset.ligatures;
+        remember("ligatures", b.dataset.lig); syncLigs();
+      };
+    });
+    syncModes(); syncLigs();
+    // Clicking anywhere else closes the panel, which is what a menu does.
+    document.addEventListener("click", function(e){
+      var d = document.getElementById("display");
+      if(d.open && !e.target.closest("#display")) d.open = false;
+    });
+  })();
   // Review-set navigation: the sidebar's counts and done ticks are live, so
   // marking a file done shows up without a reload.
   var inSet = !!document.querySelector(".nav");

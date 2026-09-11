@@ -32,7 +32,7 @@ func addProtoDecls(tb *treeBuilder, decls []*protoschema.Decl, typePath, scopePa
 			Kind:   d.Kind,
 			Level:  level,
 			Text:   strings.Join(nonEmpty(d.Comment, d.Text, d.Trailing), " "),
-			HTML:   treeLine(d.Comment, esc(d.Text), d.Trailing, "decl"),
+			HTML:   treeLine(d.Comment, protoLang.HTML(d.Text), d.Trailing, "decl"),
 		})
 		if len(d.Children) == 0 {
 			continue

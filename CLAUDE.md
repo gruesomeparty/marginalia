@@ -12,7 +12,10 @@ JSON/YAML/TOML trees (issue #2) render as folding trees anchored by node path,
 and mermaid flowcharts anchor per statement (issue #25) — in a markdown fence
 and as `.mmd`/`.mermaid` documents.
 Reviews are configurable (issue #3): `serve --config review.yaml` frames the
-review and defines the vocabulary the reviewer answers in, enforced server-side.
+review and defines the vocabulary the reviewer answers in, enforced server-side,
+and carries the requester's per-block notes and the parts it is not asking about
+(issue #18). Presentation is themed (`--theme`, Catppuccin included), code is
+highlighted server-side, and the reviewer owns light/dark and ligatures.
 Multi-document sessions (issue #8) serve a set — a directory, several paths, or
 a `.marginalia.yml`-curated list — one page per document, and markdown list
 items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
@@ -95,6 +98,15 @@ users are agents, not humans.
   deliberately no `feedback.ValidType` any more, because a second list would
   drift. `Config.Validate` and `Config.Locked` run on the server, not just in
   the page: rendering a rule is not enforcing it.
+- `internal/highlight` tokenizes code at render time — fenced blocks and
+  `.proto` declarations — because a client-side highlighter means a CDN script
+  and the page must survive strict CSP. Small on purpose: comments, strings,
+  numbers, keywords, a handful of languages, passthrough for the rest.
+- Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
+  `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
+  The reviewer's display choices (mode, ligatures) live in `localStorage`,
+  applied by a small head script before first paint; every access is wrapped,
+  because storage throws in a private window.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`

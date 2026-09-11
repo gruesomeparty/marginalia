@@ -97,6 +97,22 @@ Optionally re-renders with resolution states for a second pass.
   parser does not take apart stays reviewable as the source block it is.
 - Readable defaults: ~68ch column, serif body, sans headings, mono code,
   system fonts only (no webfont dependency), responsive down to phone width.
+  The mono stack prefers a programming font the reviewer may already have
+  installed (JetBrains Mono, Fira Code, Cascadia Code, Iosevka) with
+  contextual ligatures on, and falls back to `ui-monospace` — nothing is ever
+  fetched. Ligatures are opt-outable: they can hide a real `!`.
+- **Code is highlighted at render time, on the server** (`internal/highlight`):
+  fenced code blocks and `.proto` declarations get comments, strings, numbers
+  and keywords spanned. A client-side highlighter would mean a script from a
+  CDN, which is the one thing the page may not have. A language the tokenizer
+  does not know renders as plain text rather than badly.
+- **Themes are variable sets, light/dark is a mode** — one mechanism, so the
+  palette an agent served (`serve --theme catppuccin-mocha`) and the reviewer's
+  own choice cannot disagree. The reviewer's choice of light/dark and
+  ligatures lives in their browser (`localStorage`, guarded — storage throws in
+  a private window), never on the agent's disk: a display preference is not
+  review state. An unknown theme name is a feature request, not a typo, so it
+  hits the advertise-on-error path.
 - The page is fully self-contained (inline CSS/JS) in both modes — static
   mode must survive strict CSP (no external requests).
 
@@ -242,6 +258,24 @@ saying "nit" means opening a composer and typing, a forty-block document is a
 slog and the reviewer stops being thorough, which matters most on a phone over
 Tailscale where typing is the expensive part.
 
+The same channel carries the requester's own guidance:
+
+```yaml
+notes:
+  - block: "1/2"
+    text: why 500? I took it from the queue's batch limit — is that right?
+skip:
+  - "2"      # generated appendix: folded, and refused if something posts anyway
+```
+
+A note renders beside the block it names, marked as coming from the requester —
+framing that survives the switch from chat to browser, where the human actually
+is. Answering it is an ordinary feedback event anchored to that block, so the
+loop closes without a second channel. `skip` is `readonly` plus a fold: a
+sixty-block document where a third is under review should open on that third.
+A note whose block the document no longer has is surfaced in the banner rather
+than dropped — a question the agent asked is worth more than tidy markup.
+
 Rules this has to keep:
 
 - **The server is the gate, not the page.** A type that is not in the
@@ -250,8 +284,10 @@ Rules this has to keep:
   refused — a tab left open across a restart must not be able to write
   vocabulary the agent never asked for.
 - **The vocabulary is discoverable.** `GET /api/doc` echoes the configured
-  actions and read-only patterns, so the agent reading `blocker` out of the
-  log can see what was asked for and how it was labelled.
+  actions, the requester's notes, and the read-only and skipped blocks
+  resolved against the document — so the agent reading `blocker` out of the
+  log can see what was asked for, how it was labelled, and what was
+  deliberately not reviewed.
 - **Requester-supplied framing is never a feedback event.** Instructions
   arrive at serve time and stay out of `<doc>.feedback.jsonl`: that log is the
   human's answers, not the agent's questions.
@@ -376,5 +412,8 @@ default.
   on a block that changed comes back stale for free. The page is told the
   revision it was rendered from and offers a reload rather than discarding a
   half-typed comment.
+- Source files as a reviewable input (blocks per symbol, `marginalia serve
+  handler.go`)? Split out of the presentation roundup into #31; highlighting
+  code inside a document is done, code *as* a document is not.
 - ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
   in §5.7: one server, a page per document, per-document and session `review_done`.

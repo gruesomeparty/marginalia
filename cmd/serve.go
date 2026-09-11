@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/server"
+	"github.com/gruesomeparty/marginalia/internal/web"
 )
 
 // serveOptions is what `serve` was asked for. A struct rather than a row of
@@ -26,6 +28,7 @@ type serveOptions struct {
 	Watch  bool
 	Author string
 	Config string // review config file, "" for the default review
+	Theme  string // palette name, "" for the default
 }
 
 // buildServer resolves the paths into a review set — one document, several, or
@@ -40,6 +43,11 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		if cfg, err = review.Load(opts.Config); err != nil {
 			return nil, err
 		}
+	}
+	// A theme nobody has written yet is a feature request, not a typo.
+	theme, err := web.ThemeFor(opts.Theme)
+	if err != nil {
+		return nil, advertise(err)
 	}
 	docs := make([]server.Entry, 0, len(set.Docs))
 	for _, d := range set.Docs {
@@ -68,6 +76,7 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		// is exactly the index's list, so its order is the tree.
 		Nested: set.Index == "",
 		Review: cfg,
+		Theme:  theme,
 		Author: author,
 		Host:   opts.Host,
 		Port:   opts.Port,
@@ -75,6 +84,9 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		Watch:  opts.Watch,
 	}), nil
 }
+
+// themeList names the palettes, for flag help.
+func themeList() string { return strings.Join(web.ThemeNames(), ", ") }
 
 // sessionTitle is what the page header calls the review: the index's title, or
 // the directory the set was found in. A single document titles itself.
@@ -124,13 +136,14 @@ func newServeCmd() *cobra.Command {
 		watch  bool
 		author string
 		config string
+		theme  string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author, Config: config}
+			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author, Config: config, Theme: theme}
 			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
@@ -146,5 +159,6 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
 	cmd.Flags().StringVar(&config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
+	cmd.Flags().StringVar(&theme, "theme", "", "page palette: "+themeList())
 	return cmd
 }
