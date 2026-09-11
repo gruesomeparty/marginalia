@@ -70,10 +70,46 @@ startup reports how many supported files it excluded. Keep it in step with the
 files you actually want signed off — a listed path that does not exist stops the
 server rather than shrinking the review silently.
 
+### Framing the review (optional)
+
+If the review needs more than "read this", say so at serve time instead of only
+in chat — the framing then travels with the page, which is where the human
+actually is:
+
+```yaml
+# review.yaml — marginalia serve spec.md --config review.yaml
+title: Ingest spec — retry policy
+instructions: |
+  Focus on the retry policy in §1. Ignore prose and wording.
+  Tag every finding: Blocker for anything that must change before rollout.
+actions:
+  - type: blocker        # the word written to the log
+    label: Blocker       # the button
+    key: b               # optional shortcut on a focused block
+  - type: finding
+    requires_text: true
+    fields:
+      - name: severity
+        options: [high, medium, low]
+        required: true
+builtins: true           # false drops comment/suggest_edit/question/approve/reject
+readonly: ["2"]          # section 2 is context: shown, muted, not commentable
+require_verdict: false   # true: no review_done until every block is answered
+```
+
+Use it when you want a **vocabulary** ("tag every finding") rather than prose: an
+action with nothing to fill in saves on one tap, which is what makes a long
+document reviewable at all. Ask for what you will actually act on — a required
+field the human has to guess at is worse than no field.
+
+Startup prints the actions it accepted, and `GET /api/doc` echoes them, so you
+can confirm the review was framed the way you asked.
+
 ## 2. Tell the human what you need
 
 State the URL and exactly what you want reviewed ("I need your take on §3 and the
-error-handling approach"). Then wait.
+error-handling approach"). Then wait. Instructions in a config are the framing,
+not a substitute for asking clearly.
 
 ## 3. Watch for completion
 
@@ -106,7 +142,10 @@ back, and apply a `suggest_edit` by replacing that one declaration or value, not
 the file.
 
 Event types: `comment`, `suggest_edit` (the `text` is the proposed replacement),
-`question`, `approve`, `reject`. If a `hash` no longer matches the current block
+`question`, `approve`, `reject` — plus any action you configured, which arrives
+as its own `type` (`blocker`, `nit`) with its structured values in `fields`
+(`{"severity":"high"}`). You asked for that vocabulary, so treat it as binding:
+a `blocker` is not a `comment`. If a `hash` no longer matches the current block
 (the doc changed since the comment), flag the note as **stale** and re-confirm
 with the human before acting.
 

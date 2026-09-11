@@ -10,6 +10,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 //go:embed review.html.tmpl
@@ -41,6 +42,10 @@ type Page struct {
 	SetDone    bool     // every document already carries a review_done
 	Watch      bool     // the server re-parses on change: let the page notice
 	Revision   uint64   // the re-parse this render was made from
+	// Review is how the agent framed this review: instructions for the
+	// reviewer, the vocabulary they answer in, and which blocks are
+	// read-only. Nil means the default review.
+	Review *review.Config
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -54,6 +59,11 @@ type clientBlock struct {
 	Hash        string `json:"hash"`
 	Quote       string `json:"quote"`
 	Text        string `json:"text"`
+	// ReadOnly blocks are shown but not up for comment. The page needs it per
+	// block rather than as patterns: an inline block — a list item, a diagram
+	// statement — has its markup written by the parser, so the page marks
+	// those elements itself.
+	ReadOnly bool `json:"readonly,omitempty"`
 }
 
 type clientDoc struct {
@@ -68,12 +78,38 @@ type payload struct {
 	Author     string              `json:"author"`
 	Watch      bool                `json:"watch"`
 	Revision   uint64              `json:"revision"`
+	Review     Review              `json:"review"`
+}
+
+// Review is the review configuration as the page and an API consumer see it:
+// the framing, and the vocabulary an agent reading the log will need in order
+// to know what a custom type was asked to mean.
+type Review struct {
+	Title          string          `json:"title,omitempty"`
+	Instructions   string          `json:"instructions,omitempty"`
+	Actions        []review.Action `json:"actions"`
+	ReadOnly       []string        `json:"readonly,omitempty"`
+	RequireVerdict bool            `json:"require_verdict,omitempty"`
+}
+
+// ReviewInfo projects a review config for the page and for GET /api/doc.
+func ReviewInfo(c *review.Config) Review {
+	if c == nil {
+		c = review.Default()
+	}
+	return Review{
+		Title:          c.Title,
+		Instructions:   c.Instructions,
+		Actions:        c.Actions(),
+		ReadOnly:       c.ReadOnly,
+		RequireVerdict: c.RequireVerdict,
+	}
 }
 
 // project reduces a document to what the client needs. Kinds, levels and
 // ordinals are omitted deliberately: the page reads those off the block
 // element's data attributes.
-func project(doc *document.Document) clientDoc {
+func project(doc *document.Document, cfg *review.Config) clientDoc {
 	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks))}
 	for _, b := range doc.Blocks {
 		out.Blocks = append(out.Blocks, clientBlock{
@@ -83,6 +119,7 @@ func project(doc *document.Document) clientDoc {
 			Hash:        b.Hash,
 			Quote:       b.Quote,
 			Text:        b.PlainText,
+			ReadOnly:    cfg.Locked(b.ID),
 		})
 	}
 	return out
@@ -111,6 +148,7 @@ type viewData struct {
 	Total       int
 	DoneN       int
 	SetDone     bool
+	Review      Review
 }
 
 // Render writes the self-contained review page.
@@ -119,11 +157,24 @@ func Render(w io.Writer, p Page) error {
 	if events == nil {
 		events = []feedback.Event{}
 	}
-	raw, err := json.Marshal(payload{Doc: project(p.Doc), Events: events, Resolution: p.Resolution, Author: p.Author, Watch: p.Watch, Revision: p.Revision})
+	cfg := p.Review
+	if cfg == nil {
+		cfg = review.Default()
+	}
+	info := ReviewInfo(cfg)
+	raw, err := json.Marshal(payload{
+		Doc: project(p.Doc, cfg), Events: events, Resolution: p.Resolution,
+		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
+	})
 	if err != nil {
 		return err
 	}
-	title := p.Title
+	// A review config that names the review says what the page is called; a
+	// set index's title, then the document's path, are the fallbacks.
+	title := info.Title
+	if title == "" {
+		title = p.Title
+	}
 	if title == "" {
 		title = p.Doc.Path
 	}
@@ -145,6 +196,7 @@ func Render(w io.Writer, p Page) error {
 		Total:       len(p.Docs),
 		DoneN:       done,
 		SetDone:     p.SetDone,
+		Review:      info,
 	})
 }
 

@@ -127,11 +127,17 @@ feedback shape, deliberately — same event philosophy, independent tool):
   "block": "5.3/2",
   "quote": "A registry-backed contract mirroring…",
   "hash": "9f2c01ab54de",
-  "type": "comment | suggest_edit | question | approve | reject",
+  "type": "comment | suggest_edit | question | approve | reject | <a configured action>",
   "text": "the reviewer's note (for suggest_edit: the replacement text)",
+  "fields": { "severity": "high" },
   "author": "berkay",
   "ts": "2026-07-02T15:04:05Z" }
 ```
+
+`type` is the review's vocabulary: the five built-ins, plus whatever actions
+the requesting agent configured (§5.8). `fields` carries the structured values
+such an action collected and is omitted when there are none, so a log written
+without a config reads exactly as it always did.
 
 Rules: events are never rewritten or deleted on disk; later events on the same
 block override earlier ones when materializing a resolution view; replay is
@@ -203,6 +209,52 @@ of the set with live comment counts and per-document done ticks. Done is
 per-document, and a session-level Done appends a `review_done` (with
 `text: "session"`) to every log, so an agent watching any one document sees the
 handover close.
+
+### 5.8 Review configuration
+
+The requesting agent frames the review at serve time
+(`serve <doc> --config review.yaml`): a title, instructions rendered as a
+banner above the document, the **vocabulary** the reviewer answers in, and
+which blocks are read-only.
+
+```yaml
+title: Ingest spec — retry policy
+instructions: |
+  Focus on the retry policy in §1. Ignore prose.
+actions:
+  - type: blocker      # written to the log verbatim
+    label: Blocker     # button text
+    key: b             # optional keyboard shortcut
+  - type: finding
+    requires_text: true
+    fields:
+      - name: severity
+        options: [high, medium, low]
+        required: true
+builtins: true         # false replaces the built-in five outright
+readonly: ["2"]        # a block and everything under it
+require_verdict: false # withhold review_done until every block is answered
+```
+
+Why buttons and not just configurable types: most review feedback is a
+verdict, not prose. An action with nothing to fill in is **one tap** — if
+saying "nit" means opening a composer and typing, a forty-block document is a
+slog and the reviewer stops being thorough, which matters most on a phone over
+Tailscale where typing is the expensive part.
+
+Rules this has to keep:
+
+- **The server is the gate, not the page.** A type that is not in the
+  configured set is refused (400), an event for a read-only block is refused
+  (403), a field that was not declared or a choice outside its options is
+  refused — a tab left open across a restart must not be able to write
+  vocabulary the agent never asked for.
+- **The vocabulary is discoverable.** `GET /api/doc` echoes the configured
+  actions and read-only patterns, so the agent reading `blocker` out of the
+  log can see what was asked for and how it was labelled.
+- **Requester-supplied framing is never a feedback event.** Instructions
+  arrive at serve time and stay out of `<doc>.feedback.jsonl`: that log is the
+  human's answers, not the agent's questions.
 
 ## 6. Architecture
 

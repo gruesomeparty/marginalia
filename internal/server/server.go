@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // Entry is one document of the served review set: its parsed blocks, its own
@@ -35,6 +37,11 @@ type Options struct {
 	Index    string // index file that shaped the set, "" when discovered
 	Excluded int    // supported files the index left out
 	Nested   bool   // group the navigation tree by directory
+
+	// Review is how the agent framed this review: the vocabulary the
+	// reviewer answers in, any instructions, and which blocks are read-only.
+	// Nil means the default review — the built-in actions and nothing else.
+	Review *review.Config
 
 	Author string
 	Host   string
@@ -62,6 +69,9 @@ type Server struct {
 
 // New builds a Server with routes registered.
 func New(opts Options) *Server {
+	if opts.Review == nil {
+		opts.Review = review.Default()
+	}
 	s := &Server{opts: opts, mux: http.NewServeMux()}
 	s.docs = opts.Docs
 	if len(s.docs) == 0 && opts.Doc != nil {
@@ -142,6 +152,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 // says how many supported files its index left out, so a mistyped index entry
 // reads as an exclusion rather than as an empty folder.
 func (s *Server) announce(url string) {
+	// The review's own vocabulary last, so it is the line above the prompt:
+	// an agent that configured actions needs to see they took.
+	defer s.announceReview()
 	if s.opts.Watch {
 		defer fmt.Println("marginalia: watching for changes; the page offers a reload when a document moves on")
 	}
@@ -160,5 +173,26 @@ func (s *Server) announce(url string) {
 			fmt.Printf("; %d supported file(s) under %s excluded by it", s.opts.Excluded, s.opts.Root)
 		}
 		fmt.Println()
+	}
+}
+
+// announceReview says what the review asks for, when it asks for anything
+// beyond the default: the words the reviewer will answer in are the words the
+// agent has to read back out of the log.
+func (s *Server) announceReview() {
+	cfg := s.opts.Review
+	if len(cfg.Custom) == 0 && len(cfg.ReadOnly) == 0 && !cfg.RequireVerdict && cfg.Instructions == "" {
+		return
+	}
+	var says []string
+	for _, a := range cfg.Actions() {
+		says = append(says, a.Type)
+	}
+	fmt.Printf("marginalia: review actions: %s\n", strings.Join(says, ", "))
+	if n := len(cfg.ReadOnly); n > 0 {
+		fmt.Printf("marginalia: read-only: %s\n", strings.Join(cfg.ReadOnly, ", "))
+	}
+	if cfg.RequireVerdict {
+		fmt.Println("marginalia: every block needs a verdict before the review can be marked done")
 	}
 }

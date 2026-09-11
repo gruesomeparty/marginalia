@@ -80,6 +80,47 @@ With an index the list *is* the tree: its order, its labels, nothing else. That
 makes it a whitelist too, so startup says how many supported files it left out —
 and a mistyped entry fails loudly rather than quietly shrinking the review.
 
+## Framing a review
+
+The requesting agent decides what the review asks for, at serve time:
+
+```yaml
+# review.yaml — marginalia serve spec.md --config review.yaml
+title: Ingest spec — retry policy
+instructions: |
+  Focus on the retry policy in §1. Ignore prose and wording.
+  Tag every finding: Blocker for anything that must change before rollout.
+actions:
+  - type: blocker        # written to the log verbatim
+    label: Blocker       # button text
+    key: b               # optional keyboard shortcut on a focused block
+  - type: nit
+    key: n
+  - type: finding
+    requires_text: true
+    fields:
+      - name: severity
+        options: [high, medium, low]
+        required: true
+      - name: owner
+builtins: true           # false drops comment/suggest_edit/question/approve/reject
+readonly:
+  - "2"                  # section 2 is context: shown, muted, not commentable
+require_verdict: false   # true: no review_done until every block is answered
+```
+
+The instructions render as a banner above the document, so the framing survives
+the switch from chat to browser. Each action is a button on every block, and an
+action with nothing to fill in **saves on the tap** — most feedback is a verdict,
+not prose, and a review where saying "nit" means typing is a review that gets
+abandoned. An action with `fields` opens the composer with those values to pick.
+
+The server enforces all of it: an event whose `type` is not in the configured
+set is refused, so is one for a read-only block, so is a field that was not
+declared or a choice outside its options. `GET /api/doc` echoes the
+configuration, so the agent reading `blocker` out of the log can see what it
+asked for.
+
 ## Supported inputs
 
 | Input | Block ID |

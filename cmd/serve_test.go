@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,5 +86,43 @@ func TestServeWithoutArgsExplainsItself(t *testing.T) {
 	}
 	if strings.Contains(msg, "request-feature") {
 		t.Errorf("a usage mistake should not advertise the feature tracker: %q", msg)
+	}
+}
+
+// A review config reaches the server through `serve --config`, and a config
+// that cannot mean what it says fails at startup rather than silently
+// serving the default review.
+func TestBuildServerWithReviewConfig(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "d.md")
+	if err := os.WriteFile(doc, []byte("# Hi\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(dir, "review.yaml")
+	if err := os.WriteFile(cfg, []byte("instructions: Look at the cap.\nactions:\n  - type: blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := buildServer([]string{doc}, serveOptions{Host: "127.0.0.1", Author: "tester", Config: cfg})
+	if err != nil {
+		t.Fatalf("buildServer: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/", nil))
+	if !strings.Contains(rr.Body.String(), "Look at the cap.") {
+		t.Error("the served page does not carry the review's instructions")
+	}
+	if !strings.Contains(rr.Body.String(), `"type":"blocker"`) {
+		t.Error("the served page does not offer the configured action")
+	}
+
+	bad := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(bad, []byte("actions:\n  - type: Blocker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildServer([]string{doc}, serveOptions{Config: bad}); err == nil {
+		t.Error("a config with an invalid action must fail at startup")
+	}
+	if _, err := buildServer([]string{doc}, serveOptions{Config: filepath.Join(dir, "gone.yaml")}); err == nil {
+		t.Error("a config that isn't there must fail at startup")
 	}
 }

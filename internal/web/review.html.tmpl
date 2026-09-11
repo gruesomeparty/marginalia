@@ -44,7 +44,17 @@ pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-siz
 table{border-collapse:collapse;width:100%}
 th,td{border:1px solid var(--rule);padding:.4rem .6rem}
 blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:var(--muted)}
+/* How the agent framed the review, at the top of what it is about. */
+.framing{margin:0 0 1.6rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem;line-height:1.5}
+.framing .text{white-space:pre-wrap}
+.framing h2{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;font-weight:600}
 .block{position:relative;border-radius:6px;padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
+/* Read-only blocks are context, not questions: they read normally and do
+   nothing when tapped. */
+.block[data-readonly="1"]:hover{background:none}
+/* Muted, so the reviewer can see at a glance where their attention is not
+   wanted rather than finding out by tapping. */
+.block[data-readonly="1"]{cursor:default;color:var(--muted)}
 @media (prefers-reduced-motion:reduce){.block,.toast{transition:none}}
 .block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
@@ -68,6 +78,11 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
 .composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:999px;background:transparent;color:var(--fg);cursor:pointer;font:inherit}
 .composer .chip[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.composer .chip .k{margin-left:.35rem;opacity:.65;font-size:.78em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.composer .fields{display:flex;flex-wrap:wrap;gap:.5rem;margin:.1rem 0 .5rem}
+.composer .fields label{display:flex;flex-direction:column;gap:.15rem;font-size:.8rem;color:var(--muted)}
+.composer .fields select,.composer .fields input{font:inherit;font-size:.85rem;padding:.3rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg)}
+.existing .item .vals{margin-top:.2rem;color:var(--muted);font-size:.95em}
 .composer textarea{width:100%;min-height:4rem;font:inherit;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg);resize:vertical}
 .composer .actions{display:flex;gap:.5rem;margin-top:.5rem}
 .composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:6px;cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
@@ -134,6 +149,12 @@ header #fold+button{margin-left:.5rem}
 </aside>
 {{end}}
 <main id="doc"{{if .Doc.IsTree}} class="tree"{{end}}>
+  {{if .Review.Instructions}}
+  <section class="framing" aria-label="What you are being asked to review">
+    <h2>What to look at</h2>
+    <div class="text">{{.Review.Instructions}}</div>
+  </section>
+  {{end}}
   {{range .Doc.Blocks}}{{if not .Inline}}
   <div class="block" data-block="{{.ID}}" data-hash="{{.Hash}}" data-quote="{{.Quote}}" data-kind="{{.Kind}}" data-level="{{.Level}}" data-parent="{{.Parent}}"{{if .HasChildren}} data-kids="1"{{end}} tabindex="0" role="button" aria-label="Block {{.ID}}">{{safe .HTML}}</div>
   {{end}}{{end}}
@@ -163,7 +184,19 @@ window.__MARGINALIA__ = {{.DataJSON}};
   "use strict";
   var data = window.__MARGINALIA__;
   var author = data.author || "reviewer";
-  var TYPES = [["comment","Comment"],["suggest_edit","Suggest edit"],["question","Question"],["approve","Approve"],["reject","Reject"]];
+  // The vocabulary comes from the server, not from here: an agent can add its
+  // own actions at serve time, and the page must offer exactly what the
+  // server will accept.
+  var actions = (data.review && data.review.actions) || [];
+  var labelOf = {}, byKey = {};
+  actions.forEach(function(a){
+    labelOf[a.type] = a.label || a.type;
+    if(a.key) byKey[a.key] = a;
+  });
+  // An action with nothing to fill in is one tap — most feedback is a
+  // verdict, not prose, and making the reviewer type "nit" is how a long
+  // document stops being reviewed.
+  function needsInput(a){ return !!(a.requires_text || (a.fields && a.fields.length)); }
   var blockOf = {}; data.doc.blocks.forEach(function(b){ blockOf[b.id]=b; });
   // Notes come from the server's materialized view: it has compared each
   // event's hash against the block as it now reads, so the page shows what
@@ -262,7 +295,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var e = note.event;
       var item=document.createElement("div"); item.className="item";
       if(i === list.length-1) item.classList.add("current");
-      var t=document.createElement("span"); t.className="type"; t.textContent=e.type.replace("_"," ");
+      var t=document.createElement("span"); t.className="type"; t.textContent=labelOf[e.type] || e.type.replace("_"," ");
       item.appendChild(t);
       if(note.stale){
         item.classList.add("stale");
@@ -271,6 +304,14 @@ window.__MARGINALIA__ = {{.DataJSON}};
       }
       var body=document.createElement("div"); body.textContent=e.text||"";
       item.appendChild(body);
+      if(e.fields){
+        var keys=Object.keys(e.fields);
+        if(keys.length){
+          var vals=document.createElement("div"); vals.className="vals";
+          vals.textContent=keys.map(function(k){ return k+": "+e.fields[k]; }).join(" · ");
+          item.appendChild(vals);
+        }
+      }
       if(note.stale && e.quote){
         var was=document.createElement("div"); was.className="was"; was.textContent="was: \u201c"+e.quote+"\u201d";
         item.appendChild(was);
@@ -292,39 +333,93 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return blk ? blk.text : "";
   }
   function closeComposer(){ var c=document.querySelector(".composer"); if(c) c.remove(); }
-  function openComposer(el){
+  // save appends one event and folds it into the page without a reload.
+  function save(el, action, text, fields){
+    var id=el.dataset.block, blk=blockOf[id]||{};
+    var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:action.type,text:text,author:author};
+    if(fields && Object.keys(fields).length) ev.fields=fields;
+    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
+      .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false}); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast((labelOf[action.type]||"Note")+" saved"); })
+      .catch(function(err){ toast("Save failed: "+err.message); });
+  }
+  // openComposer offers the review's vocabulary for one block. want is the
+  // action to start on — a keyboard shortcut that needs words arrives here
+  // with the action already chosen.
+  function openComposer(el, want){
     closeComposer();
-    var id=el.dataset.block, type="comment";
+    var id=el.dataset.block, current=want||actions[0];
+    if(!current) return;
     var c=document.createElement("div"); c.className="composer";
     var chips=document.createElement("div"); chips.className="chips";
+    var fieldBox=document.createElement("div"); fieldBox.className="fields";
     var ta=document.createElement("textarea"); ta.placeholder="Your note…";
-    TYPES.forEach(function(pair){
-      var b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=pair[1];
-      b.setAttribute("aria-pressed", pair[0]===type?"true":"false");
+    var inputs={};
+    // The structured values an action collects: a choice where it has
+    // options, free text where it does not.
+    function renderFields(){
+      fieldBox.textContent=""; inputs={};
+      (current.fields||[]).forEach(function(f){
+        var wrap=document.createElement("label");
+        var name=document.createElement("span");
+        name.textContent=(f.label||f.name)+(f.required?" *":"");
+        var input;
+        if(f.options && f.options.length){
+          input=document.createElement("select");
+          // A placeholder even when the field is required: a select that
+          // starts on its first option saves a severity nobody chose.
+          input.appendChild(new Option(f.required ? "— pick one —" : "—", ""));
+          f.options.forEach(function(o){ input.appendChild(new Option(o,o)); });
+        } else {
+          input=document.createElement("input"); input.type="text";
+        }
+        inputs[f.name]=input;
+        wrap.appendChild(name); wrap.appendChild(input);
+        fieldBox.appendChild(wrap);
+      });
+      fieldBox.hidden = !fieldBox.childElementCount;
+    }
+    function select(a){
+      current=a;
+      Array.prototype.forEach.call(chips.querySelectorAll(".chip"), function(x){
+        x.setAttribute("aria-pressed", x.dataset.type===a.type ? "true" : "false");
+      });
+      if(a.type==="suggest_edit" && !ta.value) ta.value=editableText(id, el);
+      renderFields();
+    }
+    actions.forEach(function(a){
+      var b=document.createElement("button"); b.type="button"; b.className="chip"; b.dataset.type=a.type;
+      b.textContent=a.label||a.type;
+      if(a.key){ var k=document.createElement("span"); k.className="k"; k.textContent=a.key; b.appendChild(k); }
+      b.setAttribute("aria-pressed", a.type===current.type ? "true" : "false");
       b.onclick=function(){
-        type=pair[0];
-        chips.querySelectorAll(".chip").forEach(function(x){x.setAttribute("aria-pressed","false");});
-        b.setAttribute("aria-pressed","true");
-        if(pair[0]==="suggest_edit" && !ta.value){ ta.value=editableText(id, el); }
+        // An action with nothing to fill in saves on the tap — unless the
+        // reviewer has started writing, in which case they want their words
+        // kept and the tap only picks the type.
+        if(!needsInput(a) && !ta.value.trim()){ save(el, a, "", {}); return; }
+        select(a);
       };
       chips.appendChild(b);
     });
-    var actions=document.createElement("div"); actions.className="actions";
-    var save=document.createElement("button"); save.className="save"; save.type="button"; save.textContent="Save";
+    var row=document.createElement("div"); row.className="actions";
+    var saveBtn=document.createElement("button"); saveBtn.className="save"; saveBtn.type="button"; saveBtn.textContent="Save";
     var cancel=document.createElement("button"); cancel.type="button"; cancel.textContent="Cancel"; cancel.onclick=closeComposer;
-    save.onclick=function(){
+    saveBtn.onclick=function(){
       var text=ta.value.trim();
-      if(!text && type!=="approve" && type!=="reject"){ ta.focus(); return; }
-      var blk=blockOf[id]||{};
-      var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:type,text:text,author:author};
-      fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
-        .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
-        .then(function(saved){ (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false}); marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer(); toast("Saved"); })
-        .catch(function(err){ toast("Save failed: "+err.message); });
+      if(current.requires_text && !text){ ta.focus(); return; }
+      var fields={}, missing=null;
+      (current.fields||[]).forEach(function(f){
+        var v=(inputs[f.name].value||"").trim();
+        if(v) fields[f.name]=v;
+        if(f.required && !v && !missing) missing=inputs[f.name];
+      });
+      if(missing){ missing.focus(); return; }
+      save(el, current, text, fields);
     };
-    actions.appendChild(save); actions.appendChild(cancel);
-    c.appendChild(chips); c.appendChild(ta); c.appendChild(actions);
+    row.appendChild(saveBtn); row.appendChild(cancel);
+    c.appendChild(chips); c.appendChild(fieldBox); c.appendChild(ta); c.appendChild(row);
     el.mg_composer = c;
+    renderFields();
     attach(el, c); ta.focus();
   }
   var isTree = document.getElementById("doc").classList.contains("tree");
@@ -377,6 +472,20 @@ window.__MARGINALIA__ = {{.DataJSON}};
     elOf[el.dataset.block] = el;
     if(isTree) decorateTree(el);
     marker(el); renderExisting(el);
+    // A block the agent handed over read-only is context, not a question: it
+    // reads normally, keeps any notes already written against it, and opens
+    // nothing. The server refuses events for it too — this is the courtesy,
+    // that is the enforcement.
+    if((blockOf[el.dataset.block]||{}).readonly){
+      el.dataset.readonly = "1";
+      el.title = "read-only in this review";
+      el.removeAttribute("tabindex"); el.removeAttribute("role");
+      el.addEventListener("click", function(e){
+        if(e.target.closest(".composer,.existing,.caret")) return;
+        toast("This block is read-only in this review.");
+      });
+      return;
+    }
     // Blocks nest — a list item sits inside its list, a sub-item inside it —
     // so only the innermost block under the pointer answers.
     el.addEventListener("click", function(e){
@@ -385,8 +494,13 @@ window.__MARGINALIA__ = {{.DataJSON}};
       openComposer(el);
     });
     el.addEventListener("keydown", function(e){
-      if(e.key!=="Enter" || e.target !== el) return;
-      e.preventDefault(); openComposer(el);
+      if(e.target !== el || e.metaKey || e.ctrlKey || e.altKey) return;
+      if(e.key === "Enter"){ e.preventDefault(); openComposer(el); return; }
+      // A configured shortcut: the verdict without the composer.
+      var a = byKey[e.key];
+      if(!a) return;
+      e.preventDefault();
+      if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
     });
   });
   var foldBtn = document.getElementById("fold");
@@ -422,12 +536,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   document.getElementById("done").onclick=function(){
     fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
-      .then(function(res){ if(!res.ok) throw new Error("failed");
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());});
         var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
         if(t) t.hidden = false;
         refreshSetCount();
         toast(inSet ? "This file is marked done." : "Review marked done — you can close this tab."); })
-      .catch(function(err){ toast("Failed: "+err.message); });
+      .catch(function(err){ toast(err.message || "Failed"); });
   };
   // --watch: the server re-parses when the file changes, so the page checks
   // whether the render it is showing has been outrun. It never reloads under
@@ -461,7 +575,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         refreshSetCount();
         finish.textContent = "Finish review set \u2713";
         toast("Review set marked done — you can close this tab."); })
-      .catch(function(err){ toast("Failed: "+err.message); });
+      .catch(function(err){ toast(err.message || "Failed"); });
   };
 })();
 </script>

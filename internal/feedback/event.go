@@ -10,6 +10,10 @@ type Event struct {
 	Text   string `json:"text"`
 	Author string `json:"author"`
 	Ts     string `json:"ts"`
+	// Fields carries the structured values a configured action collected
+	// alongside the note — a severity, a category. Omitted when empty, so a
+	// log written without a review config reads exactly as it always did.
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 // Feedback event types.
@@ -22,11 +26,7 @@ const (
 	TypeReviewDone  = "review_done"
 )
 
-// ValidType reports whether t is a known event type.
-func ValidType(t string) bool {
-	switch t {
-	case TypeComment, TypeSuggestEdit, TypeQuestion, TypeApprove, TypeReject, TypeReviewDone:
-		return true
-	}
-	return false
-}
+// There is deliberately no ValidType here any more: which types a review
+// accepts is the review configuration's business (internal/review), since an
+// agent can add its own vocabulary. A second list of "the types there are"
+// would be a copy waiting to drift.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/server"
 )
@@ -24,6 +25,7 @@ type serveOptions struct {
 	Open   bool
 	Watch  bool
 	Author string
+	Config string // review config file, "" for the default review
 }
 
 // buildServer resolves the paths into a review set — one document, several, or
@@ -32,6 +34,12 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 	set, err := reviewset.Load(paths)
 	if err != nil {
 		return nil, routeSetError(err)
+	}
+	cfg := review.Default()
+	if opts.Config != "" {
+		if cfg, err = review.Load(opts.Config); err != nil {
+			return nil, err
+		}
 	}
 	docs := make([]server.Entry, 0, len(set.Docs))
 	for _, d := range set.Docs {
@@ -59,6 +67,7 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		// A discovered set mirrors the folders it was found in; a curated one
 		// is exactly the index's list, so its order is the tree.
 		Nested: set.Index == "",
+		Review: cfg,
 		Author: author,
 		Host:   opts.Host,
 		Port:   opts.Port,
@@ -114,13 +123,14 @@ func newServeCmd() *cobra.Command {
 		open   bool
 		watch  bool
 		author string
+		config string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author}
+			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author, Config: config}
 			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
@@ -135,5 +145,6 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&open, "open", false, "open the review page in a browser")
 	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
+	cmd.Flags().StringVar(&config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
 	return cmd
 }

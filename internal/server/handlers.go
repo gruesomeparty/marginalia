@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -82,6 +83,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Author:   s.opts.Author,
 		Title:    s.opts.Title,
 		Nested:   s.opts.Nested,
+		Review:   s.opts.Review,
 	}
 	setDone := true
 	for i := range s.docs {
@@ -156,6 +158,10 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		"author":     s.opts.Author,
 		"docs":       s.docList(),
 		"resolution": s.resolution(e, events),
+		// The vocabulary is part of the answer: an agent reading `blocker`
+		// out of the log needs to see that it was asked for, and what it was
+		// labelled when the human tapped it.
+		"review": web.ReviewInfo(s.opts.Review),
 	})
 }
 
@@ -222,10 +228,6 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	if !feedback.ValidType(e.Type) {
-		http.Error(w, "invalid event type", http.StatusBadRequest)
-		return
-	}
 	// The event names its own document, but only a document in the served set
 	// may be written to: a stale page must not be able to append anywhere.
 	target := &s.docs[0]
@@ -240,6 +242,10 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if code, err := s.check(target, &e); err != nil {
+		http.Error(w, err.Error(), code)
+		return
+	}
 	if err := s.append(target, &e); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -247,10 +253,70 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, e)
 }
 
+// check is the server-side gate on what a page may write. The page renders
+// the same rules, but rendering them is not enforcing them: a tab left open
+// across a restart, or a script pointed at the API, must not be able to
+// invent vocabulary the agent never asked for or comment on a block it
+// handed over read-only.
+func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
+	cfg := s.opts.Review
+	if e.Type == feedback.TypeReviewDone {
+		// review_done is the protocol, not review vocabulary — but it is
+		// what require_verdict withholds.
+		return s.checkVerdicts(target)
+	}
+	if err := cfg.Validate(e.Type, e.Text, e.Fields); err != nil {
+		return http.StatusBadRequest, err
+	}
+	if cfg.Locked(e.Block) {
+		return http.StatusForbidden, fmt.Errorf("block %s is read-only in this review", e.Block)
+	}
+	return http.StatusOK, nil
+}
+
+// checkVerdicts enforces require_verdict: the review is not done while a
+// commentable block has nothing said about it. The error says how many are
+// left, so the page can tell the reviewer rather than just refusing.
+func (s *Server) checkVerdicts(target *Entry) (int, error) {
+	if !s.opts.Review.RequireVerdict {
+		return http.StatusOK, nil
+	}
+	events, err := target.Store.Load()
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	answered := make(map[string]bool, len(events))
+	for _, ev := range events {
+		if ev.Type != feedback.TypeReviewDone {
+			answered[ev.Block] = true
+		}
+	}
+	missing := 0
+	// The live parse, not the one from startup: under --watch the document
+	// may have gained or lost blocks since, and the gate is about what the
+	// reviewer is looking at now.
+	for _, b := range s.docOf(target).Blocks {
+		if !answered[b.ID] && !s.opts.Review.Locked(b.ID) {
+			missing++
+		}
+	}
+	if missing > 0 {
+		return http.StatusConflict, fmt.Errorf("this review asks for a verdict on every block: %d still to go", missing)
+	}
+	return http.StatusOK, nil
+}
+
 // handleSessionDone marks the whole set reviewed: one review_done per
 // document, so an agent watching any single log sees the handover finish.
 func (s *Server) handleSessionDone(w http.ResponseWriter, _ *http.Request) {
 	written := make([]feedback.Event, 0, len(s.docs))
+	for i := range s.docs {
+		e := &s.docs[i]
+		if code, err := s.checkVerdicts(e); err != nil {
+			http.Error(w, fmt.Sprintf("%s: %s", e.Rel, err), code)
+			return
+		}
+	}
 	for i := range s.docs {
 		e := &s.docs[i]
 		event := feedback.Event{Type: feedback.TypeReviewDone, Text: "session"}
