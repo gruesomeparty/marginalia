@@ -103,9 +103,18 @@ users are agents, not humans.
   inlined SVG needs no script and makes no request, so share mode and strict
   CSP still hold, and the single Go binary still works with no Node installed —
   an unavailable renderer means the page shows the anchored source, as it
-  always did. The reviewer's theme colours the drawing in CSS (with
-  `!important`, because mermaid inlines its own id-keyed stylesheet), since a
-  server-side render cannot know which mode they will pick. Mermaid names its
+  always did. The reviewer's theme colours the drawing, and the way it
+  does is the point (`palette.go`): mermaid inlines its own stylesheet keyed on
+  the svg's id, which outranks anything the page can write, so instead of
+  shouting over it with `!important` the SVG is rewritten on the way out —
+  every colour it chose becomes `var(--mg-node-fill)`, `var(--mg-line)`,
+  `var(--mg-text)` and friends, which the page defines from the active theme.
+  A custom property also inherits and has no specificity, so hover and
+  "has notes" recolour a shape by handing it a different value, not by
+  out-ranking anything; only `stroke-width` is still taken by force. A rule
+  whose selector `roleOf` does not recognise keeps mermaid's own colours — a
+  picture in the wrong palette beats one we broke recolouring. Changing that
+  post-processing means bumping the cache key version in `hash`. Mermaid names its
   own parts (`L_<from>_<to>_<n>` on edge paths and their labels,
   `…-flowchart-<id>-<n>` on nodes, the svg id plus the name on clusters), which
   is what makes a picture anchorable; an identifier containing `_` makes the

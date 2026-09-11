@@ -146,8 +146,10 @@ func TestSVGSanitizes(t *testing.T) {
 	if !strings.Contains(svg, "data:image/png") {
 		t.Error("dropped an inlined image")
 	}
-	if !strings.Contains(svg, ".node{fill:red}") {
-		t.Error("dropped the stylesheet with the import")
+	// The stylesheet survives the import being cut out of it — and comes back
+	// speaking the page's variables, since rendering themes it too.
+	if !strings.Contains(svg, ".node{fill:var(--mg-node-fill)}") {
+		t.Errorf("lost the stylesheet with the import:\n%s", svg)
 	}
 }
 

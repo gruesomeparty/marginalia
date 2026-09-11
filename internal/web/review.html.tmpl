@@ -106,36 +106,28 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .diagram .flip{font:inherit;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--rule);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
 .diagram .flip:hover{color:var(--fg)}
 .diagram figcaption .hint{margin-left:.5rem;color:var(--muted);font-size:.74rem}
-/* The drawing is rendered by mermaid's own CLI, with mermaid's own palette
-   and its own stylesheet inlined in the SVG — selectors keyed on the svg's id,
-   so nothing but !important reaches them. These rules dress the picture in the
-   page's colours instead: the reviewer's theme and mode, whichever they
-   picked, because the render happens on the server and cannot know which one
-   that is, and a picture that ignores dark mode is dark text on a dark page.
-   Colour only; mermaid keeps every position it computed. */
-.diagram .pic svg .node rect,.diagram .pic svg .node circle,.diagram .pic svg .node ellipse,.diagram .pic svg .node polygon,.diagram .pic svg .node path{fill:var(--card)!important;stroke:var(--rule)!important}
-.diagram .pic svg .cluster rect{fill:transparent!important;stroke:var(--rule)!important}
-.diagram .pic svg text,.diagram .pic svg span,.diagram .pic svg .label,.diagram .pic svg .nodeLabel,.diagram .pic svg .edgeLabel,.diagram .pic svg .cluster-label{fill:var(--fg)!important;color:var(--fg)!important}
-.diagram .pic svg .edgeLabel,.diagram .pic svg .edgeLabel p,.diagram .pic svg .labelBkg{background-color:var(--bg)!important}
-.diagram .pic svg .edgeLabel rect{fill:var(--bg)!important}
-.diagram .pic svg .flowchart-link{stroke:var(--muted)!important}
-.diagram .pic svg .marker,.diagram .pic svg marker path{fill:var(--muted)!important;stroke:var(--muted)!important}
-/* An anchored shape: hoverable, clickable, and marked when it carries notes.
-   An arrow is two pixels wide, so each anchored edge also carries an
-   invisible, wide copy of itself that takes the click (.mg-hit). Highlighting
-   follows data-hover, set on every shape sharing the anchor, because the copy
-   is what the pointer is actually over and the drawn arrow is what should
-   light up. The copy itself never paints. */
+/* The drawing is rendered by mermaid's own CLI, with mermaid's own palette —
+   but the SVG is rewritten on the way out (internal/diagram/palette.go) so
+   every colour it chose reads one of these variables instead. That is why
+   nothing here has to outrank mermaid's id-keyed stylesheet: the page names
+   the colours, the stylesheet asks for them. A custom property also inherits
+   and carries no specificity, so a hovered or answered shape recolours itself
+   by setting one below. */
+.diagram .pic{--mg-node-fill:var(--card);--mg-node-stroke:var(--rule);--mg-cluster-fill:transparent;--mg-text:var(--fg);--mg-label-bg:var(--bg);--mg-line:var(--muted);--mg-bad:var(--bad)}
 .diagram [data-anchor]{cursor:pointer}
 .diagram .mg-hit{stroke:transparent}
-.diagram [data-anchor][data-hover]{filter:brightness(1.08) saturate(1.4)}
-/* !important again, and for the same reason: these override the palette rules
-   above, which had to shout to be heard over mermaid's own. */
-.diagram g[data-anchor][data-hover] rect,.diagram g[data-anchor][data-hover] polygon,.diagram g[data-anchor][data-hover] circle,.diagram g[data-anchor][data-hover] path{stroke:var(--accent)!important;stroke-width:2.5px!important}
-.diagram g[data-anchor][data-count]:not([data-count="0"]) rect,.diagram g[data-anchor][data-count]:not([data-count="0"]) polygon,.diagram g[data-anchor][data-count]:not([data-count="0"]) circle{stroke:var(--marker)!important;stroke-width:3px!important}
-.diagram path[data-anchor]:not(.mg-hit)[data-hover]{stroke:var(--accent)!important;stroke-width:3px!important}
-.diagram path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke:var(--marker)!important;stroke-width:3px!important}
-.diagram [data-anchor][data-hover] .edgeLabel,.diagram [data-anchor][data-hover] .nodeLabel{color:var(--accent)!important;fill:var(--accent)!important}
+/* A shape that carries notes wears the marker colour; the one under the
+   pointer wears the accent, and says so last so it wins on an answered shape.
+   Both work by handing the shape a different value for the variables its own
+   stylesheet already reads. */
+.diagram .pic [data-anchor][data-count]:not([data-count="0"]){--mg-line:var(--marker);--mg-node-stroke:var(--marker)}
+.diagram .pic [data-anchor][data-hover]{--mg-line:var(--accent);--mg-node-stroke:var(--accent);--mg-text:var(--accent)}
+/* Weight is the one thing still taken by force: mermaid sets it per edge class
+   (.edge-thickness-normal) and per node rule, neither of which reads a
+   variable, and a highlight two pixels wide is not one. */
+.diagram .pic g[data-anchor][data-hover] rect,.diagram .pic g[data-anchor][data-hover] polygon,.diagram .pic g[data-anchor][data-hover] circle{stroke-width:2.5px!important}
+.diagram .pic g[data-anchor][data-count]:not([data-count="0"]) rect,.diagram .pic g[data-anchor][data-count]:not([data-count="0"]) polygon,.diagram .pic g[data-anchor][data-count]:not([data-count="0"]) circle{stroke-width:3px!important}
+.diagram .pic path[data-anchor]:not(.mg-hit)[data-hover],.diagram .pic path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke-width:3px!important}
 /* The requester's own note about a block — the agent asking, not the human
    answering, so it reads differently from a feedback item. */
 .sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:0 6px 6px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.83rem;white-space:pre-wrap}
