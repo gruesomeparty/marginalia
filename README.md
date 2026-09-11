@@ -109,6 +109,22 @@ readonly:
 require_verdict: false   # true: no review_done until every block is answered
 ```
 
+You can also hand over per-block guidance and mark the parts you are not asking
+about:
+
+```yaml
+notes:
+  - block: "1/2"
+    text: why 500? I took it from the queue's batch limit — is that right?
+skip:
+  - "2"                  # generated appendix: folded, and refused if posted to
+```
+
+A note renders beside its block, labelled as coming from the requester;
+answering it is an ordinary feedback event on that block, so nothing needs a
+second channel. Notes never enter `<doc>.feedback.jsonl` — that log is the
+human's answers, not your questions.
+
 The instructions render as a banner above the document, so the framing survives
 the switch from chat to browser. Each action is a button on every block, and an
 action with nothing to fill in **saves on the tap** — most feedback is a verdict,
@@ -175,6 +191,23 @@ half-typed shows a *"this document changed on disk — Reload"* prompt instead,
 and auto-reloads only when nothing is open. Watching polls mtime and size a
 couple of times a second rather than using filesystem notifications, which miss
 the temp-file-and-rename that editors save with.
+
+## How the page reads
+
+- **Themes.** `--theme` picks a palette — `default`, `light`, `dark`,
+  `catppuccin`, `catppuccin-latte`, `catppuccin-mocha`. A palette is a set of
+  CSS variables and light/dark is a mode, so the theme you serve and the one
+  the reviewer picks are the same mechanism. The **Display** menu on the page
+  lets the reviewer choose System / Light / Dark and turn code ligatures off;
+  those choices live in their browser, never on your disk.
+- **Code.** Fenced code blocks and `.proto` declarations are highlighted at
+  render time, on the server — comments recede, strings and numbers stand out.
+  Go, Rust, JS/TS, Python, shell, SQL, JSON, YAML, TOML, proto and HTTP are
+  tokenized; anything else renders as plain text rather than badly. No
+  highlighter is fetched: the page must survive a strict CSP, which is also
+  why the mono font stack only *prefers* JetBrains Mono, Fira Code, Cascadia
+  Code or Iosevka if the reviewer already has one, and falls back to the
+  system mono otherwise.
 
 ## Reviewing again after a revision
 

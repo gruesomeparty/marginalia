@@ -101,20 +101,28 @@ func parseMarkdown(path string, src []byte) (*Document, error) {
 			Hash:      hashText(plain),
 			PlainText: plain,
 		}
-		// A mermaid fence is a diagram, not an opaque wall of source: its
-		// statements anchor individually inside the fence's own markup.
-		if fence, ok := n.(*ast.FencedCodeBlock); ok && isMermaidFence(fence, src) {
-			p.blocks = append(p.blocks, block)
-			at := len(p.blocks) - 1
-			html, kids, ok := p.mermaidFence(fence, section, id)
-			if ok {
-				p.blocks[at].HTML = html
-				p.blocks[at].HasChildren = kids
+		if fence, ok := n.(*ast.FencedCodeBlock); ok {
+			// A mermaid fence is a diagram, not an opaque wall of source: its
+			// statements anchor individually inside the fence's own markup.
+			if isMermaidFence(fence, src) {
+				p.blocks = append(p.blocks, block)
+				at := len(p.blocks) - 1
+				html, kids, ok := p.mermaidFence(fence, section, id)
+				if ok {
+					p.blocks[at].HTML = html
+					p.blocks[at].HasChildren = kids
+					continue
+				}
+				// Not a diagram type we take apart: render it as the code
+				// block it is, with the anchor it already had.
+				p.blocks = p.blocks[:at]
+			} else if html, ok := highlightFence(fence, src); ok {
+				// Any other fence is read as code: tokenize it here rather
+				// than shipping a highlighter to the browser.
+				block.HTML = html
+				p.blocks = append(p.blocks, block)
 				continue
 			}
-			// Not a diagram type we take apart: render it as the code block
-			// it is, with the anchor it already had.
-			p.blocks = p.blocks[:at]
 		}
 		list, isList := n.(*ast.List)
 		if !isList {

@@ -54,6 +54,22 @@ type Config struct {
 	// RequireVerdict withholds review_done until every commentable block
 	// carries at least one event.
 	RequireVerdict bool `yaml:"require_verdict"`
+	// Notes are the requester's own guidance, anchored to a block: "why this
+	// number?", "generated — skim only". They are deliberately not feedback
+	// events: this is the agent asking, and <doc>.feedback.jsonl is the
+	// human's answers. They arrive at serve time and are echoed on
+	// GET /api/doc; they never reach the log.
+	Notes []Note `yaml:"notes"`
+	// Skip marks what the requester is not asking about: those blocks render
+	// folded and, like ReadOnly, are refused by the server — a sixty-block
+	// document where a third is under review should open on that third.
+	Skip []string `yaml:"skip"`
+}
+
+// Note is one piece of requester guidance, anchored to a block.
+type Note struct {
+	Block string `yaml:"block" json:"block"`
+	Text  string `yaml:"text" json:"text"`
 }
 
 // Action is one thing the reviewer can say about a block. Type is written to
@@ -163,9 +179,22 @@ func (c *Config) validate() error {
 			return err
 		}
 	}
-	for _, pat := range c.ReadOnly {
-		if strings.TrimSpace(pat) == "" {
-			return fmt.Errorf("readonly: an entry is empty")
+	for name, list := range map[string][]string{"readonly": c.ReadOnly, "skip": c.Skip} {
+		for _, pat := range list {
+			if strings.TrimSpace(pat) == "" {
+				return fmt.Errorf("%s: an entry is empty", name)
+			}
+		}
+	}
+	for i := range c.Notes {
+		n := &c.Notes[i]
+		n.Block = strings.TrimSpace(n.Block)
+		n.Text = strings.TrimSpace(n.Text)
+		if n.Block == "" {
+			return fmt.Errorf("notes: an entry has no block to anchor to")
+		}
+		if n.Text == "" {
+			return fmt.Errorf("notes: the note on %s is empty", n.Block)
 		}
 	}
 	return nil
@@ -225,12 +254,34 @@ func (c *Config) Action(t string) (Action, bool) {
 	return Action{}, false
 }
 
-// Locked reports whether a block was handed over as read-only. A pattern
+// Locked reports whether a block takes no feedback: handed over as read-only
+// context, or skipped outright. Hiding the composer is not enough — a stale
+// page could still post — so this is what the server checks.
+func (c *Config) Locked(block string) bool {
+	return matches(c.ReadOnly, block) || matches(c.Skip, block)
+}
+
+// Skipped reports whether a block should open folded: the requester said it
+// is not part of this review.
+func (c *Config) Skipped(block string) bool { return matches(c.Skip, block) }
+
+// NotesFor returns the requester's guidance anchored to a block.
+func (c *Config) NotesFor(block string) []Note {
+	var out []Note
+	for _, n := range c.Notes {
+		if n.Block == block {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// matches reports whether a block is named by one of the patterns. A pattern
 // matches the block it names and everything under it — a section, a list and
 // its items, a diagram and its statements — because that is how the paths
 // nest and how a reviewer reads "don't comment on section 2".
-func (c *Config) Locked(block string) bool {
-	for _, pat := range c.ReadOnly {
+func matches(patterns []string, block string) bool {
+	for _, pat := range patterns {
 		pat = strings.TrimSpace(pat)
 		if block == pat {
 			return true

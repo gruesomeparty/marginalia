@@ -243,3 +243,50 @@ func TestDefaultReviewUnchanged(t *testing.T) {
 		t.Errorf("an unconfigured type: code=%d, want 400", rr.Code)
 	}
 }
+
+// A skipped block folds on the page and takes no feedback, and the API says
+// which blocks those are so a consuming agent knows what was deliberately
+// not reviewed.
+func TestSkippedBlocks(t *testing.T) {
+	cfg := config(t, "skip:\n  - \"2\"\nnotes:\n  - block: \"1/2\"\n    text: why 500?\n")
+	s, store := framed(t, cfg)
+	if rr := post(t, s, "/api/feedback", feedback.Event{Block: "2/2", Type: feedback.TypeComment, Text: "no"}); rr.Code != http.StatusForbidden {
+		t.Errorf("a skipped block should refuse feedback: %d", rr.Code)
+	}
+	if events, _ := store.Load(); len(events) != 0 {
+		t.Errorf("nothing should have been written: %+v", events)
+	}
+	var doc struct {
+		ReadOnly []string `json:"readonly"`
+		Skipped  []string `json:"skipped"`
+		Review   struct {
+			Notes []review.Note `json:"notes"`
+			Skip  []string      `json:"skip"`
+		} `json:"review"`
+	}
+	if err := json.Unmarshal(get(t, s, "/api/doc").Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(doc.Skipped, ",") != "2/1,2/2" {
+		t.Errorf("skipped blocks = %v", doc.Skipped)
+	}
+	// Skipped implies read-only, so the same blocks appear there.
+	if strings.Join(doc.ReadOnly, ",") != "2/1,2/2" {
+		t.Errorf("read-only blocks = %v", doc.ReadOnly)
+	}
+	if len(doc.Review.Notes) != 1 || doc.Review.Notes[0].Block != "1/2" {
+		t.Errorf("the requester's notes are not discoverable: %+v", doc.Review.Notes)
+	}
+	page := get(t, s, "/").Body.String()
+	if !strings.Contains(page, `"skipped":true`) {
+		t.Error("the page payload should mark skipped blocks")
+	}
+	if !strings.Contains(page, "why 500?") {
+		t.Error("the page should carry the requester's note")
+	}
+	// And the note stays out of the log: it is the agent asking, not the
+	// human answering.
+	if events, _ := store.Load(); len(events) != 0 {
+		t.Errorf("requester notes must never be events: %+v", events)
+	}
+}

@@ -187,3 +187,56 @@ actions:
 		}
 	}
 }
+
+// The requester's own guidance and the parts it is not asking about.
+func TestNotesAndSkip(t *testing.T) {
+	c := mustLoad(t, `
+notes:
+  - block: "1/2"
+    text: |
+      why 500?
+  - block: "1/2"
+    text: and who owns it?
+  - block: "$.spec.replicas"
+    text: this one is load-bearing
+skip:
+  - "2"
+readonly:
+  - "3/1"
+`)
+	if got := c.NotesFor("1/2"); len(got) != 2 || got[0].Text != "why 500?" {
+		t.Errorf("notes on 1/2 = %+v", got)
+	}
+	if got := c.NotesFor("$.spec.replicas"); len(got) != 1 {
+		t.Errorf("notes on a tree path = %+v", got)
+	}
+	if got := c.NotesFor("1/3"); got != nil {
+		t.Errorf("notes on an unmentioned block = %+v", got)
+	}
+	// Skipped blocks fold *and* take no feedback; read-only ones only the
+	// latter.
+	for _, id := range []string{"2", "2/1", "2.3"} {
+		if !c.Skipped(id) || !c.Locked(id) {
+			t.Errorf("%q should be skipped and locked", id)
+		}
+	}
+	if !c.Locked("3/1") || c.Skipped("3/1") {
+		t.Error("read-only is not the same as skipped")
+	}
+	if c.Locked("1/2") || c.Skipped("1/2") {
+		t.Error("1/2 is under review")
+	}
+}
+
+func TestLoadRejectsBadGuidance(t *testing.T) {
+	cases := map[string]string{
+		"note with no block": "notes:\n  - text: why?\n",
+		"note with no text":  "notes:\n  - block: \"1/2\"\n",
+		"empty skip entry":   "skip:\n  - \"\"\n",
+	}
+	for name, body := range cases {
+		if _, err := load(t, body); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}

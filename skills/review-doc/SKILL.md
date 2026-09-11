@@ -102,6 +102,25 @@ action with nothing to fill in saves on one tap, which is what makes a long
 document reviewable at all. Ask for what you will actually act on — a required
 field the human has to guess at is worse than no field.
 
+The same file carries your own questions and the parts you are not asking about:
+
+```yaml
+notes:
+  - block: "1/2"
+    text: why 500? I took it from the queue's batch limit — is that right?
+skip:
+  - "2"                  # folded on the page, and refused if anything posts to it
+```
+
+A note renders beside that block, labelled as yours; the human's reply comes
+back as an ordinary event on the same block. Prefer a note on the block over a
+paragraph in `instructions` when the question is *about* something specific —
+that is the whole point of anchoring. Your notes never enter the feedback log.
+
+`--theme` picks a palette (`default`, `catppuccin`, `catppuccin-mocha`, …) if
+the human has a preference; light/dark and ligatures are theirs to set on the
+page, so do not try to serve those for them.
+
 Startup prints the actions it accepted, and `GET /api/doc` echoes them, so you
 can confirm the review was framed the way you asked.
 

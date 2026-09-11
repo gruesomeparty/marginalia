@@ -126,3 +126,25 @@ func TestBuildServerWithReviewConfig(t *testing.T) {
 		t.Error("a config that isn't there must fail at startup")
 	}
 }
+
+// A theme nobody has written yet is a capability gap, so it goes to the
+// feedback loop rather than dying as a typo.
+func TestBuildServerUnknownTheme(t *testing.T) {
+	doc := filepath.Join(t.TempDir(), "d.md")
+	if err := os.WriteFile(doc, []byte("# Hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := buildServer([]string{doc}, serveOptions{Theme: "catppuccin-frappe"})
+	if err == nil || !strings.Contains(err.Error(), "request-feature") {
+		t.Fatalf("want advertise-on-error, got %v", err)
+	}
+	srv, err := buildServer([]string{doc}, serveOptions{Theme: "catppuccin-mocha"})
+	if err != nil {
+		t.Fatalf("buildServer: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/", nil))
+	if !strings.Contains(rr.Body.String(), `data-palette="catppuccin"`) {
+		t.Error("the served page is not painted in the chosen theme")
+	}
+}

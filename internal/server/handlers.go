@@ -84,6 +84,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Title:    s.opts.Title,
 		Nested:   s.opts.Nested,
 		Review:   s.opts.Review,
+		Theme:    s.opts.Theme,
 	}
 	setDone := true
 	for i := range s.docs {
@@ -162,7 +163,23 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		// out of the log needs to see that it was asked for, and what it was
 		// labelled when the human tapped it.
 		"review": web.ReviewInfo(s.opts.Review),
+		// Resolved against this document, so a consuming agent can see which
+		// blocks were deliberately not reviewed rather than re-deriving it
+		// from the patterns.
+		"readonly": s.blocksWhere(e, s.opts.Review.Locked),
+		"skipped":  s.blocksWhere(e, s.opts.Review.Skipped),
 	})
+}
+
+// blocksWhere lists the document's blocks a review rule applies to.
+func (s *Server) blocksWhere(e *Entry, rule func(string) bool) []string {
+	out := []string{}
+	for _, b := range e.Doc.Blocks {
+		if rule(b.ID) {
+			out = append(out, b.ID)
+		}
+	}
+	return out
 }
 
 // docList describes the served set so an agent reading the API knows what the
