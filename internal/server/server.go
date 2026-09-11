@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
@@ -46,6 +47,7 @@ type Options struct {
 	Host   string
 	Port   int
 	Open   bool
+	Watch  bool // re-parse a document when its file changes
 }
 
 // Server serves the review pages and feedback API.
@@ -55,6 +57,14 @@ type Server struct {
 	byRel  map[string]*Entry
 	byPath map[string]*Entry
 	mux    *http.ServeMux
+
+	// mu guards each entry's parsed document, which --watch replaces while
+	// handlers are reading it.
+	mu       sync.RWMutex
+	revision revisionCounter
+	// stamps records each document's file as it was when the server was
+	// built, so the watcher's baseline predates anything it should catch.
+	stamps map[string]stamp
 }
 
 // New builds a Server with routes registered.
@@ -69,16 +79,21 @@ func New(opts Options) *Server {
 	}
 	s.byRel = make(map[string]*Entry, len(s.docs))
 	s.byPath = make(map[string]*Entry, len(s.docs))
+	s.stamps = make(map[string]stamp, len(s.docs))
 	for i := range s.docs {
 		e := &s.docs[i]
 		s.byRel[e.Rel] = e
 		s.byPath[e.Doc.Path] = e
+		if st, ok := stampOf(e.Doc.Path); ok {
+			s.stamps[e.Doc.Path] = st
+		}
 	}
 	s.mux.HandleFunc("GET /{$}", s.handleIndex)
 	s.mux.HandleFunc("GET /d/{doc...}", s.handleDocPage)
 	s.mux.HandleFunc("GET /api/doc", s.handleDoc)
 	s.mux.HandleFunc("GET /api/feedback", s.handleGetFeedback)
 	s.mux.HandleFunc("GET /api/resolution", s.handleResolution)
+	s.mux.HandleFunc("GET /api/revision", s.handleRevision)
 	s.mux.HandleFunc("POST /api/feedback", s.handlePostFeedback)
 	s.mux.HandleFunc("POST /api/session_done", s.handleSessionDone)
 	return s
@@ -118,6 +133,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}()
 	url := fmt.Sprintf("http://%s", ln.Addr().String())
 	s.announce(url)
+	if s.opts.Watch {
+		go s.watch(ctx)
+	}
 	if s.opts.Open {
 		_ = openBrowser(url)
 	}
@@ -137,6 +155,9 @@ func (s *Server) announce(url string) {
 	// The review's own vocabulary last, so it is the line above the prompt:
 	// an agent that configured actions needs to see they took.
 	defer s.announceReview()
+	if s.opts.Watch {
+		defer fmt.Println("marginalia: watching for changes; the page offers a reload when a document moves on")
+	}
 	if len(s.docs) == 1 {
 		fmt.Printf("marginalia: serving %s at %s\n", s.docs[0].Doc.Path, url)
 		fmt.Printf("marginalia: feedback → %s\n", s.docs[0].Store.Path())

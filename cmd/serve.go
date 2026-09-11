@@ -17,13 +17,15 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/server"
 )
 
-// serveOptions is what `serve` was asked for, beyond the paths themselves.
+// serveOptions is what `serve` was asked for. A struct rather than a row of
+// positional booleans, which is how open and watch get swapped by accident.
 type serveOptions struct {
-	host   string
-	port   int
-	open   bool
-	author string
-	config string // review config file, "" for the default review
+	Host   string
+	Port   int
+	Open   bool
+	Watch  bool
+	Author string
+	Config string // review config file, "" for the default review
 }
 
 // buildServer resolves the paths into a review set — one document, several, or
@@ -34,8 +36,8 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		return nil, routeSetError(err)
 	}
 	cfg := review.Default()
-	if opts.config != "" {
-		if cfg, err = review.Load(opts.config); err != nil {
+	if opts.Config != "" {
+		if cfg, err = review.Load(opts.Config); err != nil {
 			return nil, err
 		}
 	}
@@ -52,7 +54,7 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 			Rel:   d.Rel,
 		})
 	}
-	author := opts.author
+	author := opts.Author
 	if author == "" {
 		author = defaultAuthor()
 	}
@@ -67,9 +69,10 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 		Nested: set.Index == "",
 		Review: cfg,
 		Author: author,
-		Host:   opts.host,
-		Port:   opts.port,
-		Open:   opts.open,
+		Host:   opts.Host,
+		Port:   opts.Port,
+		Open:   opts.Open,
+		Watch:  opts.Watch,
 	}), nil
 }
 
@@ -113,12 +116,21 @@ func requirePaths(verb string) cobra.PositionalArgs {
 }
 
 func newServeCmd() *cobra.Command {
-	var opts serveOptions
+	var (
+		opts   serveOptions
+		port   int
+		host   string
+		open   bool
+		watch  bool
+		author string
+		config string
+	)
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
 		Short: "Serve one or more documents for block-anchored human review",
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			opts = serveOptions{Host: host, Port: port, Open: open, Watch: watch, Author: author, Config: config}
 			srv, err := buildServer(args, opts)
 			if err != nil {
 				return err
@@ -128,10 +140,11 @@ func newServeCmd() *cobra.Command {
 			return srv.Run(ctx)
 		},
 	}
-	cmd.Flags().IntVar(&opts.port, "port", 8787, "port to listen on")
-	cmd.Flags().StringVar(&opts.host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
-	cmd.Flags().BoolVar(&opts.open, "open", false, "open the review page in a browser")
-	cmd.Flags().StringVar(&opts.author, "author", "", "review author (defaults to $USER)")
-	cmd.Flags().StringVar(&opts.config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
+	cmd.Flags().IntVar(&port, "port", 8787, "port to listen on")
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
+	cmd.Flags().BoolVar(&open, "open", false, "open the review page in a browser")
+	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
+	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
+	cmd.Flags().StringVar(&config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
 	return cmd
 }

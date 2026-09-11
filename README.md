@@ -159,6 +159,23 @@ node, indented by depth, with **Collapse all** for a big file.
   does not take apart (a sequence diagram, say) stays reviewable as one source
   block rather than failing.
 
+## Revising while the review is open
+
+```bash
+marginalia serve spec.md --watch
+```
+
+The server re-reads and re-parses a document when its file changes, so an edit
+lands on the next page load without a restart — and prior feedback on a block
+you changed comes back flagged stale, because the resolution view is
+materialized per render.
+
+The page never reloads under the reviewer's hands: a change while a comment is
+half-typed shows a *"this document changed on disk — Reload"* prompt instead,
+and auto-reloads only when nothing is open. Watching polls mtime and size a
+couple of times a second rather than using filesystem notifications, which miss
+the temp-file-and-rename that editors save with.
+
 ## Reviewing again after a revision
 
 Reopen a revised document and prior feedback re-anchors by block, with the

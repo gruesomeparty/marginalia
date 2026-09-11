@@ -369,6 +369,12 @@ default.
   everything else with the reason it needs confirmation. Applying belongs to
   whoever owns the document, because *never mutate the source document* (§5.6)
   outranks the convenience of doing it here.
-- Watch mode (`serve --watch`: re-render on file change mid-review)?
+- ~~Watch mode (`serve --watch`: re-render on file change mid-review)?~~ **Yes**
+  (#7). Polls size+mtime (filesystem notifications miss the temp-file rename
+  editors save with), keeps the last good parse if a save leaves the file
+  unreadable, and re-anchors prior feedback through the resolution view — a note
+  on a block that changed comes back stale for free. The page is told the
+  revision it was rendered from and offers a reload rather than discarding a
+  half-typed comment.
 - ~~Multi-document sessions (review a spec + its plan together)?~~ Answered
   in §5.7: one server, a page per document, per-document and session `review_done`.

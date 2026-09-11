@@ -60,9 +60,10 @@ func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 // reads, so a re-render can say which notes still apply, which predate an edit
 // and which have lost their block entirely.
 func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resolution {
-	hashes := make(map[string]string, len(e.Doc.Blocks))
-	order := make([]string, 0, len(e.Doc.Blocks))
-	for _, b := range e.Doc.Blocks {
+	doc := s.docOf(e)
+	hashes := make(map[string]string, len(doc.Blocks))
+	order := make([]string, 0, len(doc.Blocks))
+	for _, b := range doc.Blocks {
 		hashes[b.ID] = b.Hash
 		order = append(order, b.ID)
 	}
@@ -76,11 +77,13 @@ func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resoluti
 // document under a 200 is worse than an honest 500.
 func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 	page := web.Page{
-		Doc:    current.Doc,
-		Author: s.opts.Author,
-		Title:  s.opts.Title,
-		Nested: s.opts.Nested,
-		Review: s.opts.Review,
+		Doc:      s.docOf(current),
+		Watch:    s.opts.Watch,
+		Revision: s.Revision(),
+		Author:   s.opts.Author,
+		Title:    s.opts.Title,
+		Nested:   s.opts.Nested,
+		Review:   s.opts.Review,
 	}
 	setDone := true
 	for i := range s.docs {
@@ -150,7 +153,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		events = []feedback.Event{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"doc":        e.Doc,
+		"doc":        s.docOf(e),
 		"events":     events,
 		"author":     s.opts.Author,
 		"docs":       s.docList(),
@@ -166,8 +169,9 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 // human was handed, not just the document it asked about.
 func (s *Server) docList() []map[string]string {
 	out := make([]map[string]string, 0, len(s.docs))
-	for _, e := range s.docs {
-		out = append(out, map[string]string{"path": e.Doc.Path, "rel": e.Rel, "label": e.Label})
+	for i := range s.docs {
+		e := &s.docs[i]
+		out = append(out, map[string]string{"path": s.docOf(e).Path, "rel": e.Rel, "label": e.Label})
 	}
 	return out
 }
@@ -187,6 +191,12 @@ func (s *Server) handleResolution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.resolution(e, events))
+}
+
+// handleRevision lets the page notice that a document it is showing has been
+// re-parsed under it. Deliberately tiny: the page polls it while --watch is on.
+func (s *Server) handleRevision(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"rev": s.Revision(), "watch": s.opts.Watch})
 }
 
 func (s *Server) handleGetFeedback(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +292,10 @@ func (s *Server) checkVerdicts(target *Entry) (int, error) {
 		}
 	}
 	missing := 0
-	for _, b := range target.Doc.Blocks {
+	// The live parse, not the one from startup: under --watch the document
+	// may have gained or lost blocks since, and the gate is about what the
+	// reviewer is looking at now.
+	for _, b := range s.docOf(target).Blocks {
 		if !answered[b.ID] && !s.opts.Review.Locked(b.ID) {
 			missing++
 		}
@@ -319,7 +332,7 @@ func (s *Server) handleSessionDone(w http.ResponseWriter, _ *http.Request) {
 // append fills in what the page left out and writes the event to that
 // document's log.
 func (s *Server) append(target *Entry, e *feedback.Event) error {
-	e.Doc = target.Doc.Path
+	e.Doc = s.docOf(target).Path
 	if e.Author == "" {
 		e.Author = s.opts.Author
 	}
