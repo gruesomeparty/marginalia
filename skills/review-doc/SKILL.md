@@ -51,10 +51,60 @@ A mermaid diagram is also drawn as a picture when
 [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) is on the
 machine, and the drawing carries those same anchors: the human clicks the arrow
 that is wrong and the event lands on that statement, so read the feedback
-exactly as before. Nothing changes if `mmdc` is missing — the page shows the
-anchored source — and `--diagrams=off` asks for the source even when it is
-present. Mention it if the human says the picture is missing; do not make the
-review conditional on it.
+exactly as before.
+
+### Making diagrams draw (optional, and worth it)
+
+A human reviewing a flow reads a picture faster than nine lines of `-->`. If
+the document you are handing over contains a `mermaid` fence or is a `.mmd`
+file, get the picture if you can:
+
+```bash
+mmdc --version || npm i -g @mermaid-js/mermaid-cli
+marginalia serve arch.md          # picks mmdc up from PATH by itself
+```
+
+If it lives somewhere else, name it — `--mmdc /path/to/mmdc`, or
+`MARGINALIA_MMDC=/path/to/mmdc`. A path that is wrong is an error, not a
+silent fallback.
+
+Startup tells you which mode you are in, and that line is the thing to check —
+not the exit code:
+
+- `marginalia: 1 diagram(s) drawn` — the human gets the picture.
+- `marginalia: mermaid diagrams render as anchored source — install
+  @mermaid-js/mermaid-cli (mmdc) for pictures` — no renderer found.
+- `marginalia: a diagram could not be drawn, showing its source: …` — found,
+  but it failed; the reason follows on the same line.
+
+**When it fails, it is almost always the browser, not the diagram.** `mmdc`
+drives a headless Chromium through puppeteer:
+
+| What the error says | What to do |
+|---|---|
+| `Running as root without --no-sandbox is not supported` | write `{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}` to a file and `export MARGINALIA_MMDC_ARGS="-p /path/to/that.json"` |
+| `Could not find chrome-headless-shell (ver. …)` | no browser was downloaded: `npx puppeteer browsers install chrome-headless-shell`, or point at one you have with `export PUPPETEER_EXECUTABLE_PATH=/path/to/chrome` |
+| `no mermaid renderer at "…"` | the `--mmdc` / `MARGINALIA_MMDC` path is wrong — fix it, or drop it to look on `PATH` |
+| a mermaid `Parse error` | the diagram itself is wrong — fix the document, or hand it over with `--diagrams=off` and let the human read the source |
+
+Rules to hold to:
+
+- **Never block the handover on the renderer.** If the picture will not draw,
+  serve anyway: the anchored source is a complete review surface and was the
+  only one until recently. Say once, to the human, that they are reading source
+  rather than a drawing.
+- **`export` is stricter than `serve` on purpose.** It fails rather than
+  shipping a file with a missing picture, because whoever opens it cannot
+  re-run your command. Either fix the renderer or pass `--diagrams=off`.
+- **The first render is slow** (a browser starts, several seconds), then
+  cached by content — so `--watch` stays instant, and re-serving the same
+  document costs nothing. Do not add your own timeout around `serve` on that
+  account.
+- **Read the feedback exactly the same way.** A note from a shape in the
+  picture and a note from the source line are the same event, with the same
+  `block`. Nothing downstream needs to know which surface the human used.
+- `--diagrams=off` asks for the source even when a renderer is present — use it
+  when you specifically want the human quoting text.
 
 ### Handing over several documents at once
 

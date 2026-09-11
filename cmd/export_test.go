@@ -425,6 +425,25 @@ func TestDiagramModes(t *testing.T) {
 	if r, err := diagrams("off", bin); err != nil || r.Available() {
 		t.Errorf("off: %v, available=%v", err, r.Available())
 	}
+	// A renderer the caller named but that is not there is a typo, not a
+	// machine without Node: saying "install mermaid-cli" would answer a
+	// mistyped path with advice about the thing they just said they had.
+	missing := filepath.Join(t.TempDir(), "not-mmdc")
+	if _, err := diagrams("auto", missing); err == nil {
+		t.Error("a --mmdc pointing nowhere was accepted")
+	} else if !strings.Contains(err.Error(), missing) || !strings.Contains(err.Error(), "--diagrams=off") {
+		t.Errorf("unhelpful error: %v", err)
+	}
+	t.Setenv("MARGINALIA_MMDC", missing)
+	if _, err := diagrams("auto", ""); err == nil {
+		t.Error("MARGINALIA_MMDC pointing nowhere was accepted")
+	}
+	// It is only an error when a renderer was asked for: off never draws.
+	if r, err := diagrams("off", missing); err != nil || r.Available() {
+		t.Errorf("--diagrams=off with a bad path: %v", err)
+	}
+	t.Setenv("MARGINALIA_MMDC", "")
+
 	_, err := diagrams("maybe", bin)
 	if err == nil {
 		t.Fatal("an unknown mode was accepted")

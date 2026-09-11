@@ -18,6 +18,40 @@ go install github.com/gruesomeparty/marginalia@latest
 
 Or download a release from the [releases page](https://github.com/gruesomeparty/marginalia/releases).
 
+**Optional — drawing mermaid diagrams.** Marginalia has no dependencies and
+needs none. If you want a `mermaid` fence to render as a *picture* rather than
+as anchored source, install mermaid's own CLI:
+
+```bash
+npm i -g @mermaid-js/mermaid-cli     # provides `mmdc`
+marginalia serve arch.md             # startup now says: "1 diagram(s) drawn"
+```
+
+Without it, startup says so once and the page shows the anchored source — every
+other part of the review is identical, so this is never a prerequisite for
+handing a document over.
+
+`mmdc` drives a headless Chromium through puppeteer, which is where the two
+things that can go wrong live:
+
+- **Running as root** (containers, CI) — Chromium refuses to start without
+  `--no-sandbox`, and the error says exactly that. Give `mmdc` a puppeteer
+  config and point Marginalia at it:
+
+  ```bash
+  printf '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > /tmp/puppeteer.json
+  export MARGINALIA_MMDC_ARGS="-p /tmp/puppeteer.json"
+  ```
+
+- **No browser downloaded** — `Could not find chrome-headless-shell (ver. …)`
+  means puppeteer never fetched one: `npx puppeteer browsers install
+  chrome-headless-shell`. If Chromium is already on the machine, skip the
+  download with `export PUPPETEER_EXECUTABLE_PATH=/path/to/chrome`.
+
+`MARGINALIA_MMDC=/path/to/mmdc` (or `--mmdc`) names the binary when it is not on
+`PATH` — a path that is wrong is an error rather than a silent fallback to no
+pictures. `--diagrams=off` skips drawing entirely.
+
 **Claude plugin** — add it from either marketplace, then install:
 
 ```

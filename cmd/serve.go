@@ -99,14 +99,32 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 // diagrams resolves the diagram-rendering choice. "auto" draws mermaid when
 // mermaid-cli is installed and shows the anchored source when it is not, so a
 // machine without Node still serves every review; "off" never draws.
+//
+// Naming a renderer is different from having one found for you: a --mmdc (or
+// MARGINALIA_MMDC) that points nowhere is a typo, and falling back to "no
+// renderer installed" would answer it with a notice about installing the thing
+// the caller just said they had.
 func diagrams(mode, bin string) (*diagram.Renderer, error) {
 	switch mode {
 	case "", "auto":
-		return diagram.Find(bin), nil
+		r := diagram.Find(bin)
+		if named := firstNonEmpty(bin, os.Getenv("MARGINALIA_MMDC")); named != "" && !r.Available() {
+			return nil, advertise(fmt.Errorf("no mermaid renderer at %q — drop the flag to look on PATH, or pass --diagrams=off", named))
+		}
+		return r, nil
 	case "off":
 		return &diagram.Renderer{}, nil
 	}
 	return nil, advertise(fmt.Errorf("unknown --diagrams %q — available: auto, off", mode))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // themeList names the palettes, for flag help.

@@ -238,6 +238,12 @@ pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)
 ## Commands
 
 - Build: `go build ./...`  ·  Run: `go run . serve <doc.md> --open`
+- Drawn diagrams (optional): `npm i -g @mermaid-js/mermaid-cli`. As root — any
+  container, CI included — puppeteer needs `{"args":["--no-sandbox",
+  "--disable-setuid-sandbox","--disable-dev-shm-usage"]}` in a file named by
+  `MARGINALIA_MMDC_ARGS="-p that.json"`, and `PUPPETEER_EXECUTABLE_PATH` if a
+  Chromium is already on the box. Startup says which mode you got; README and
+  `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
