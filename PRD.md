@@ -95,8 +95,9 @@ Optionally re-renders with resolution states for a second pass.
   note lands on. Source is one toggle away, remembered per reviewer. Rendering
   server-side to SVG is what keeps the rest of the design intact — no script
   in the page, no request on open, so a shared file still survives a strict
-  CSP — and the reviewer's theme and mode dress the picture in CSS, since the
-  render cannot know which one they will pick. Without `mmdc` the page shows
+  CSP — and the reviewer's theme and mode dress the picture by rewriting
+  mermaid's own stylesheet into the page's CSS variables as the SVG comes out,
+  since the render cannot know which one they will pick. Without `mmdc` the page shows
   the anchored source exactly as before: nothing in the review loop depends on
   a renderer being installed. A fence keeps its own block, so a note about the
   diagram as a whole still has somewhere to live, and a diagram type the

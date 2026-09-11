@@ -105,7 +105,7 @@ func (r *Renderer) SVG(src string) (string, error) {
 // hash keys the cache by what was rendered and by how we post-process it, so
 // a change to either invalidates old entries.
 func hash(src string) string {
-	sum := sha256.Sum256([]byte("v1\x00" + src))
+	sum := sha256.Sum256([]byte("v2\x00" + src))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -169,5 +169,5 @@ func (r *Renderer) render(src string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s produced no SVG: %w", filepath.Base(r.Bin), err)
 	}
-	return sanitize(string(svg)), nil
+	return theme(sanitize(string(svg))), nil
 }
