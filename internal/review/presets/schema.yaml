@@ -1,0 +1,28 @@
+title: Schema change review
+instructions: |
+  The question is whether this change is safe to ship, not whether the schema
+  is beautiful. Look for anything that breaks an existing client, fields whose
+  optionality or type changed, names that will be hard to live with, and
+  migration the change implies but does not state.
+actions:
+  - type: breaking
+    label: Breaking change
+    key: b
+    requires_text: true
+    fields:
+      - name: affects
+        label: What breaks
+        options: [clients, stored data, both]
+        required: true
+  - type: naming
+    label: Naming
+    key: n
+    requires_text: true
+  - type: optionality
+    label: Optionality or type
+    key: o
+    requires_text: true
+  - type: migration
+    label: Needs migration
+    key: m
+    requires_text: true

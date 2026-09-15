@@ -148,3 +148,68 @@ func TestBuildServerUnknownTheme(t *testing.T) {
 		t.Error("the served page is not painted in the chosen theme")
 	}
 }
+
+// A shipped framing is selected by name, and an unknown one names the ones
+// that exist rather than silently serving the default review.
+func TestReviewConfigResolvesPresetsAndOverlays(t *testing.T) {
+	cfg, err := reviewConfig("security", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Title != "Security review" {
+		t.Errorf("preset not loaded: %q", cfg.Title)
+	}
+	var found bool
+	for _, a := range cfg.Actions() {
+		if a.Type == "vulnerability" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the security vocabulary is missing: %+v", cfg.Actions())
+	}
+
+	// No preset and no file is the plain default review, unchanged.
+	plain, err := reviewConfig("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Title != "" || len(plain.Custom) != 0 {
+		t.Errorf("the default review grew a framing: %+v", plain)
+	}
+
+	// A file layers over a preset.
+	path := filepath.Join(t.TempDir(), "over.yaml")
+	if err := os.WriteFile(path, []byte("title: Ingest security review\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	layered, err := reviewConfig("security", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layered.Title != "Ingest security review" {
+		t.Errorf("the file did not win on title: %q", layered.Title)
+	}
+	if len(layered.Actions()) != len(cfg.Actions()) {
+		t.Error("layering a title dropped the preset's vocabulary")
+	}
+
+	_, err = reviewConfig("architecture", "")
+	if err == nil {
+		t.Fatal("an unknown framing was accepted")
+	}
+	// The error advertises the feedback loop, like every other unknown option.
+	for _, want := range []string{"adr", "request-feature"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("unhelpful error, missing %q: %v", want, err)
+		}
+	}
+}
+
+func TestPresetListNamesTheShippedFramings(t *testing.T) {
+	for _, want := range []string{"adr", "copy", "schema", "security"} {
+		if !strings.Contains(presetList(), want) {
+			t.Errorf("flag help does not offer %q: %s", want, presetList())
+		}
+	}
+}

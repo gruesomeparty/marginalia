@@ -30,6 +30,7 @@ type serveOptions struct {
 	Watch  bool
 	Author string
 	Config string // review config file, "" for the default review
+	Review string // shipped preset name, "" for none
 	Theme  string // palette name, "" for the default
 	// Diagrams is "auto" (draw mermaid when a renderer is installed) or
 	// "off" (always show the anchored source).
@@ -44,11 +45,9 @@ func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
 	if err != nil {
 		return nil, routeSetError(err)
 	}
-	cfg := review.Default()
-	if opts.Config != "" {
-		if cfg, err = review.Load(opts.Config); err != nil {
-			return nil, err
-		}
+	cfg, err := reviewConfig(opts.Review, opts.Config)
+	if err != nil {
+		return nil, err
 	}
 	// A theme nobody has written yet is a feature request, not a typo.
 	theme, err := web.ThemeFor(opts.Theme)
@@ -127,6 +126,29 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// reviewConfig resolves the framing a review runs under: a shipped preset, a
+// file, or both — the file layered over the preset, so an agent can take the
+// vocabulary that already exists and change only the instructions. Neither is
+// the plain default review.
+func reviewConfig(preset, path string) (*review.Config, error) {
+	cfg := review.Default()
+	if preset != "" {
+		var err error
+		if cfg, err = review.Preset(preset); err != nil {
+			return nil, advertise(err)
+		}
+	}
+	if path != "" {
+		if err := cfg.Overlay(path); err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+// presetList names the shipped framings, for flag help.
+func presetList() string { return strings.Join(review.PresetNames(), ", ") }
+
 // themeList names the palettes, for flag help.
 func themeList() string { return strings.Join(web.ThemeNames(), ", ") }
 
@@ -186,6 +208,7 @@ func newServeCmd() *cobra.Command {
 		watch       bool
 		author      string
 		config      string
+		preset      string
 		theme       string
 		diagramMode string
 		mmdc        string
@@ -197,7 +220,7 @@ func newServeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts = serveOptions{
 				Host: host, Port: port, Open: open, Watch: watch, Author: author,
-				Config: config, Theme: theme, Diagrams: diagramMode, MMDC: mmdc,
+				Config: config, Review: preset, Theme: theme, Diagrams: diagramMode, MMDC: mmdc,
 			}
 			srv, err := buildServer(args, opts)
 			if err != nil {
@@ -214,6 +237,7 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")
 	cmd.Flags().StringVar(&config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
+	cmd.Flags().StringVar(&preset, "review", "", "shipped review framing to start from: "+presetList())
 	cmd.Flags().StringVar(&theme, "theme", "", "page palette: "+themeList())
 	cmd.Flags().StringVar(&diagramMode, "diagrams", "auto", "draw mermaid diagrams: auto (when mermaid-cli is installed), off")
 	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")

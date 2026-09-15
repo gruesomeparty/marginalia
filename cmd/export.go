@@ -12,7 +12,6 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/diagram"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
-	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/web"
 )
@@ -21,6 +20,7 @@ import (
 type exportOptions struct {
 	out      string
 	config   string
+	preset   string
 	theme    string
 	author   string
 	diagrams string // "auto" or "off", as for serve
@@ -47,11 +47,9 @@ func buildExport(paths []string, opts exportOptions) (path string, page []byte, 
 	if err != nil {
 		return "", nil, err
 	}
-	cfg := review.Default()
-	if opts.config != "" {
-		if cfg, err = review.Load(opts.config); err != nil {
-			return "", nil, err
-		}
+	cfg, err := reviewConfig(opts.preset, opts.config)
+	if err != nil {
+		return "", nil, err
 	}
 	theme, err := web.ThemeFor(opts.theme)
 	if err != nil {
@@ -140,6 +138,7 @@ func newExportCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&opts.out, "out", "o", "", "output file (default <doc>.review.html)")
 	cmd.Flags().StringVar(&opts.config, "config", "", "review config: instructions, custom actions, read-only blocks (YAML)")
+	cmd.Flags().StringVar(&opts.preset, "review", "", "shipped review framing to start from: "+presetList())
 	cmd.Flags().StringVar(&opts.theme, "theme", "", "page palette: "+themeList())
 	cmd.Flags().StringVar(&opts.author, "author", "", "review author (defaults to $USER)")
 	cmd.Flags().StringVar(&opts.diagrams, "diagrams", "auto", "draw mermaid diagrams into the file: auto (when mermaid-cli is installed), off")

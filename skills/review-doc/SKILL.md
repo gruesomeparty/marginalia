@@ -106,6 +106,24 @@ Rules to hold to:
 - `--diagrams=off` asks for the source even when a renderer is present — use it
   when you specifically want the human quoting text.
 
+### Pick a framing rather than inventing one
+
+Four framings ship inside the binary, and using one means the events you read
+back are the same words across every run of the same workflow:
+
+```bash
+marginalia review list                          # adr, copy, schema, security
+marginalia serve decision.md --review adr
+```
+
+Use `adr` for a decision record, `schema` for an API or schema change,
+`security` when you want it read as an attacker would, `copy` for anything
+user-facing. Run `marginalia review show <name>` to see the exact vocabulary
+before you impose it. Layer your own file over a preset with `--config` when
+the review needs something specific — the file changes only what it names, so
+`instructions:` alone reframes a preset without touching its verbs. Write a
+config from scratch only when no framing fits.
+
 ### Handing over several documents at once
 
 A set is served as one server with a page per document and a navigation tree, so

@@ -12,11 +12,8 @@ package review
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config is the on-disk shape of a review config file:
@@ -119,21 +116,11 @@ func Default() *Config { return &Config{} }
 // misspelled option that silently does nothing would leave the agent thinking
 // it framed a review it did not.
 func Load(path string) (*Config, error) {
-	f, err := os.Open(path)
-	if err != nil {
+	c := Default()
+	if err := c.Overlay(path); err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
-	dec := yaml.NewDecoder(f)
-	dec.KnownFields(true)
-	var c Config
-	if err := dec.Decode(&c); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
-	}
-	if err := c.validate(); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
-	}
-	return &c, nil
+	return c, nil
 }
 
 // validate normalizes the config and rejects one that cannot mean what it

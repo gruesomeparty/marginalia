@@ -174,6 +174,24 @@ declared or a choice outside its options. `GET /api/doc` echoes the
 configuration, so the agent reading `blocker` out of the log can see what it
 asked for.
 
+### Framings that ship
+
+Writing a `review.yaml` from scratch for every review means the same question
+gets a different vocabulary each time. Four framings are built in:
+
+```bash
+marginalia review list                        # names and their vocabularies
+marginalia review show security > review.yaml # copy one to disk as a start
+marginalia serve api.proto --review security  # or just use it by name
+```
+
+`adr` (is this decision sound), `schema` (is this change safe to ship),
+`security` (read it as an attacker), `copy` (it goes in front of users). A
+preset is a starting point, not a cage: `--config` layers a file over it, and
+the file changes only what it names — `instructions:` alone reframes a review
+without touching its verbs, while naming `actions:` replaces the vocabulary
+wholesale.
+
 ## Supported inputs
 
 | Input | Block ID |
