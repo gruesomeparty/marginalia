@@ -1,0 +1,24 @@
+title: Architecture decision review
+instructions: |
+  You are being asked whether this decision is sound, not whether the writing
+  is good. Three things are worth your attention: the context (is the problem
+  stated correctly?), the decision itself, and the consequences the author
+  accepted. If an alternative was dismissed too quickly, say so on the block
+  that dismisses it.
+actions:
+  - type: blocker
+    label: Blocker
+    key: b
+    requires_text: true
+  - type: concern
+    label: Concern
+    key: c
+    requires_text: true
+  - type: alternative
+    label: Alternative not considered
+    key: a
+    requires_text: true
+  - type: context_missing
+    label: Context missing
+    key: m
+    requires_text: true

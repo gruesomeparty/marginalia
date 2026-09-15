@@ -1,0 +1,27 @@
+title: Security review
+instructions: |
+  Read this as an attacker would. Flag what is exploitable and say how — a
+  finding with no path to abuse is a hardening note, which is a different
+  thing and has its own button. Worth the attention: trust boundaries,
+  authentication, input that reaches a parser, secrets, and anything logged.
+actions:
+  - type: vulnerability
+    label: Vulnerability
+    key: v
+    requires_text: true
+    fields:
+      - name: severity
+        label: Severity
+        options: [critical, high, medium, low]
+        required: true
+  - type: hardening
+    label: Hardening
+    key: h
+    requires_text: true
+  - type: threat_model
+    label: Needs threat model
+    key: t
+    requires_text: true
+  - type: out_of_scope
+    label: Out of scope
+    key: o

@@ -141,6 +141,14 @@ users are agents, not humans.
   unscoped note would be rendered beside the wrong block and reported as
   unanchored on every other page. A note naming a document the set does not
   serve is named at startup rather than dropped.
+- `internal/review/presets/*.yaml` are framings embedded in the binary
+  (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
+  than inventing one and the events compare across runs. `Config.Overlay`
+  layers a file over a preset: yaml.v3 decoding into a populated struct leaves
+  absent keys alone, which is exactly the layering wanted — naming `actions:`
+  replaces the vocabulary, naming only `instructions:` reframes it. `Load` is
+  now `Default()` + `Overlay`, so there is one decoder configuration
+  (`KnownFields(true)`) wherever a config comes from.
 - `internal/review` is the review configuration: framing, the action
   vocabulary (built-ins plus configured ones), structured fields, read-only
   patterns. It is the **only** authority on which event types exist — there is

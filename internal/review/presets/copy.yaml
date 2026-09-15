@@ -1,0 +1,22 @@
+title: Copy review
+instructions: |
+  This goes in front of users. Flag anything that is wrong, anything they will
+  misread, and anything that promises more than we ship. Tone matters, but it
+  is the least of these — prefer a suggested edit over a note about how a
+  sentence feels.
+actions:
+  - type: wrong
+    label: Factually wrong
+    key: w
+    requires_text: true
+  - type: unclear
+    label: Unclear
+    key: u
+    requires_text: true
+  - type: tone
+    label: Tone
+    key: t
+    requires_text: true
+  - type: typo
+    label: Typo
+    key: y
