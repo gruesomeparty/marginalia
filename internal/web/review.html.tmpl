@@ -212,6 +212,18 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing .item.current{border-left-width:3px}
 .existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:var(--r-pill);font-size:var(--fs-xs);color:var(--muted);text-transform:none;font-weight:400}
 .existing .item .was{margin-top:.2rem;color:var(--muted);font-style:italic}
+/* A thread: the answers to one note, indented under it. One level deep, so
+   the rule is a rule and not the first step of a tree. */
+.existing .thread{margin:.35rem 0 0 .2rem;border-left:1px solid var(--rule);padding-left:.6rem}
+.existing .reply{margin:.25rem 0}
+.existing .reply .who{font-weight:600;color:var(--muted);font-size:var(--fs-sm);margin-right:.35rem}
+.existing .replybtn{font:inherit;font-size:var(--fs-sm);margin-top:.3rem;padding:.1rem .5rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--muted);cursor:pointer}
+.existing .replybtn:hover{color:var(--fg);border-color:var(--accent)}
+.existing .replybox{margin-top:.4rem}
+.existing .replybox textarea{width:100%;min-height:2.6rem;font:inherit;font-size:var(--fs-base);padding:.4rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
+.existing .replybox .row{display:flex;gap:.4rem;margin-top:.35rem}
+.existing .replybox button{font:inherit;font-size:var(--fs-sm);padding:.25rem .7rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+.existing .replybox .send{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 /* What was decided colours the badge, wherever it sits. */
 .block[data-state="approve"]{--badge:var(--ok);--badge-fg:var(--on-accent)}
 .block[data-state="reject"]{--badge:var(--bad);--badge-fg:var(--on-accent)}
@@ -516,10 +528,79 @@ window.__MARGINALIA__ = {{.DataJSON}};
         var was=document.createElement("div"); was.className="was"; was.textContent="was: \u201c"+e.quote+"\u201d";
         item.appendChild(was);
       }
+      renderThread(el, note, item);
       box.appendChild(item);
     });
     el.mg_existing = box;
     attach(el, box);
+  }
+  // A thread: the answers to one note, and the way to add another. A note
+  // without an id cannot be answered — that is a log written before replies
+  // existed, or a reply whose own target is missing — so no affordance is
+  // offered rather than one that would fail on save.
+  function renderThread(el, note, item){
+    (note.replies||[]).forEach(function(r){
+      var thread = item.querySelector(":scope > .thread");
+      if(!thread){ thread=document.createElement("div"); thread.className="thread"; item.appendChild(thread); }
+      var line=document.createElement("div"); line.className="reply";
+      var who=document.createElement("span"); who.className="who";
+      who.textContent=r.event.author || "agent";
+      line.appendChild(who);
+      var body=document.createElement("span"); body.textContent=r.event.text||"";
+      line.appendChild(body);
+      thread.appendChild(line);
+    });
+    if(!note.id || note.dangling) return;
+    var btn=document.createElement("button");
+    btn.type="button"; btn.className="replybtn"; btn.textContent="Reply";
+    btn.setAttribute("aria-expanded","false");
+    btn.addEventListener("click", function(ev){ ev.stopPropagation(); openReply(el, note, item, btn); });
+    item.appendChild(btn);
+  }
+  // openReply is deliberately not the composer: a reply has no vocabulary to
+  // pick from and no fields to fill in — it is the one thing it is, so it is
+  // a box and a button.
+  function openReply(el, note, item, btn){
+    var open = item.querySelector(":scope > .replybox");
+    if(open){ open.remove(); btn.setAttribute("aria-expanded","false"); return; }
+    var box=document.createElement("div"); box.className="replybox";
+    var ta=document.createElement("textarea"); ta.placeholder="Your answer\u2026";
+    var row=document.createElement("div"); row.className="row";
+    var send=document.createElement("button"); send.type="button"; send.className="send"; send.textContent="Reply";
+    var cancel=document.createElement("button"); cancel.type="button"; cancel.textContent="Cancel";
+    function close(){ box.remove(); btn.setAttribute("aria-expanded","false"); }
+    function submit(){
+      var text=ta.value.trim();
+      if(!text){ ta.focus(); return; }
+      saveReply(el, note, text);
+    }
+    send.onclick=submit; cancel.onclick=close;
+    ta.addEventListener("keydown", function(e){
+      if(e.key==="Escape"){ e.preventDefault(); close(); return; }
+      if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); submit(); }
+    });
+    row.appendChild(send); row.appendChild(cancel);
+    box.appendChild(ta); box.appendChild(row);
+    item.appendChild(box);
+    btn.setAttribute("aria-expanded","true");
+    ta.focus();
+  }
+  // A reply lands under the note it answers and nowhere else: it is not the
+  // block's current state, and it must not move a badge or the header count.
+  // What the reviewer said is what those measure.
+  function saveReply(el, note, text){
+    var id=el.dataset.block, blk=blockOf[id]||{};
+    var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:"reply",text:text,reply_to:note.id,author:author};
+    function landed(saved){
+      (note.replies=note.replies||[]).push({event:saved,stale:false,id:saved.id});
+      renderExisting(el);
+      toast("Reply saved");
+    }
+    if(data.static){ landed(keep(ev)); refreshShare(); return; }
+    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
+      .then(landed)
+      .catch(function(err){ toast("Reply failed: "+err.message); });
   }
   // The replacement text a suggest_edit starts from: a markdown block's own
   // text, or — for a tree node — just its declaration line, without the
@@ -542,7 +623,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:action.type,text:text,author:author};
     if(fields && Object.keys(fields).length) ev.fields=fields;
     function landed(saved){
-      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false});
+      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false,id:saved.id});
       marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer();
       toast((labelOf[action.type]||"Note")+" saved");
     }

@@ -43,7 +43,7 @@ users are agents, not humans.
 ## Planned architecture (from PRD §6)
 
 - **Single Go binary**, cobra subcommands: `serve`, `suggestions`, `export`,
-  `import`, `review`, `mcp`, `version`. `suggestions` reads a document and its log from disk (no
+  `import`, `reply`, `review`, `mcp`, `version`. `suggestions` reads a document and its log from disk (no
   server) and splits `suggest_edit` events into applicable and
   needs-confirmation via `feedback.Resolution.Suggestions()`. Applying requires
   all three of: the suggestion is the note that stands for its block, its hash
@@ -52,16 +52,19 @@ users are agents, not humans.
   for editing. The tool never applies anything: *never mutate the source
   document*.
 - `internal/mcpserver` is the agent-facing surface (`marginalia mcp`, stdio):
-  `review_document`, `feedback_since`, `review_status`, `await_review_done`,
-  `close_review`. Three rules hold it together. **Stdout belongs to the
+  `review_document`, `feedback_since`, `review_status`, `reply_to_note`,
+  `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the
   protocol** — that is why `server.Options.Log` exists and why every notice
   goes through `s.logf`; one stray `fmt.Println` corrupts a whole session and
   looks like a broken client. **Reads are disk-backed**, never served from the
   running HTTP server, so they survive the agent's session ending and let any
   number of agents follow one review; the wait polls the log's size+mtime, not
   `/api/revision`, which counts document re-parses and moves for a different
-  reason. **No tool writes to a log**: the log is the human's answers, and
-  `review_done` is the signal the handover exists to produce. `--root` confines
+  reason. **Only `reply_to_note` writes, and it writes one type**: the rest of
+  the log is the human's answers, and `review_done` is the signal the handover
+  exists to produce — an agent that could append one could answer its own
+  question. A reply is legible as the exception it is, because it names the
+  note it answers. `--root` confines
   every path a tool names (relative paths resolve against it), because a tool
   argument can come from text the model read and `.yaml` is a supported input.
 - `internal/session` is the pipeline both callers share — `Build` turns paths
@@ -172,7 +175,30 @@ users are agents, not humans.
   patterns. It is the **only** authority on which event types exist — there is
   deliberately no `feedback.ValidType` any more, because a second list would
   drift. `Config.Validate` and `Config.Locked` run on the server, not just in
-  the page: rendering a rule is not enforcing it.
+  the page: rendering a rule is not enforcing it. `review_done` and `reply` are
+  **protocol**, not vocabulary (`Protocol`, `IsProtocol`, `ValidateProtocol`): a
+  config cannot define them, `Validate` refuses them, and `builtins: false`
+  cannot turn a reply off. A reply also bypasses `Locked` — a readonly pattern
+  added after a thread opened must not strand it.
+- Threaded replies (issue #47): an event may carry `reply_to`, naming another
+  event by `feedback.NoteID` — sha256 of the same tuple `cmd/import.go` already
+  treats as an event's identity, **derived and never stored**, so every log on
+  disk has ids the day it ships and an id survives export/import, which rewrites
+  `Doc`. `Materialize` hangs each reply under the note it answers as a
+  `feedback.Reply` (deliberately not a `Note`: a type that could nest would
+  invite a forum, and the MCP SDK cannot build a schema for a recursive one
+  either), re-rooting a reply to a reply with a depth-bounded walk, and
+  surfacing one that names nothing as a `Dangling` note of its own rather than
+  dropping it. `Resolution.Replies` counts them **separately from `Comments`**:
+  the header count is how much the reviewer said and must not inflate because
+  the agent answered. The server's `check()` gates a reply on the id resolving
+  in *that document's* log (`Server.knows`), `POST /api/feedback` echoes the
+  saved event wearing its `id` (the page has no sha256 it can rely on in every
+  context it runs in), `marginalia reply` and the `reply_to_note` MCP tool are
+  the agent's side, and `import` refuses a reply whose target is in neither the
+  incoming file nor the existing log. `reply_to_note` is the **only** MCP tool
+  that writes, and it writes one type: an agent that could append a `comment` or
+  a `review_done` could answer its own question.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
@@ -249,7 +275,8 @@ one surface and a note from either is the same event.
 `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
-`suggest_edit` (text = replacement), `question`, `approve`, `reject`, plus any
+`suggest_edit` (text = replacement), `question`, `approve`, `reject`, `reply`
+(an answer to another note, carrying `reply_to`), plus any
 action the requesting agent configured (`blocker`, `nit`, …) — an action with
 nothing to fill in is one tap, and one that declares `fields` carries them in
 the event's `fields` map. A **Done**

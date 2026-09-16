@@ -96,6 +96,50 @@ type Field struct {
 // append-only log that other tools read, so it stays boring on purpose.
 var ident = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
+// Protocol event types. These are not review vocabulary: they are how the
+// review itself works, so they are accepted whatever the configured actions
+// are — including with `builtins: false` — and no config may redefine them.
+//
+// `reply` is here rather than in Builtin() for the same reason review_done is:
+// it is not a verdict on a block, it answers another note, and it must not
+// appear as a chip competing with the words the agent asked for.
+const (
+	TypeReviewDone = "review_done"
+	TypeReply      = "reply"
+)
+
+// Protocol lists them, for the server's gate and for the validator.
+func Protocol() []string { return []string{TypeReviewDone, TypeReply} }
+
+// IsProtocol reports whether a type is the review's own machinery.
+func IsProtocol(typ string) bool {
+	for _, t := range Protocol() {
+		if t == typ {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateProtocol checks a protocol event. A reply must say something and
+// must name the note it answers; the caller checks that the name resolves,
+// since only it has the log.
+func ValidateProtocol(typ, text, replyTo string) error {
+	switch typ {
+	case TypeReviewDone:
+		return nil
+	case TypeReply:
+		if strings.TrimSpace(text) == "" {
+			return fmt.Errorf("a reply needs something to say")
+		}
+		if strings.TrimSpace(replyTo) == "" {
+			return fmt.Errorf("a reply must name the note it answers (reply_to)")
+		}
+		return nil
+	}
+	return fmt.Errorf("%q is not a protocol event", typ)
+}
+
 // Builtin actions — the compiled-in vocabulary from M1, kept here so the page
 // and the server read the same list the configured ones join.
 func Builtin() []Action {
@@ -133,9 +177,13 @@ func (c *Config) validate() error {
 	if len(c.Custom) == 0 && !c.keepBuiltins() {
 		return fmt.Errorf("builtins are off but no actions are configured — the reviewer would have nothing to say")
 	}
-	// review_done is the protocol's own event, never a review action: an
-	// action that wrote it would mark the review finished.
-	seenType := map[string]bool{"review_done": true}
+	// The protocol's own events are never review actions: an action that
+	// wrote review_done would mark the review finished, and one that wrote
+	// reply would answer a note rather than judge a block.
+	seenType := map[string]bool{}
+	for _, t := range Protocol() {
+		seenType[t] = true
+	}
 	// A custom action may reuse a built-in word only when the built-ins are
 	// off; otherwise two buttons would write the same type.
 	if c.keepBuiltins() {

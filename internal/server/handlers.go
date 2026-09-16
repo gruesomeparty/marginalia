@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/web"
 )
 
@@ -268,7 +269,19 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusCreated, e)
+	// The reply pointer is a note id, and only the server can derive one — a
+	// page has no sha256 it can rely on in every context it runs in. So the
+	// saved event comes back wearing its id, and the page can offer a reply on
+	// a note the reviewer just wrote.
+	writeJSON(w, http.StatusCreated, saved{Event: e, ID: feedback.NoteID(e)})
+}
+
+// saved is the POSTed event as it is echoed back: the event itself, flattened,
+// plus the id a reply names it by. Embedding keeps the shape a client already
+// parses — the id is an added key, not a new envelope.
+type saved struct {
+	feedback.Event
+	ID string `json:"id"`
 }
 
 // check is the server-side gate on what a page may write. The page renders
@@ -283,6 +296,20 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 		// what require_verdict withholds.
 		return s.checkVerdicts(target)
 	}
+	if review.IsProtocol(e.Type) {
+		if err := review.ValidateProtocol(e.Type, e.Text, e.ReplyTo); err != nil {
+			return http.StatusBadRequest, err
+		}
+		// The note being answered has to exist in *this* document's log.
+		// Rendering a reply box is not enforcing anything.
+		if !s.knows(target, e.ReplyTo) {
+			return http.StatusBadRequest, fmt.Errorf("unknown note %q — nothing in this document's log answers to it", e.ReplyTo)
+		}
+		// A reply is deliberately not blocked by readonly/skip: a pattern
+		// added after the fact must not strand an open thread. Root
+		// vocabulary on those blocks is still refused, below.
+		return http.StatusOK, nil
+	}
 	if err := cfg.Validate(e.Type, e.Text, e.Fields); err != nil {
 		return http.StatusBadRequest, err
 	}
@@ -290,6 +317,20 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 		return http.StatusForbidden, fmt.Errorf("block %s is read-only in this review", e.Block)
 	}
 	return http.StatusOK, nil
+}
+
+// knows reports whether a note with that id is in the document's log.
+func (s *Server) knows(target *Entry, id string) bool {
+	events, err := target.Store.Load()
+	if err != nil {
+		return false
+	}
+	for _, e := range events {
+		if feedback.NoteID(e) == id {
+			return true
+		}
+	}
+	return false
 }
 
 // checkVerdicts enforces require_verdict: the review is not done while a

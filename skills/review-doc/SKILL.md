@@ -27,9 +27,15 @@ calls and you can skip the CLI:
 review is still open. Every read works from the log on disk, so pass `paths`
 instead of `session_id` in a later session and it still works.
 
-No tool writes to the feedback log, by design — it is the human's answers, and
-`review_done` in particular is the one signal the handover exists to produce.
-Apply suggested edits yourself, to the document, never through Marginalia.
+`reply_to_note {doc, note_id, text}` answers one of their notes in place. Use it
+for a `question` — the answer shows under their own note the next time the page
+renders, which beats revising the document and hoping they notice. `note_id`
+comes back with every note from `review_status` and `feedback_since`.
+
+That is the only tool that writes, and it writes one type. The rest of the log
+is the human's answers — `review_done` above all, since it is the one signal the
+handover exists to produce. Apply suggested edits yourself, to the document,
+never through Marginalia.
 
 Everything below is the CLI path: use it when the MCP server is not connected.
 
@@ -281,12 +287,30 @@ back, and apply a `suggest_edit` by replacing that one declaration or value, not
 the file.
 
 Event types: `comment`, `suggest_edit` (the `text` is the proposed replacement),
-`question`, `approve`, `reject` — plus any action you configured, which arrives
+`question`, `approve`, `reject`, `reply` (an answer to another note, naming it
+in `reply_to`) — plus any action you configured, which arrives
 as its own `type` (`blocker`, `nit`) with its structured values in `fields`
 (`{"severity":"high"}`). You asked for that vocabulary, so treat it as binding:
 a `blocker` is not a `comment`. If a `hash` no longer matches the current block
 (the doc changed since the comment), flag the note as **stale** and re-confirm
 with the human before acting.
+
+## 4b. Answer their questions
+
+A `question` is addressed to you. Answer it where they asked it:
+
+```bash
+marginalia reply spec.md                        # the notes, and the ids
+marginalia reply spec.md --to <id> --text "…"   # the answer
+```
+
+(or `reply_to_note` over MCP). The answer is appended like any other event, it
+points at the note it answers, and it changes nothing about that note — the
+question stays the block's state until *they* say otherwise. Answering is not
+resolving.
+
+Do this before you revise, not after: an answer they read in the page is worth
+more than a diff they have to infer it from.
 
 ## 5. Revise and, if needed, re-review
 
