@@ -345,6 +345,13 @@ func TestPathIdentitySurvivesASymlinkedRoot(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Skip("symlinks unavailable here")
 	}
+	// t.TempDir itself sits under a symlink on macOS (/var -> /private/var),
+	// so the expectation has to be resolved too — the first version of this
+	// test had the very bug it exists to catch.
+	resolved, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cs, _ := serveMCP(t, link)
 
 	var started reviewDocumentOut
@@ -352,8 +359,8 @@ func TestPathIdentitySurvivesASymlinkedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	served := started.Docs[0].Doc
-	if served != filepath.Join(real, "spec.md") {
-		t.Fatalf("the tool reported %q, not the resolved path", served)
+	if served != filepath.Join(resolved, "spec.md") {
+		t.Fatalf("the tool reported %q, want the resolved %q", served, filepath.Join(resolved, "spec.md"))
 	}
 	post(t, started.URL, feedback.Event{Doc: served, Block: "1/2", Type: "comment", Text: "one", Author: "t"})
 
