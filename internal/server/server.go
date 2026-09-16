@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +57,13 @@ type Options struct {
 	Port   int
 	Open   bool
 	Watch  bool // re-parse a document when its file changes
+
+	// Log is where the startup notices go. It defaults to stdout, which is
+	// what a person running `serve` expects — but under the MCP server stdout
+	// carries JSON-RPC frames, and one stray banner corrupts the protocol for
+	// the whole session. So the writer is a seam rather than a hardcoded
+	// os.Stdout, and `marginalia mcp` points it at stderr.
+	Log io.Writer
 }
 
 // Server serves the review pages and feedback API.
@@ -74,6 +83,23 @@ type Server struct {
 	// stamps records each document's file as it was when the server was
 	// built, so the watcher's baseline predates anything it should catch.
 	stamps map[string]stamp
+}
+
+// logf and logln are the one way anything in this package talks to the
+// operator, so the destination is decided once, in Options.
+func (s *Server) logf(format string, args ...any) {
+	_, _ = fmt.Fprintf(s.out(), format, args...)
+}
+
+func (s *Server) logln(args ...any) {
+	_, _ = fmt.Fprintln(s.out(), args...)
+}
+
+func (s *Server) out() io.Writer {
+	if s.opts.Log != nil {
+		return s.opts.Log
+	}
+	return os.Stdout
 }
 
 // New builds a Server with routes registered.
@@ -114,6 +140,21 @@ func New(opts Options) *Server {
 }
 
 // Handler exposes the mux for tests.
+// Review is the framing this server runs: the vocabulary the reviewer answers
+// in, and what the requester asked for. Never nil — a plain serve is the
+// default review.
+func (s *Server) Review() *review.Config {
+	if s.opts.Review == nil {
+		return review.Default()
+	}
+	return s.opts.Review
+}
+
+// Entries are the documents being served, in navigation order. Read-only: the
+// parsed document behind each one is swapped by --watch, so anything needing
+// the current parse goes through docOf.
+func (s *Server) Entries() []Entry { return s.docs }
+
 func (s *Server) Handler() http.Handler { return s.mux }
 
 // Run starts the server and blocks until ctx is cancelled.
@@ -171,23 +212,23 @@ func (s *Server) announce(url string) {
 	defer s.announceReview()
 	defer s.announceDiagrams()
 	if s.opts.Watch {
-		defer fmt.Println("marginalia: watching for changes; the page offers a reload when a document moves on")
+		defer s.logln("marginalia: watching for changes; the page offers a reload when a document moves on")
 	}
 	if len(s.docs) == 1 {
-		fmt.Printf("marginalia: serving %s at %s\n", s.docs[0].Doc.Path, url)
-		fmt.Printf("marginalia: feedback → %s\n", s.docs[0].Store.Path())
+		s.logf("marginalia: serving %s at %s\n", s.docs[0].Doc.Path, url)
+		s.logf("marginalia: feedback → %s\n", s.docs[0].Store.Path())
 		return
 	}
-	fmt.Printf("marginalia: serving %d documents at %s\n", len(s.docs), url)
+	s.logf("marginalia: serving %d documents at %s\n", len(s.docs), url)
 	for _, e := range s.docs {
-		fmt.Printf("marginalia:   %s → %s\n", e.Rel, e.Store.Path())
+		s.logf("marginalia:   %s → %s\n", e.Rel, e.Store.Path())
 	}
 	if s.opts.Index != "" {
-		fmt.Printf("marginalia: set curated by %s", s.opts.Index)
+		s.logf("marginalia: set curated by %s", s.opts.Index)
 		if s.opts.Excluded > 0 {
-			fmt.Printf("; %d supported file(s) under %s excluded by it", s.opts.Excluded, s.opts.Root)
+			s.logf("; %d supported file(s) under %s excluded by it", s.opts.Excluded, s.opts.Root)
 		}
-		fmt.Println()
+		s.logln()
 	}
 }
 
@@ -232,15 +273,15 @@ func (s *Server) strayNotes() []string {
 func (s *Server) announceDiagrams() {
 	if !s.opts.Diagrams.Available() {
 		if s.hasDiagrams() {
-			fmt.Println("marginalia: mermaid diagrams render as anchored source — install @mermaid-js/mermaid-cli (mmdc) for pictures")
+			s.logln("marginalia: mermaid diagrams render as anchored source — install @mermaid-js/mermaid-cli (mmdc) for pictures")
 		}
 		return
 	}
 	if s.drawn > 0 {
-		fmt.Printf("marginalia: %d diagram(s) drawn\n", s.drawn)
+		s.logf("marginalia: %d diagram(s) drawn\n", s.drawn)
 	}
 	if s.drawErr != nil {
-		fmt.Printf("marginalia: a diagram could not be drawn, showing its source: %v\n", s.drawErr)
+		s.logf("marginalia: a diagram could not be drawn, showing its source: %v\n", s.drawErr)
 	}
 }
 
@@ -269,23 +310,23 @@ func (s *Server) announceReview() {
 	for _, a := range cfg.Actions() {
 		says = append(says, a.Type)
 	}
-	fmt.Printf("marginalia: review actions: %s\n", strings.Join(says, ", "))
+	s.logf("marginalia: review actions: %s\n", strings.Join(says, ", "))
 	if len(cfg.ReadOnly) > 0 {
-		fmt.Printf("marginalia: read-only: %s\n", strings.Join(cfg.ReadOnly, ", "))
+		s.logf("marginalia: read-only: %s\n", strings.Join(cfg.ReadOnly, ", "))
 	}
 	if len(cfg.Skip) > 0 {
-		fmt.Printf("marginalia: skipped: %s\n", strings.Join(cfg.Skip, ", "))
+		s.logf("marginalia: skipped: %s\n", strings.Join(cfg.Skip, ", "))
 	}
 	if n := len(cfg.Notes); n > 0 {
-		fmt.Printf("marginalia: %d note(s) from the requester on the page\n", n)
+		s.logf("marginalia: %d note(s) from the requester on the page\n", n)
 	}
 	// A note that names a document this server does not serve would render
 	// nowhere at all. Say so: silently dropping the agent's own question is
 	// the one outcome worse than a wrong anchor.
 	for _, name := range s.strayNotes() {
-		fmt.Printf("marginalia: note for %q — no such document in this review\n", name)
+		s.logf("marginalia: note for %q — no such document in this review\n", name)
 	}
 	if cfg.RequireVerdict {
-		fmt.Println("marginalia: every block needs a verdict before the review can be marked done")
+		s.logln("marginalia: every block needs a verdict before the review can be marked done")
 	}
 }

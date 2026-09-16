@@ -9,6 +9,30 @@ Once the marginalia plugin is installed, a human or agent can trigger this
 workflow with `/marginalia:review-doc <path>`. This skill is the workflow
 itself — follow it whether you were invoked that way or reached it directly.
 
+## If the marginalia MCP server is connected, use it
+
+Check your tools for `review_document`. If it is there, the whole loop is tool
+calls and you can skip the CLI:
+
+1. `review_document {paths, review}` — serves the document and returns the URL
+   to give the human, plus the action vocabulary you will read back.
+2. Give the human that URL and say what you want looked at.
+3. `await_review_done {session_id}` — blocks until they press Done. A timeout
+   is not a failure: it returns `done: false`, so tell the human you are still
+   waiting and call again rather than treating it as an error.
+4. `review_status {session_id}` — per-block state, what went stale, and the
+   suggested edits that are safe to apply verbatim.
+
+`feedback_since {cursor}` reads incrementally if you want to react while the
+review is still open. Every read works from the log on disk, so pass `paths`
+instead of `session_id` in a later session and it still works.
+
+No tool writes to the feedback log, by design — it is the human's answers, and
+`review_done` in particular is the one signal the handover exists to produce.
+Apply suggested edits yourself, to the document, never through Marginalia.
+
+Everything below is the CLI path: use it when the MCP server is not connected.
+
 ## Preflight: ensure the binary exists
 
 Run `marginalia version`. If it is not found, install it:
