@@ -16,6 +16,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
+          # The action's cache key does not include the module graph, so a
+          # dependency change restores analysis facts computed against the old
+          # one — which surfaced as six phantom staticcheck SA5011 findings in
+          # test files that plainly use t.Fatal, none of which the same binary
+          # reproduces on a clean run. The job takes twelve seconds; a lint
+          # result you can trust is worth more than the cache.
+          skip-cache: true
   test:
     strategy:
       fail-fast: false
