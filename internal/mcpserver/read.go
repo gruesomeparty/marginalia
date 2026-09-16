@@ -68,6 +68,32 @@ func (s *Server) docsOf(sessionID string, paths []string) ([]string, error) {
 	return out, nil
 }
 
+// normalizeCursor re-keys a caller's cursor to the paths this server actually
+// serves.
+//
+// The two spellings are not hypothetical: on macOS /var is a symlink to
+// /private/var, so a caller that passes "spec.md" under a temp root holds a
+// different string than the resolved one the tools hand back. Keyed naively,
+// its cursor would match nothing and every call would re-deliver the whole log
+// — silently, which is the worst way for a cursor to fail.
+func (s *Server) normalizeCursor(cursor map[string]int) map[string]int {
+	if len(cursor) == 0 {
+		return cursor
+	}
+	out := make(map[string]int, len(cursor))
+	for key, at := range cursor {
+		resolved, err := s.confine([]string{key})
+		if err != nil || len(resolved) != 1 {
+			// Not a path this server would serve; keep it as given rather
+			// than dropping it, so the mismatch is visible in the result.
+			out[key] = at
+			continue
+		}
+		out[resolved[0]] = at
+	}
+	return out
+}
+
 // eventsSince reads one document's log from the cursor on.
 func eventsSince(path string, cursor int) (DocEvents, error) {
 	events, err := feedback.NewStore(path).Load()

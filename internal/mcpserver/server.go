@@ -192,7 +192,7 @@ func (s *Server) feedbackSince(_ context.Context, _ *mcp.CallToolRequest, in rea
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
-	out, _, err := readAll(docs, in.Cursor)
+	out, _, err := readAll(docs, s.normalizeCursor(in.Cursor))
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
@@ -213,7 +213,7 @@ func (s *Server) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
-	done, reason, events, err := waitForDone(ctx, docs, in.Cursor, time.Duration(in.TimeoutSeconds)*time.Second)
+	done, reason, events, err := waitForDone(ctx, docs, s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
