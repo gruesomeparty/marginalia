@@ -26,10 +26,13 @@ type thread struct {
 	Stale  bool   `json:"stale"`
 	// Status is where the note stands in the revision loop, and Unclaimed
 	// flags an `addressed` the document does not bear out.
-	Status    string   `json:"status"`
-	Unclaimed bool     `json:"unclaimed,omitempty"`
-	Replies   []string `json:"replies"`
-	Progress  []string `json:"progress,omitempty"`
+	Status    string `json:"status"`
+	Unclaimed bool   `json:"unclaimed,omitempty"`
+	// Sub is the sentence the note is about, when it is about less than the
+	// whole block. An agent should quote this back rather than the block.
+	Sub      string   `json:"sub,omitempty"`
+	Replies  []string `json:"replies"`
+	Progress []string `json:"progress,omitempty"`
 }
 
 func newReplyCmd() *cobra.Command {
@@ -89,7 +92,7 @@ func threadsOf(doc string) ([]thread, error) {
 			t := thread{
 				ID: n.ID, Block: st.Block, Type: n.Event.Type, Text: n.Event.Text,
 				Author: n.Event.Author, Ts: n.Event.Ts, Stale: n.Stale,
-				Status: n.Status, Unclaimed: n.Unclaimed,
+				Status: n.Status, Unclaimed: n.Unclaimed, Sub: subQuote(n),
 				Replies: make([]string, 0, len(n.Replies)),
 			}
 			for _, r := range n.Replies {
@@ -113,6 +116,14 @@ func threadsOf(doc string) ([]thread, error) {
 	return append(open, answered...), nil
 }
 
+// subQuote is the sentence a note is about, or empty for a whole-block note.
+func subQuote(n feedback.Note) string {
+	if n.Event.Sub == nil {
+		return ""
+	}
+	return n.Event.Sub.Quote
+}
+
 func listThreads(w io.Writer, doc string, asJSON bool) error {
 	threads, err := threadsOf(doc)
 	if err != nil {
@@ -133,8 +144,20 @@ func listThreads(w io.Writer, doc string, asJSON bool) error {
 	var b strings.Builder
 	for _, t := range threads {
 		fmt.Fprintf(&b, "%s  %s  %s  [%s]", t.ID, t.Block, t.Type, t.Status)
+		if t.Sub != "" {
+			// Which sentence, so the agent acts on that one rather than the
+			// paragraph around it.
+			fmt.Fprintf(&b, "  on \u201c%s\u201d", t.Sub)
+		}
 		if t.Stale {
-			b.WriteString("  (stale — block edited since)")
+			// Same rule as the page: name the thing that moved. For a note
+			// about one sentence, "the block was edited" is true of almost
+			// any edit and says nothing.
+			if t.Sub != "" {
+				b.WriteString("  (stale — this sentence was edited)")
+			} else {
+				b.WriteString("  (stale — block edited since)")
+			}
 		}
 		b.WriteString("\n")
 		if t.Text != "" {
@@ -147,7 +170,11 @@ func listThreads(w io.Writer, doc string, asJSON bool) error {
 			fmt.Fprintf(&b, "    · %s\n", pr)
 		}
 		if t.Unclaimed {
-			b.WriteString("    ⚠ marked addressed, but the block has not changed since\n")
+			what := "block"
+			if t.Sub != "" {
+				what = "sentence"
+			}
+			fmt.Fprintf(&b, "    ⚠ marked addressed, but the %s has not changed since\n", what)
 		}
 	}
 	_, err = io.WriteString(w, b.String())
