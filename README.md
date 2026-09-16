@@ -128,10 +128,20 @@ them is much better.
 
 ### MCP (preferred)
 
+**Installed as a Claude plugin, this is already done** — the plugin declares the
+server, so the tools are there as soon as the `marginalia` binary is on `PATH`.
+If the tools are missing, that binary is the thing to check: a server that
+cannot start looks exactly like one nobody configured.
+
+For any other MCP client:
+
 ```jsonc
 // in your MCP client's config
-{ "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp", "--root", "."] } } }
+{ "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp"] } } }
 ```
+
+Add `"--root", "<dir>"` to confine it somewhere other than the working
+directory; `MARGINALIA_MCP_ROOT` does the same without a flag.
 
 | Tool | What it does |
 |---|---|

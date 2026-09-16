@@ -1,8 +1,14 @@
 {
   "name": "marginalia",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hand an agent-authored document to a human for block-anchored review; feedback returns as structured JSONL events.",
   "author": { "name": "gruesomeparty" },
   "homepage": "https://github.com/gruesomeparty/marginalia",
-  "keywords": ["review", "feedback", "annotation", "markdown", "proto", "json", "yaml", "toml", "mermaid", "mcp"]
+  "keywords": ["review", "feedback", "annotation", "markdown", "proto", "json", "yaml", "toml", "mermaid", "mcp"],
+  "mcpServers": {
+    "marginalia": {
+      "command": "marginalia",
+      "args": ["mcp"]
+    }
+  }
 }

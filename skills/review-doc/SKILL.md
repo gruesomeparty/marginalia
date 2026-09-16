@@ -12,7 +12,21 @@ itself — follow it whether you were invoked that way or reached it directly.
 ## If the marginalia MCP server is connected, use it
 
 Check your tools for `review_document`. If it is there, the whole loop is tool
-calls and you can skip the CLI:
+calls and you can skip the CLI.
+
+**If it is not there, that is worth ten seconds before you fall back.** The
+plugin declares the server, so it should be. Almost always the cause is that
+the `marginalia` binary is not on `PATH` — the server cannot start, and a
+server that cannot start is indistinguishable from one nobody configured:
+
+```bash
+marginalia version        # not found? install it (see Preflight below)
+```
+
+Install it, then start a new session so the server is launched. Falling back to
+the CLI is correct and everything below works — but it is the slower path, and
+telling the human "no MCP server, using the CLI" without saying *why* leaves
+them unable to fix it. Say which of the two it was.
 
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
@@ -44,7 +58,8 @@ decorative. The rest of the log is theirs — `review_done` above all, since it 
 the one signal the handover exists to produce. Apply suggested edits yourself,
 to the document, never through Marginalia.
 
-Everything below is the CLI path: use it when the MCP server is not connected.
+Everything below is the CLI path: use it when the MCP server is not connected
+and you could not get it connected.
 
 ## Preflight: ensure the binary exists
 
