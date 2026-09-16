@@ -43,6 +43,7 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
 | **Drawn diagrams** | With mermaid's CLI installed, a flowchart renders as a picture whose shapes carry the same anchors as the source. Click the arrow, comment on that edge. |
 | **Framed reviews** | The requesting agent sets the instructions, the vocabulary (`blocker`, `nit`, …), structured fields, and which blocks are off-limits. Enforced server-side, not just rendered. |
 | **Four shipped framings** | `adr`, `schema`, `security`, `copy` — so the same review compares across runs instead of getting a fresh vocabulary each time. |
+| **Sentence-level notes** | Select a sentence in a paragraph and comment on *that*. The note survives unrelated edits around it and goes honestly stale when its own sentence changes. |
 | **Threads** | A reviewer's question gets an answer, in place, under their own note. |
 | **A revision loop** | The agent records *which note* a change answered; the reviewer confirms or reopens. The claim is checkable against the block's hash. |
 | **Long-document flow** | Progress as answered-of-commentable, keyboard movement between unanswered blocks, filters, and a Done button that names what is missing. |
@@ -198,6 +199,11 @@ You get a page. Click a block, pick a verdict, done.
   vocabulary. That is why the arrows exist: a configured key is a single
   character, so `ArrowDown` can never be taken.
 
+- **Comment on a sentence, not the paragraph.** Select text inside a block and
+  an offer appears; take it and the note is about that sentence, which the page
+  marks in the prose. Ignore it and selecting text is exactly what it always
+  was — you can still copy a quote out, and clicking a block still comments on
+  the block.
 - **Progress that means something.** The header reads *answered of
   commentable*, not a raw comment count, because only that ratio says how much
   is left:
@@ -356,6 +362,14 @@ a strict CSP, and the drawing takes the reviewer's theme and light/dark.
 
 A diagram type the parser does not take apart — a sequence diagram, say — stays
 reviewable as one source block rather than failing.
+
+### Where sentence-level notes apply
+
+Deliberately narrow: markdown prose. A tree node and a diagram statement are
+already fine-grained, and inside a code fence the rendered text and the block's
+plain text can differ — so the page simply does not offer there, and a note on
+the whole block is what you get. That is better than an anchor nothing can
+resolve.
 
 ### Code in a document
 
@@ -587,9 +601,36 @@ in the served set — a stale page must not be able to append elsewhere.
   "fields": {"severity": "high"},
   "author": "berkay",
   "ts": "2026-09-16T08:11:15Z",
-  "reply_to": "8f2a1c4b9de0" // on reply/addressed/confirm/reopen: the note this is about
+  "reply_to": "8f2a1c4b9de0", // on reply/addressed/confirm/reopen: the note this is about
+  "sub": {                    // present only when the note is about one sentence
+    "quote": "Retries use no backoff.",
+    "prefix": "The cap is 500. ",
+    "suffix": " Failures go to the log.",
+    "start": 16,
+    "hash": "c814be3e3d44"
+  }
 }
 ```
+
+**Sub-anchors are a field, never a longer block id.** A sub-block id
+(`5.3/2#1`, say) would be accepted by every consumer that already reads
+`block`, and would silently mean something different to each of them. An event
+with a `sub` still names its block exactly as before, so a reader that knows
+nothing about this sees an ordinary note on the paragraph — which is where it
+is, just less precisely.
+
+Re-location is by **quote plus surrounding context**, the selectors the W3C
+annotation model settled on for the same problem. An offset alone would always
+"find" something, which is the failure mode worth avoiding: a note that
+silently re-anchors to a neighbouring sentence is worse than one that admits it
+is stale. So a sub-anchored note is judged by whether **its own sentence** is
+still there, not by whether the paragraph changed — otherwise the feature would
+be worthless on any paragraph anyone edits.
+
+The page sends only the quote; the server derives the context and the offset
+against its own copy of the block, so the two cannot disagree about text the
+reviewer is looking at. A quote the block does not contain is refused rather
+than stored as an anchor nothing could ever resolve.
 
 **Types.** `comment`, `suggest_edit` (the `text` is the replacement),
 `question`, `approve`, `reject`, plus any action the requesting agent
@@ -643,7 +684,6 @@ Honest limitations of what is on `main` today. Each links to where it is tracked
 | **No authentication or provenance** ([#54](https://github.com/gruesomeparty/marginalia/issues/54)) | Anyone who can reach the URL can write to the log, and `author` is whatever the client says. Bind to loopback or a Tailscale interface; do not put a review on an untrusted network. |
 | **One reviewer at a time** ([#53](https://github.com/gruesomeparty/marginalia/issues/53)) | Two people on the same document both write to one log with no identity and no conflict story. |
 | **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. |
-| **Notes anchor to a block, not a sentence** ([#49](https://github.com/gruesomeparty/marginalia/issues/49)) | On a long paragraph you comment on the paragraph. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, though the phone is a stated goal. |
 | **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
 | **No blocking handoff from the CLI** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | MCP has `await_review_done`. There is no `serve --until-done`, no long-poll endpoint, and no outbound notification. |
@@ -668,6 +708,8 @@ They are a stack — each based on the one before — so they land in order.
 | [#59](https://github.com/gruesomeparty/marginalia/pull/59) | [#47](https://github.com/gruesomeparty/marginalia/issues/47) | Threaded replies |
 | [#61](https://github.com/gruesomeparty/marginalia/pull/61) | [#48](https://github.com/gruesomeparty/marginalia/issues/48) | The revision loop |
 | [#62](https://github.com/gruesomeparty/marginalia/pull/62) | [#46](https://github.com/gruesomeparty/marginalia/issues/46) | Long-document flow |
+| [#63](https://github.com/gruesomeparty/marginalia/pull/63) | — | This README |
+| [#64](https://github.com/gruesomeparty/marginalia/pull/64) | [#49](https://github.com/gruesomeparty/marginalia/issues/49) | Sentence-level notes |
 
 Much of what this README documents lives in that stack rather than on `main`.
 
@@ -678,9 +720,9 @@ Much of what this README documents lives in that stack rather than on `main`.
 The [tracker](https://github.com/gruesomeparty/marginalia/issues) is the
 roadmap; every milestone in the PRD's build order has shipped.
 
-**Next:** sub-block anchoring ([#49](https://github.com/gruesomeparty/marginalia/issues/49)),
-then browser tests for the page
-([#60](https://github.com/gruesomeparty/marginalia/issues/60)).
+**Next:** browser tests for the page
+([#60](https://github.com/gruesomeparty/marginalia/issues/60)) — the largest
+gap, and the one every recent change has widened.
 
 **After that**, roughly by weight: more reviewable inputs
 ([#52](https://github.com/gruesomeparty/marginalia/issues/52),

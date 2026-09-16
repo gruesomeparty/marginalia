@@ -78,13 +78,11 @@ func threadsOf(doc string) ([]thread, error) {
 	if err != nil {
 		return nil, err
 	}
-	hashes := make(map[string]string, len(parsed.Blocks))
-	order := make([]string, 0, len(parsed.Blocks))
+	blocks := make([]feedback.Block, 0, len(parsed.Blocks))
 	for _, b := range parsed.Blocks {
-		hashes[b.ID] = b.Hash
-		order = append(order, b.ID)
+		blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 	}
-	res := feedback.Materialize(events, hashes, order)
+	res := feedback.Materialize(events, blocks)
 	var open, answered []thread
 	for _, st := range res.States {
 		for _, n := range st.History {

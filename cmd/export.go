@@ -96,13 +96,11 @@ func buildExport(paths []string, opts exportOptions) (path string, page []byte, 
 // resolutionOf materializes a log against the document as it now reads, so a
 // shared page carries the same second-pass view the server would show.
 func resolutionOf(doc *document.Document, events []feedback.Event) feedback.Resolution {
-	hashes := make(map[string]string, len(doc.Blocks))
-	order := make([]string, 0, len(doc.Blocks))
+	blocks := make([]feedback.Block, 0, len(doc.Blocks))
 	for _, b := range doc.Blocks {
-		hashes[b.ID] = b.Hash
-		order = append(order, b.ID)
+		blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 	}
-	return feedback.Materialize(events, hashes, order)
+	return feedback.Materialize(events, blocks)
 }
 
 func newExportCmd() *cobra.Command {

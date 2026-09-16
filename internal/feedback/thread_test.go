@@ -10,7 +10,7 @@ func ev(block, typ, text, author, ts string) Event {
 }
 
 func materialize(events []Event) Resolution {
-	return Materialize(events, map[string]string{"1/1": "h1", "1/2": "h1"}, []string{"1/1", "1/2"})
+	return Materialize(events, blocksFrom(map[string]string{"1/1": "h1", "1/2": "h1"}, []string{"1/1", "1/2"}))
 }
 
 // The case the feature exists for: a human asks, the agent answers, and the

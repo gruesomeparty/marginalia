@@ -112,6 +112,15 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 .outstanding .list button:hover{border-color:var(--accent);color:var(--accent)}
 .outstanding .list .id{font-family:var(--mono);color:var(--muted);margin-right:.5rem}
 .outstanding>button{font:inherit;padding:.3rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+/* A note about one sentence. The mark is the quote as it now reads — found
+   again by the server, never an offset we hope still points somewhere. */
+.block mark.mg-sub{background:color-mix(in srgb,var(--marker) var(--tint),transparent);color:inherit;border-radius:var(--r-tab);padding:0 .05em;box-shadow:0 1px 0 var(--marker)}
+.block mark.mg-sub.on{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);box-shadow:0 1px 0 var(--accent)}
+.existing .item .quoted{margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--marker);color:var(--muted);font-style:italic}
+/* The offer to comment on a selection, floating where the selection is. It is
+   a button and not a hijacked mouseup, so selecting text to copy it stays
+   exactly what it always was. */
+.selbtn{position:absolute;z-index:30;font:inherit;font-family:var(--sans);font-size:var(--fs-sm);padding:.25rem .7rem;border:1px solid var(--accent);border-radius:var(--r-pill);background:var(--accent);color:var(--on-accent);cursor:pointer;box-shadow:var(--shadow);white-space:nowrap}
 /* An inline block a filter would have hidden: it stays where the author put
    it and recedes, because removing a bullet renumbers the list around it. */
 .block.dimmed{opacity:.35}
@@ -617,8 +626,24 @@ window.__MARGINALIA__ = {{.DataJSON}};
       item.appendChild(t);
       if(note.stale){
         item.classList.add("stale");
-        var tag=document.createElement("span"); tag.className="tag"; tag.textContent="stale — block edited since";
+        var tag=document.createElement("span"); tag.className="tag";
+        // Say which thing moved. For a note about one sentence, "the block
+        // changed" is true of almost every edit and tells the reader nothing;
+        // what makes this note stale is that its own sentence is gone.
+        tag.textContent = e.sub ? "stale — this sentence was edited" : "stale — block edited since";
         item.appendChild(tag);
+      }
+      // What the note is about, when it is about one sentence rather than the
+      // block. Shown even when stale — especially then, since "the text this
+      // was written against" is exactly what the reader needs.
+      if(e.sub && e.sub.quote){
+        var on=document.createElement("div"); on.className="quoted";
+        on.textContent="\u201c"+e.sub.quote+"\u201d";
+        item.appendChild(on);
+        if(note.at){
+          item.addEventListener("mouseenter", function(){ lightSub(el, note.at, true); });
+          item.addEventListener("mouseleave", function(){ lightSub(el, note.at, false); });
+        }
       }
       var body=document.createElement("div"); body.textContent=e.text||"";
       item.appendChild(body);
@@ -794,13 +819,16 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // share mode there is no server to append to, so the browser is the store
   // and the reviewer hands the result over themselves — the one place in
   // Marginalia where a human has to copy something.
-  function save(el, action, text, fields){
+  function save(el, action, text, fields, selection){
     var id=el.dataset.block, blk=blockOf[id]||{};
     var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:action.type,text:text,author:author};
     if(fields && Object.keys(fields).length) ev.fields=fields;
+    // Only the quote. The server derives the rest against its own copy of the
+    // block, which is the copy it will search when the note is read back.
+    if(selection) ev.sub={quote:selection};
     function landed(saved){
-      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false,id:saved.id,status:"outstanding"});
-      marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer();
+      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false,id:saved.id,at:saved.at,status:"outstanding"});
+      marker(el); renderExisting(el); markSub(el); count(); bumpCurrentCount(); closeComposer();
       toast((labelOf[action.type]||"Note")+" saved");
     }
     if(data.static){ landed(keep(ev)); refreshShare(); return; }
@@ -832,11 +860,17 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // openComposer offers the review's vocabulary for one block. want is the
   // action to start on — a keyboard shortcut that needs words arrives here
   // with the action already chosen.
-  function openComposer(el, want){
+  function openComposer(el, want, selection){
     closeComposer();
     var id=el.dataset.block, current=want||actions[0];
     if(!current) return;
     var c=document.createElement("div"); c.className="composer";
+    // What the note is about, when it is about less than the whole block.
+    if(selection){
+      var on=document.createElement("div"); on.className="quoted";
+      on.textContent="\u201c"+selection+"\u201d";
+      c.appendChild(on);
+    }
     var chips=document.createElement("div"); chips.className="chips";
     var fieldBox=document.createElement("div"); fieldBox.className="fields";
     var ta=document.createElement("textarea"); ta.placeholder="Your note…";
@@ -882,7 +916,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         // An action with nothing to fill in saves on the tap — unless the
         // reviewer has started writing, in which case they want their words
         // kept and the tap only picks the type.
-        if(!needsInput(a) && !ta.value.trim()){ save(el, a, "", {}); return; }
+        if(!needsInput(a) && !ta.value.trim()){ save(el, a, "", {}, selection); return; }
         select(a);
       };
       chips.appendChild(b);
@@ -900,7 +934,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         if(f.required && !v && !missing) missing=inputs[f.name];
       });
       if(missing){ missing.focus(); return; }
-      save(el, current, text, fields);
+      save(el, current, text, fields, selection);
     };
     row.appendChild(saveBtn); row.appendChild(cancel);
     c.appendChild(chips); c.appendChild(fieldBox); c.appendChild(ta); c.appendChild(row);
@@ -908,6 +942,142 @@ window.__MARGINALIA__ = {{.DataJSON}};
     renderFields();
     attach(el, c); ta.focus();
   }
+  // --- commenting on a sentence -------------------------------------------
+  //
+  // The smallest thing you could comment on was a block, so "this sentence
+  // contradicts §4" arrived attached to six sentences. A selection now carries
+  // a sub-anchor: the quote, and enough of what surrounds it to find again.
+  //
+  // Two rules the implementation is shaped by. Selecting text must keep
+  // working — you copy quotes out of documents — so nothing is hijacked on
+  // mouseup; an offer appears and you take it or ignore it. And the page never
+  // computes the anchor: it sends the quote, and the server derives the rest
+  // against its own copy of the block, so the two cannot disagree about text
+  // the reviewer is looking at.
+  var selBtn = null, pending = null;
+  function clearSelOffer(){
+    if(selBtn){ selBtn.remove(); selBtn = null; }
+    pending = null;
+  }
+  // A selection is anchorable when it sits inside exactly one block, that
+  // block is commentable, and the text it selected is actually in the block's
+  // own plain text — which is what the server will search. When the rendering
+  // and the plain text disagree (a fence, a tree node) we simply do not offer:
+  // a note on the whole block is better than an anchor nothing can resolve.
+  function anchorable(sel){
+    if(!sel || sel.isCollapsed) return null;
+    var text = sel.toString().replace(/\s+/g, " ").trim();
+    if(text.length < 3) return null;
+    var node = sel.anchorNode, el = node && (node.nodeType === 1 ? node : node.parentElement);
+    el = el && el.closest && el.closest(".block");
+    if(!el) return null;
+    // The whole selection has to be in that one block.
+    var end = sel.focusNode, endEl = end && (end.nodeType === 1 ? end : end.parentElement);
+    if(!endEl || !endEl.closest || endEl.closest(".block") !== el) return null;
+    if(el.closest("pre") || isTree) return null;
+    var b = blockOf[el.dataset.block];
+    if(!b || b.readonly) return null;
+    if((b.text || "").replace(/\s+/g, " ").indexOf(text) < 0) return null;
+    return {el: el, text: text};
+  }
+  function offerSelection(){
+    var sel = window.getSelection();
+    var found = anchorable(sel);
+    if(!found){ clearSelOffer(); return; }
+    var rect = sel.getRangeAt(0).getBoundingClientRect();
+    if(!rect.width && !rect.height){ clearSelOffer(); return; }
+    if(!selBtn){
+      selBtn = document.createElement("button");
+      selBtn.type = "button"; selBtn.className = "selbtn";
+      selBtn.textContent = "Comment on selection";
+      // mousedown, not click: by the time click fires the selection is gone.
+      selBtn.addEventListener("mousedown", function(e){
+        e.preventDefault(); e.stopPropagation();
+        var f = pending;
+        clearSelOffer();
+        if(f) openComposer(f.el, null, f.text);
+      });
+      document.body.appendChild(selBtn);
+    }
+    pending = found;
+    selBtn.style.top  = (window.scrollY + rect.bottom + 6) + "px";
+    selBtn.style.left = (window.scrollX + rect.left) + "px";
+  }
+  document.addEventListener("selectionchange", function(){
+    // Debounced to the frame, because selectionchange fires per character
+    // while dragging.
+    if(offerSelection.queued) return;
+    offerSelection.queued = true;
+    requestAnimationFrame(function(){ offerSelection.queued = false; offerSelection(); });
+  });
+  document.addEventListener("scroll", clearSelOffer, true);
+
+  // markSub paints each located sub-anchor onto the rendered block, by walking
+  // its text nodes to the offsets the server resolved. Rendering is left
+  // alone otherwise: the marks are added after the fact and removed before
+  // they are recomputed, so nothing accumulates.
+  function markSub(el){
+    Array.prototype.forEach.call(el.querySelectorAll("mark.mg-sub"), function(m){
+      var parent = m.parentNode;
+      while(m.firstChild) parent.insertBefore(m.firstChild, m);
+      parent.removeChild(m);
+      parent.normalize();
+    });
+    var list = (byBlock[el.dataset.block] || []).filter(function(n){ return n.at && !n.stale; });
+    if(!list.length) return;
+    // Later marks first, so painting one does not shift the offsets of the
+    // ones before it.
+    list.slice().sort(function(a, b){ return b.at.start - a.at.start; }).forEach(function(n){
+      paint(el, n.at.start, n.at.end);
+    });
+  }
+  // paint wraps the rune range [start,end) of el's visible text in a <mark>.
+  // Offsets are counted the way the server counts them — over whitespace-
+  // normalized text — so runs of spaces and newlines in the markup do not
+  // shift the answer.
+  function paint(el, start, end){
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        // Notes rendered inside the block (a list item's box) are not part of
+        // the document's text and must not be counted or marked.
+        return n.parentElement && n.parentElement.closest(".existing,.composer,.selbtn")
+          ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var seen = 0, node, first = null, firstOff = 0, last = null, lastOff = 0;
+    while((node = walker.nextNode())){
+      var raw = node.nodeValue, i = 0;
+      while(i < raw.length){
+        var isSpace = /\s/.test(raw[i]);
+        // Collapse a run of whitespace to the single space the server saw.
+        if(isSpace){
+          var j = i; while(j < raw.length && /\s/.test(raw[j])) j++;
+          if(seen > 0 && seen < end){
+            if(seen === start && !first){ first = node; firstOff = i; }
+            seen++;
+          }
+          i = j;
+          continue;
+        }
+        if(seen === start && !first){ first = node; firstOff = i; }
+        seen++;
+        i++;
+        if(seen === end){ last = node; lastOff = i; break; }
+      }
+      if(last) break;
+    }
+    if(!first || !last) return;
+    try{
+      var range = document.createRange();
+      range.setStart(first, firstOff);
+      range.setEnd(last, lastOff);
+      var mark = document.createElement("mark");
+      mark.className = "mg-sub";
+      mark.dataset.start = String(start);
+      range.surroundContents(mark);
+    }catch(e){ /* the range crosses an element boundary — leave it unmarked */ }
+  }
+
   // --- the shape of the review -------------------------------------------
   //
   // A sixty-block document is a queue, not a page. These four things make it
@@ -1110,6 +1280,13 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(close) close.onclick = function(){ document.getElementById("outstanding").hidden = true; };
   })();
 
+  // Hovering a note lights the sentence it is about, so a paragraph with
+  // three notes is readable rather than a guessing game.
+  function lightSub(el, at, on){
+    Array.prototype.forEach.call(el.querySelectorAll("mark.mg-sub"), function(m){
+      m.classList.toggle("on", on && m.dataset.start === String(at.start));
+    });
+  }
   var isTree = document.getElementById("doc").classList.contains("tree");
   var elOf = {};
 
@@ -1172,7 +1349,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
   Array.prototype.forEach.call(document.querySelectorAll(".block"), function(el){
     elOf[el.dataset.block] = el;
     if(isTree) decorateTree(el);
-    marker(el); renderExisting(el);
+    marker(el); renderExisting(el); markSub(el);
     // A block the agent handed over read-only is context, not a question: it
     // reads normally, keeps any notes already written against it, and opens
     // nothing. The server refuses events for it too — this is the courtesy,
@@ -1192,6 +1369,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
     el.addEventListener("click", function(e){
       if(e.target.closest(".composer,.existing,.caret")) return;
       if(e.target.closest(".block") !== el) return;
+      // Finishing a drag-select is not a click on the block. Without this,
+      // selecting a sentence would open a composer about the paragraph and
+      // throw the selection away — which is how "comment on a sentence" would
+      // have cost "select a sentence".
+      var sel = window.getSelection();
+      if(sel && !sel.isCollapsed && sel.toString().trim()) return;
       openComposer(el);
     });
     el.addEventListener("keydown", function(e){

@@ -55,6 +55,11 @@ type Note struct {
 	// import, or a hand-edited file. It is surfaced as a note of its own
 	// rather than dropped, for the same reason an orphan is.
 	Dangling bool `json:"dangling,omitempty"`
+	// At is where a sub-anchored note's quote sits in the block as it now
+	// reads, so the page can mark it without searching again. Nil when the
+	// note is about the whole block, or when its quote is gone — and a note
+	// whose quote is gone is stale, which is how the reader hears about it.
+	At *Located `json:"at,omitempty"`
 }
 
 // Where a note stands in the revision loop.
@@ -129,13 +134,33 @@ type Resolution struct {
 	Done      bool `json:"done"`
 }
 
-// Materialize replays a log against a document's current blocks. hashes maps
-// each block ID to its current content hash and order lists the blocks in
-// document order; a note whose block appears in neither is **orphaned** — the
-// text it was written against is gone, so it is surfaced at the end rather
-// than silently dropped, which is the whole point of anchoring by hash.
-func Materialize(events []Event, hashes map[string]string, order []string) Resolution {
+// Block is one block of the document as it now reads: what Materialize needs
+// in order to replay a log against it.
+//
+// This replaced a parallel `hashes map[string]string` and `order []string`,
+// which every caller built from the same loop and which could disagree with
+// each other. Text is here because a sub-anchor re-locates by what it quoted,
+// not by the block's hash.
+type Block struct {
+	ID   string
+	Hash string
+	Text string
+}
+
+// Materialize replays a log against a document's current blocks, in document
+// order. A note whose block is not among them is **orphaned** — the text it
+// was written against is gone, so it is surfaced at the end rather than
+// silently dropped, which is the whole point of anchoring by hash.
+func Materialize(events []Event, blocks []Block) Resolution {
 	var res Resolution
+	hashes := make(map[string]string, len(blocks))
+	texts := make(map[string]string, len(blocks))
+	order := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		hashes[b.ID] = b.Hash
+		texts[b.ID] = b.Text
+		order = append(order, b.ID)
+	}
 	byBlock := make(map[string][]Note, len(order))
 	replies := map[string][]Reply{}
 	var seen []string // orphan blocks, in the order the log mentions them
@@ -159,6 +184,20 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 			// A note with no hash predates hashing, or was written against a
 			// block that has none; it is reported as it is, not as stale.
 			Stale: known && e.Hash != "" && e.Hash != hash,
+		}
+		// A sub-anchored note answers a *different* question about staleness.
+		// The block's hash changes when any sentence in the paragraph is
+		// touched, but this note is about one of them: if its quote is still
+		// there the note still applies, and saying otherwise would make
+		// sub-anchoring worthless on any paragraph anyone edits. If the quote
+		// is gone the note is stale, however little the block changed.
+		if known && e.Sub != nil {
+			at, ok := Locate(e.Sub, texts[e.Block])
+			note.Stale = !ok
+			if ok {
+				located := at
+				note.At = &located
+			}
 		}
 		if e.ReplyTo != "" {
 			// An answer and a status both name another note, so both travel

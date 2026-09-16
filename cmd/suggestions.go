@@ -75,15 +75,13 @@ func collectSuggestions(paths []string) ([]report, error) {
 		if err != nil {
 			return nil, err
 		}
-		hashes := make(map[string]string, len(doc.Blocks))
+		blocks := make([]feedback.Block, 0, len(doc.Blocks))
 		text := make(map[string]string, len(doc.Blocks))
-		order := make([]string, 0, len(doc.Blocks))
 		for _, b := range doc.Blocks {
-			hashes[b.ID] = b.Hash
+			blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 			text[b.ID] = b.PlainText
-			order = append(order, b.ID)
 		}
-		ready, needs := feedback.Materialize(events, hashes, order).Suggestions()
+		ready, needs := feedback.Materialize(events, blocks).Suggestions()
 		r := report{Doc: d.Path, Applicable: make([]applicable, 0, len(ready)), NeedsConfirmation: needs}
 		for _, s := range ready {
 			r.Applicable = append(r.Applicable, applicable{Suggestion: s, Current: text[s.Block]})

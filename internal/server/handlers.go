@@ -62,13 +62,11 @@ func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 // and which have lost their block entirely.
 func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resolution {
 	doc := s.docOf(e)
-	hashes := make(map[string]string, len(doc.Blocks))
-	order := make([]string, 0, len(doc.Blocks))
+	blocks := make([]feedback.Block, 0, len(doc.Blocks))
 	for _, b := range doc.Blocks {
-		hashes[b.ID] = b.Hash
-		order = append(order, b.ID)
+		blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 	}
-	return feedback.Materialize(events, hashes, order)
+	return feedback.Materialize(events, blocks)
 }
 
 // renderPage renders one document plus the navigation state of the whole set,
@@ -273,15 +271,36 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 	// page has no sha256 it can rely on in every context it runs in. So the
 	// saved event comes back wearing its id, and the page can offer a reply on
 	// a note the reviewer just wrote.
-	writeJSON(w, http.StatusCreated, saved{Event: e, ID: feedback.NoteID(e)})
+	writeJSON(w, http.StatusCreated, saved{Event: e, ID: feedback.NoteID(e), At: s.locate(target, &e)})
 }
 
 // saved is the POSTed event as it is echoed back: the event itself, flattened,
-// plus the id a reply names it by. Embedding keeps the shape a client already
-// parses — the id is an added key, not a new envelope.
+// plus the two things only the server can work out — the id a reply names it
+// by, and where a sub-anchor landed. Embedding keeps the shape a client
+// already parses; both are added keys, not a new envelope.
 type saved struct {
 	feedback.Event
-	ID string `json:"id"`
+	ID string            `json:"id"`
+	At *feedback.Located `json:"at,omitempty"`
+}
+
+// locate reports where a just-saved sub-anchor sits, so the page can mark the
+// sentence without waiting for a re-render. It is the same call Materialize
+// makes, against the same text, so the mark cannot drift from the one a reload
+// would paint.
+func (s *Server) locate(target *Entry, e *feedback.Event) *feedback.Located {
+	if e.Sub == nil {
+		return nil
+	}
+	for _, b := range s.docOf(target).Blocks {
+		if b.ID != e.Block {
+			continue
+		}
+		if at, ok := feedback.Locate(e.Sub, b.PlainText); ok {
+			return &at
+		}
+	}
+	return nil
 }
 
 // check is the server-side gate on what a page may write. The page renders
@@ -316,7 +335,45 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 	if cfg.Locked(e.Block) {
 		return http.StatusForbidden, fmt.Errorf("block %s is read-only in this review", e.Block)
 	}
+	if code, err := s.anchorSub(target, e); err != nil {
+		return code, err
+	}
 	return http.StatusOK, nil
+}
+
+// anchorSub rebuilds a sub-anchor from the quote alone, against the server's
+// own copy of the block.
+//
+// The page sends what the reviewer selected; everything else — the surrounding
+// context, the offset — is derived here. That is deliberate: the page and the
+// server would otherwise each compute an anchor from their own idea of the
+// block's text, and the one time they disagreed the note would be written in a
+// form the reader could never resolve. Deriving it once, on the side that will
+// do the resolving, makes that impossible rather than unlikely.
+//
+// A quote that is not in the block is refused. An anchor that cannot resolve
+// even at the moment it is written is not worth storing.
+func (s *Server) anchorSub(target *Entry, e *feedback.Event) (int, error) {
+	if e.Sub == nil {
+		return http.StatusOK, nil
+	}
+	if feedback.NormalizeSpace(e.Sub.Quote) == "" {
+		// Nothing selected: a note about the whole block, said clumsily.
+		e.Sub = nil
+		return http.StatusOK, nil
+	}
+	for _, b := range s.docOf(target).Blocks {
+		if b.ID != e.Block {
+			continue
+		}
+		sub := feedback.MakeSub(b.PlainText, e.Sub.Quote)
+		if sub == nil {
+			return http.StatusBadRequest, fmt.Errorf("that selection is not in block %s any more — the document may have changed since the page loaded", e.Block)
+		}
+		e.Sub = sub
+		return http.StatusOK, nil
+	}
+	return http.StatusBadRequest, fmt.Errorf("unknown block %s", e.Block)
 }
 
 // knows reports whether a note with that id is in the document's log.

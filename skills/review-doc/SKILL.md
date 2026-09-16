@@ -293,6 +293,12 @@ directly (`CreateOrderRequest/customer_id`, `$.spec.replicas`) — quote that pa
 back, and apply a `suggest_edit` by replacing that one declaration or value, not
 the file.
 
+A note may carry a `sub` alongside its `block`: the reviewer selected one
+sentence rather than the whole paragraph. `sub.quote` is what they meant — quote
+*that* back, and apply a `suggest_edit` to that sentence. The `block` anchor is
+unchanged, so nothing you already do breaks; a note without `sub` is about the
+whole block, as before.
+
 Event types: `comment`, `suggest_edit` (the `text` is the proposed replacement),
 `question`, `approve`, `reject`, `reply` (an answer to another note, naming it
 in `reply_to`), `addressed`/`confirm`/`reopen` (the revision loop, also naming a
