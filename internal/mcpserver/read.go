@@ -147,15 +147,13 @@ func statusOf(path string) (DocStatus, error) {
 	if err != nil {
 		return DocStatus{}, err
 	}
-	hashes := make(map[string]string, len(doc.Blocks))
+	blocks := make([]feedback.Block, 0, len(doc.Blocks))
 	text := make(map[string]string, len(doc.Blocks))
-	order := make([]string, 0, len(doc.Blocks))
 	for _, b := range doc.Blocks {
-		hashes[b.ID] = b.Hash
+		blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 		text[b.ID] = b.PlainText
-		order = append(order, b.ID)
 	}
-	res := feedback.Materialize(events, hashes, order)
+	res := feedback.Materialize(events, blocks)
 	ready, needs := res.Suggestions()
 	out := DocStatus{
 		Doc: path, Blocks: len(doc.Blocks),

@@ -31,6 +31,11 @@ type Event struct {
 	// answers. Omitted on every event written before this, so old logs parse
 	// and re-serialize unchanged.
 	ReplyTo string `json:"reply_to,omitempty"`
+	// Sub anchors the note to a run of text inside the block — a sentence in
+	// a paragraph. Absent on every event written before it existed, and on
+	// every note about a whole block, which is still the common case. See
+	// subanchor.go for why this is a field and not a longer block id.
+	Sub *Sub `json:"sub,omitempty"`
 }
 
 // NoteID identifies an event so another event can point at it.

@@ -373,3 +373,57 @@ func TestProjectedReadOnlyIsExactlyTheServersGate(t *testing.T) {
 		}
 	}
 }
+
+// A sub-anchored note reaches the page with where its quote landed, so the
+// sentence can be marked without the page searching for it again.
+func TestRenderCarriesSubAnchors(t *testing.T) {
+	body := "# Spec\n\nThe cap is 500. Retries use no backoff. Failures go to the log.\n"
+	doc, _ := document.ParseBytes("spec.md", []byte(body))
+	var text string
+	for _, b := range doc.Blocks {
+		if b.ID == "1/2" {
+			text = b.PlainText
+		}
+	}
+	sub := feedback.MakeSub(text, "Retries use no backoff.")
+	if sub == nil {
+		t.Fatal("the quote is in the block")
+	}
+	e := feedback.Event{Block: "1/2", Type: "comment", Text: "wrong", Author: "berkay", Ts: "2026-07-03T10:00:00Z", Sub: sub}
+	res := feedback.Materialize([]feedback.Event{e}, []feedback.Block{{ID: "1/2", Hash: "x", Text: text}})
+
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Resolution: res, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{`"sub":{`, `"quote":"Retries use no backoff."`, `"at":{`, "markSub", "mg-sub"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+}
+
+// The compatibility promise: an event written before sub-anchors existed
+// renders exactly as it did, and carries no sub-anchor keys at all.
+func TestEventsWrittenBeforeSubAnchorsAreUntouched(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# Spec\n\nOne sentence only.\n"))
+	e := feedback.Event{Block: "1/2", Type: "comment", Text: "an old note", Author: "berkay", Ts: "2026-07-01T10:00:00Z"}
+	res := feedback.Materialize([]feedback.Event{e}, []feedback.Block{{ID: "1/2", Hash: "x", Text: "One sentence only."}})
+	if res.States[0].Current.At != nil {
+		t.Error("a note with no sub-anchor has no position")
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Resolution: res, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "an old note") {
+		t.Error("the note should still render")
+	}
+	for _, absent := range []string{`"sub":`, `"at":`} {
+		if strings.Contains(out, absent) {
+			t.Errorf("an old event must not gain %q in the payload", absent)
+		}
+	}
+}

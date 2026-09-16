@@ -240,6 +240,31 @@ users are agents, not humans.
   scrolls to one on click, computed in the page but still enforced by the
   server — a 409 re-opens the same panel, so if the two ever disagree the
   server wins visibly.
+- Sentence-level notes (issue #49) are a **new event field, never a longer
+  block id**: a sub-block id like `5.3/2#1` would be accepted by every consumer
+  that already reads `block` and would silently mean something different to
+  each. `Event.Sub` carries quote + prefix + suffix + start + hash — the W3C
+  annotation model's selectors, for the same reason it chose them: an offset
+  alone always "finds" something, and a note that silently re-anchors to a
+  neighbouring sentence is worse than one that admits it is stale.
+  `feedback.Locate` scores candidates by surviving context and breaks ties by
+  distance from the recorded offset. **A sub-anchored note's staleness is
+  decided by its own sentence, not by the block hash** — judging it by the hash
+  would make the feature worthless on any paragraph anyone edits — and
+  `Note.At` is where it landed, so the page marks it without searching again.
+  The page sends *only* the quote; `Server.anchorSub` rebuilds the anchor
+  against the server's own `PlainText` and refuses a quote the block does not
+  contain, so page and server cannot disagree about what was selected, and
+  `POST /api/feedback` returns `at` for the same reason it returns `id`. The
+  offer is a button on a selection, never a hijacked mouseup, and the block's
+  click handler ignores a click that ends a drag-select — otherwise "comment on
+  a sentence" would have cost "select a sentence". Scope is markdown prose:
+  trees and fences are skipped because their rendered text and `PlainText` can
+  differ.
+- `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
+  `hashes` map plus an `order` slice. The pair could express a block that was
+  known but unlisted, five callers each built it with the same loop, and a
+  sub-anchor needs the text anyway.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
@@ -315,7 +340,8 @@ carries the same ids as `data-anchor` on its shapes, so picture and source are
 one surface and a note from either is the same event.
 `block` re-locates cheaply, `quote`
 makes events self-describing, `hash` flags a comment as **stale** on re-render
-instead of silently misanchoring. Feedback event types: `comment`,
+instead of silently misanchoring. A note about one sentence adds `sub`
+(quote + context + offset) *beside* that anchor and never inside `block`. Feedback event types: `comment`,
 `suggest_edit` (text = replacement), `question`, `approve`, `reject`, `reply`
 (an answer to another note, carrying `reply_to`), `addressed`/`confirm`/`reopen`
 (the revision loop, also carrying `reply_to`), plus any

@@ -25,7 +25,7 @@ func TestMaterializeFlagsStaleAndOrphaned(t *testing.T) {
 		{Type: TypeReviewDone, Ts: "2026-07-03T11:00:00Z"},
 	}
 	hashes := map[string]string{"1/1": "aaa", "1/2": "new"}
-	res := Materialize(events, hashes, []string{"1/1", "1/2"})
+	res := Materialize(events, blocksFrom(hashes, []string{"1/1", "1/2"}))
 
 	if res.Comments != 3 || res.Stale != 1 || res.Orphaned != 1 || !res.Done {
 		t.Fatalf("counts = %+v", res)
@@ -58,7 +58,7 @@ func TestMaterializeFollowsDocumentOrder(t *testing.T) {
 		note("2/1", "b", TypeComment, "second", "2026-07-03T10:02:00Z"),
 	}
 	hashes := map[string]string{"1/1": "a", "2/1": "b", "3/1": "c"}
-	res := Materialize(events, hashes, []string{"1/1", "2/1", "3/1"})
+	res := Materialize(events, blocksFrom(hashes, []string{"1/1", "2/1", "3/1"}))
 	var got []string
 	for _, s := range res.States {
 		got = append(got, s.Block)
@@ -75,7 +75,7 @@ func TestMaterializeCurrentIsLatest(t *testing.T) {
 		note("1/1", "old", TypeReject, "was rejected", "2026-07-03T10:00:00Z"),
 		note("1/1", "new", TypeApprove, "fixed now", "2026-07-03T12:00:00Z"),
 	}
-	res := Materialize(events, map[string]string{"1/1": "new"}, []string{"1/1"})
+	res := Materialize(events, blocksFrom(map[string]string{"1/1": "new"}, []string{"1/1"}))
 	st := stateOf(res, "1/1")
 	if st == nil || st.Current.Event.Text != "fixed now" || st.Stale {
 		t.Fatalf("state = %+v", st)
@@ -92,14 +92,14 @@ func TestMaterializeCurrentIsLatest(t *testing.T) {
 // is reported as it is rather than guessed at.
 func TestMaterializeTreatsMissingHashAsCurrent(t *testing.T) {
 	events := []Event{note("1/1", "", TypeComment, "no hash", "2026-07-03T10:00:00Z")}
-	res := Materialize(events, map[string]string{"1/1": "aaa"}, []string{"1/1"})
+	res := Materialize(events, blocksFrom(map[string]string{"1/1": "aaa"}, []string{"1/1"}))
 	if st := stateOf(res, "1/1"); st == nil || st.Stale {
 		t.Errorf("state = %+v, want not stale", st)
 	}
 }
 
 func TestMaterializeEmptyLog(t *testing.T) {
-	res := Materialize(nil, map[string]string{"1/1": "a"}, []string{"1/1"})
+	res := Materialize(nil, blocksFrom(map[string]string{"1/1": "a"}, []string{"1/1"}))
 	if len(res.States) != 0 || res.Comments != 0 || res.Done {
 		t.Errorf("empty log = %+v", res)
 	}
@@ -120,7 +120,7 @@ func TestSuggestionsSplitsByWhatIsProvable(t *testing.T) {
 		note("1/6", "fff", TypeSuggestEdit, "", "2026-07-03T10:07:00Z"),
 	}
 	hashes := map[string]string{"1/1": "aaa", "1/2": "new", "1/3": "ccc", "1/4": "ddd", "1/5": "eee", "1/6": "fff"}
-	res := Materialize(events, hashes, []string{"1/1", "1/2", "1/3", "1/4", "1/5", "1/6"})
+	res := Materialize(events, blocksFrom(hashes, []string{"1/1", "1/2", "1/3", "1/4", "1/5", "1/6"}))
 	ready, needs := res.Suggestions()
 
 	if len(ready) != 1 || ready[0].Block != "1/1" || ready[0].Replacement != "fixed wording" {
@@ -157,7 +157,7 @@ func TestSuggestionsSplitsByWhatIsProvable(t *testing.T) {
 }
 
 func TestSuggestionsEmptyLog(t *testing.T) {
-	ready, needs := Materialize(nil, map[string]string{"1/1": "a"}, []string{"1/1"}).Suggestions()
+	ready, needs := Materialize(nil, blocksFrom(map[string]string{"1/1": "a"}, []string{"1/1"})).Suggestions()
 	if len(ready) != 0 || len(needs) != 0 {
 		t.Errorf("empty log = %+v / %+v", ready, needs)
 	}

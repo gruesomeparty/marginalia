@@ -31,7 +31,7 @@ func only(t *testing.T, res Resolution) Note {
 func TestANoteNobodyAddressedStaysOutstanding(t *testing.T) {
 	q := noteOn("Why 500?", "aaaa", "2026-07-03T10:00:00Z")
 	// The block was edited — repeatedly — but for unrelated reasons.
-	res := Materialize([]Event{q}, map[string]string{"1/2": "zzzz"}, []string{"1/2"})
+	res := Materialize([]Event{q}, blocksFrom(map[string]string{"1/2": "zzzz"}, []string{"1/2"}))
 	n := only(t, res)
 	if n.Status != StatusOutstanding {
 		t.Errorf("status = %q, want outstanding", n.Status)
@@ -52,7 +52,7 @@ func TestAddressedThenConfirmedLeavesTheQueue(t *testing.T) {
 	a := progress(TypeAddressed, "Raised the cap to 2000.", "aaaa", id, "2026-07-03T11:00:00Z")
 	hashes := map[string]string{"1/2": "bbbb"} // the block really did change
 
-	res := Materialize([]Event{q, a}, hashes, []string{"1/2"})
+	res := Materialize([]Event{q, a}, blocksFrom(hashes, []string{"1/2"}))
 	n := only(t, res)
 	if n.Status != StatusAddressed || len(n.Progress) != 1 {
 		t.Fatalf("status = %q, progress = %d; want addressed with one entry", n.Status, len(n.Progress))
@@ -65,7 +65,7 @@ func TestAddressedThenConfirmedLeavesTheQueue(t *testing.T) {
 	}
 
 	c := progress(TypeConfirm, "", "", id, "2026-07-03T12:00:00Z")
-	res = Materialize([]Event{q, a, c}, hashes, []string{"1/2"})
+	res = Materialize([]Event{q, a, c}, blocksFrom(hashes, []string{"1/2"}))
 	n = only(t, res)
 	if n.Status != StatusConfirmed {
 		t.Errorf("status = %q, want confirmed", n.Status)
@@ -86,7 +86,7 @@ func TestReopenReturnsANoteToTheQueue(t *testing.T) {
 		progress(TypeConfirm, "", "", id, "2026-07-03T12:00:00Z"),
 		progress(TypeReopen, "Still says 500 two paragraphs down.", "", id, "2026-07-03T13:00:00Z"),
 	}
-	res := Materialize(events, map[string]string{"1/2": "bbbb"}, []string{"1/2"})
+	res := Materialize(events, blocksFrom(map[string]string{"1/2": "bbbb"}, []string{"1/2"}))
 	n := only(t, res)
 	if n.Status != StatusReopened {
 		t.Fatalf("status = %q, want reopened", n.Status)
@@ -99,7 +99,7 @@ func TestReopenReturnsANoteToTheQueue(t *testing.T) {
 	}
 	// And it can be addressed again — the loop is a loop.
 	events = append(events, progress(TypeAddressed, "Fixed the second one too.", "bbbb", id, "2026-07-03T14:00:00Z"))
-	if got := only(t, Materialize(events, map[string]string{"1/2": "cccc"}, []string{"1/2"})).Status; got != StatusAddressed {
+	if got := only(t, Materialize(events, blocksFrom(map[string]string{"1/2": "cccc"}, []string{"1/2"}))).Status; got != StatusAddressed {
 		t.Errorf("status = %q, want addressed again", got)
 	}
 }
@@ -112,7 +112,7 @@ func TestAnAddressedClaimTheDocumentDoesNotBearOut(t *testing.T) {
 	a := progress(TypeAddressed, "Raised the cap.", "aaaa", id, "2026-07-03T11:00:00Z")
 
 	// The block still hashes to what it did before the claimed edit.
-	n := only(t, Materialize([]Event{q, a}, map[string]string{"1/2": "aaaa"}, []string{"1/2"}))
+	n := only(t, Materialize([]Event{q, a}, blocksFrom(map[string]string{"1/2": "aaaa"}, []string{"1/2"})))
 	if n.Status != StatusAddressed {
 		t.Errorf("the claim is still reported: status = %q", n.Status)
 	}
@@ -122,7 +122,7 @@ func TestAnAddressedClaimTheDocumentDoesNotBearOut(t *testing.T) {
 
 	// A claim with no hash cannot be checked — not the same as being false.
 	noHash := progress(TypeAddressed, "Raised the cap.", "", id, "2026-07-03T11:00:00Z")
-	if only(t, Materialize([]Event{q, noHash}, map[string]string{"1/2": "aaaa"}, []string{"1/2"})).Unclaimed {
+	if only(t, Materialize([]Event{q, noHash}, blocksFrom(map[string]string{"1/2": "aaaa"}, []string{"1/2"}))).Unclaimed {
 		t.Error("a claim with no hash cannot be disproven, so it must not be marked as disproven")
 	}
 }
@@ -132,7 +132,7 @@ func TestAnAddressedClaimTheDocumentDoesNotBearOut(t *testing.T) {
 func TestAnApproveIsNotOutstandingWork(t *testing.T) {
 	ok := Event{Block: "1/1", Type: TypeApprove, Author: "berkay", Ts: "2026-07-03T10:00:00Z"}
 	q := noteOn("Why 500?", "aaaa", "2026-07-03T10:00:00Z")
-	res := Materialize([]Event{ok, q}, map[string]string{"1/1": "x", "1/2": "aaaa"}, []string{"1/1", "1/2"})
+	res := Materialize([]Event{ok, q}, blocksFrom(map[string]string{"1/1": "x", "1/2": "aaaa"}, []string{"1/1", "1/2"}))
 	if res.Outstanding != 1 {
 		t.Errorf("outstanding = %d, want 1 (the question, not the approval)", res.Outstanding)
 	}
@@ -148,7 +148,7 @@ func TestStatusAndAnswersDoNotContaminateEachOther(t *testing.T) {
 		{Block: "1/2", Type: TypeReply, Text: "The API caps it.", Author: "agent", Ts: "2026-07-03T11:00:00Z", ReplyTo: id},
 		progress(TypeAddressed, "Documented the cap.", "aaaa", id, "2026-07-03T12:00:00Z"),
 	}
-	res := Materialize(events, map[string]string{"1/2": "bbbb"}, []string{"1/2"})
+	res := Materialize(events, blocksFrom(map[string]string{"1/2": "bbbb"}, []string{"1/2"}))
 	n := only(t, res)
 	if len(n.Replies) != 1 || n.Replies[0].Event.Type != TypeReply {
 		t.Errorf("the answer belongs in the thread: %+v", n.Replies)
@@ -170,7 +170,7 @@ func TestLogsWrittenBeforeReReviewAreUnchanged(t *testing.T) {
 		{Block: "1/1", Type: TypeComment, Text: "tighten this", Author: "berkay", Ts: "2026-07-01T10:00:00Z"},
 		{Block: "1/2", Type: TypeApprove, Author: "berkay", Ts: "2026-07-01T10:01:00Z"},
 	}
-	res := Materialize(events, map[string]string{"1/1": "a", "1/2": "b"}, []string{"1/1", "1/2"})
+	res := Materialize(events, blocksFrom(map[string]string{"1/1": "a", "1/2": "b"}, []string{"1/1", "1/2"}))
 	if res.Comments != 2 || res.Addressed != 0 || res.Confirmed != 0 {
 		t.Fatalf("an old log should materialize as it always did: %+v", res)
 	}
@@ -193,7 +193,7 @@ func TestStatusSurvivesAnOrphanedBlock(t *testing.T) {
 	q := noteOn("Why 500?", "aaaa", "2026-07-03T10:00:00Z")
 	id := NoteID(q)
 	a := progress(TypeAddressed, "Cut the paragraph entirely.", "aaaa", id, "2026-07-03T11:00:00Z")
-	res := Materialize([]Event{q, a}, map[string]string{}, nil)
+	res := Materialize([]Event{q, a}, blocksFrom(map[string]string{}, nil))
 	if len(res.States) != 1 || !res.States[0].Orphaned {
 		t.Fatalf("the note should be orphaned: %+v", res.States)
 	}
