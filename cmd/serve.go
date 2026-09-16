@@ -6,175 +6,37 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/gruesomeparty/marginalia/internal/diagram"
-	"github.com/gruesomeparty/marginalia/internal/document"
-	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
-	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/server"
-	"github.com/gruesomeparty/marginalia/internal/web"
+	"github.com/gruesomeparty/marginalia/internal/session"
 )
 
-// serveOptions is what `serve` was asked for. A struct rather than a row of
-// positional booleans, which is how open and watch get swapped by accident.
-type serveOptions struct {
-	Host   string
-	Port   int
-	Open   bool
-	Watch  bool
-	Author string
-	Config string // review config file, "" for the default review
-	Review string // shipped preset name, "" for none
-	Theme  string // palette name, "" for the default
-	// Diagrams is "auto" (draw mermaid when a renderer is installed) or
-	// "off" (always show the anchored source).
-	Diagrams string
-	MMDC     string // explicit mermaid-cli path
-}
+// serveOptions, buildServer and their helpers moved to internal/session when
+// the MCP server became a second caller: a package cmd cannot be imported, and
+// starting a review is the same pipeline whether a flag or a tool call asked
+// for it. These are the thin aliases the CLI still speaks in.
+type serveOptions = session.Options
 
-// buildServer resolves the paths into a review set — one document, several, or
-// a directory of them — parses each and wires it to its own feedback log.
 func buildServer(paths []string, opts serveOptions) (*server.Server, error) {
-	set, err := reviewset.Load(paths)
-	if err != nil {
-		return nil, routeSetError(err)
-	}
-	cfg, err := reviewConfig(opts.Review, opts.Config)
-	if err != nil {
-		return nil, err
-	}
-	// A theme nobody has written yet is a feature request, not a typo.
-	theme, err := web.ThemeFor(opts.Theme)
-	if err != nil {
-		return nil, advertise(err)
-	}
-	drawer, err := diagrams(opts.Diagrams, opts.MMDC)
-	if err != nil {
-		return nil, err
-	}
-	docs := make([]server.Entry, 0, len(set.Docs))
-	for _, d := range set.Docs {
-		doc, err := document.Parse(d.Path)
-		if err != nil {
-			return nil, err
-		}
-		docs = append(docs, server.Entry{
-			Doc:   doc,
-			Store: feedback.NewStore(d.Path),
-			Label: d.Label,
-			Rel:   d.Rel,
-		})
-	}
-	author := opts.Author
-	if author == "" {
-		author = defaultAuthor()
-	}
-	return server.New(server.Options{
-		Docs:     docs,
-		Title:    sessionTitle(set),
-		Root:     set.Root,
-		Index:    set.Index,
-		Excluded: set.Excluded,
-		// A discovered set mirrors the folders it was found in; a curated one
-		// is exactly the index's list, so its order is the tree.
-		Nested:   set.Index == "",
-		Review:   cfg,
-		Theme:    theme,
-		Diagrams: drawer,
-		Author:   author,
-		Host:     opts.Host,
-		Port:     opts.Port,
-		Open:     opts.Open,
-		Watch:    opts.Watch,
-	}), nil
+	return session.Build(paths, opts)
 }
 
-// diagrams resolves the diagram-rendering choice. "auto" draws mermaid when
-// mermaid-cli is installed and shows the anchored source when it is not, so a
-// machine without Node still serves every review; "off" never draws.
-//
-// Naming a renderer is different from having one found for you: a --mmdc (or
-// MARGINALIA_MMDC) that points nowhere is a typo, and falling back to "no
-// renderer installed" would answer it with a notice about installing the thing
-// the caller just said they had.
-func diagrams(mode, bin string) (*diagram.Renderer, error) {
-	switch mode {
-	case "", "auto":
-		r := diagram.Find(bin)
-		if named := firstNonEmpty(bin, os.Getenv("MARGINALIA_MMDC")); named != "" && !r.Available() {
-			return nil, advertise(fmt.Errorf("no mermaid renderer at %q — drop the flag to look on PATH, or pass --diagrams=off", named))
-		}
-		return r, nil
-	case "off":
-		return &diagram.Renderer{}, nil
-	}
-	return nil, advertise(fmt.Errorf("unknown --diagrams %q — available: auto, off", mode))
-}
+func diagrams(mode, bin string) (*diagram.Renderer, error) { return session.Diagrams(mode, bin) }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// reviewConfig resolves the framing a review runs under: a shipped preset, a
-// file, or both — the file layered over the preset, so an agent can take the
-// vocabulary that already exists and change only the instructions. Neither is
-// the plain default review.
 func reviewConfig(preset, path string) (*review.Config, error) {
-	cfg := review.Default()
-	if preset != "" {
-		var err error
-		if cfg, err = review.Preset(preset); err != nil {
-			return nil, advertise(err)
-		}
-	}
-	if path != "" {
-		if err := cfg.Overlay(path); err != nil {
-			return nil, err
-		}
-	}
-	return cfg, nil
+	return session.ReviewConfig(preset, path)
 }
 
-// presetList names the shipped framings, for flag help.
-func presetList() string { return strings.Join(review.PresetNames(), ", ") }
+func presetList() string { return session.PresetList() }
 
-// themeList names the palettes, for flag help.
-func themeList() string { return strings.Join(web.ThemeNames(), ", ") }
+func themeList() string { return session.ThemeList() }
 
-// sessionTitle is what the page header calls the review: the index's title, or
-// the directory the set was found in. A single document titles itself.
-func sessionTitle(set *reviewset.Set) string {
-	if set.Title != "" {
-		return set.Title
-	}
-	if set.Single() {
-		return ""
-	}
-	// A relative root ("." from inside the directory being served) is no kind
-	// of name; use the directory's own.
-	if abs, err := filepath.Abs(set.Root); err == nil {
-		return filepath.Base(abs)
-	}
-	return set.Root
-}
-
-func defaultAuthor() string {
-	if u := os.Getenv("USER"); u != "" {
-		return u
-	}
-	return "reviewer"
-}
+func defaultAuthor() string { return session.DefaultAuthor() }
 
 // requirePaths rejects an empty argument list with an error that says what to
 // type. Deliberately not routed through advertise(): the request-feature

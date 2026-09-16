@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/gruesomeparty/marginalia/internal/session"
 	"github.com/spf13/cobra"
 )
 
@@ -9,6 +10,10 @@ var (
 	commit  = "none"
 	date    = "unknown"
 )
+
+// The release ldflags write to cmd.version, so session takes its copy from
+// here rather than the other way round.
+func init() { session.Version = version }
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{

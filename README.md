@@ -73,6 +73,30 @@ Then, in any session:
   `approved-for-agent` queue into a pull request (the loop that maintains
   Marginalia itself).
 
+## Agents: use the MCP server
+
+The primary users are agents, and the CLI makes them scrape a startup banner
+and parse JSONL. `marginalia mcp` speaks MCP over stdio instead:
+
+```jsonc
+// in your MCP client's config
+{ "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp", "--root", "."] } } }
+```
+
+Five tools: `review_document` (serve a document, get the URL to hand over, and
+the vocabulary you will read back), `feedback_since` (only what is new, by
+cursor), `review_status` (the log materialized against the document as it now
+reads, including which suggested edits are safe to apply), `await_review_done`
+(block until the human finishes; a timeout reports `done: false` rather than
+failing), and `close_review`.
+
+Two things about it are deliberate. **Reads come from the log on disk**, so
+they keep working after the agent's session ends and any number of agents can
+follow the same review. And **no tool writes to a feedback log** — the log is
+the human's answers, and an agent that could append to it could answer its own
+question. `--root` confines which paths a tool call may reach, because a tool
+argument can come from text the model read and `.yaml` is a supported input.
+
 ## Quickstart
 
 ```bash
