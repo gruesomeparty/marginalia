@@ -77,6 +77,11 @@ type clientBlock struct {
 	// Skipped blocks open folded: the requester said they are not part of
 	// this review.
 	Skipped bool `json:"skipped,omitempty"`
+	// Inline marks a block whose markup sits inside its parent's — a list
+	// item, a diagram statement. A filter must not hide one: removing a
+	// bullet renumbers the list around it, and removing a statement tears a
+	// hole in the source the author wrote. The page dims those instead.
+	Inline bool `json:"inline,omitempty"`
 	// Notes are the requester's guidance for this block — the agent asking,
 	// not the human answering.
 	Notes []review.Note `json:"notes,omitempty"`
@@ -167,6 +172,7 @@ func project(doc *document.Document, cfg *review.Config, names []string) clientD
 			Hash:        b.Hash,
 			Quote:       b.Quote,
 			Text:        b.PlainText,
+			Inline:      b.Inline,
 			ReadOnly:    cfg.Locked(b.ID),
 			Skipped:     cfg.Skipped(b.ID),
 			Notes:       cfg.NotesFor(b.ID, names...),

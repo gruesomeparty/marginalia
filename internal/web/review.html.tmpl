@@ -73,20 +73,53 @@ header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
 header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
 header button.secondary{background:transparent;color:var(--fg);border-color:var(--rule)}
 /* Display settings: the reviewer's, not the agent's — theme and ligatures,
-   remembered in this browser and nowhere else. */
-.display{position:relative;font-size:var(--fs-base)}
-.display summary{list-style:none;cursor:pointer;padding:.4rem .9rem;border:1px solid var(--rule);border-radius:var(--r-md)}
-.display summary::-webkit-details-marker{display:none}
-.display[open] summary{background:var(--card)}
-.display .panel{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:.6rem;display:grid;gap:.5rem;min-width:13rem}
-.display .group{display:flex;align-items:center;gap:.35rem;justify-content:space-between}
-.display .group>span{color:var(--muted)}
-.display .opts{display:flex}
-.display .opts button{font:inherit;font-size:var(--fs-sm);padding:.2rem .5rem;border:1px solid var(--rule);background:transparent;color:var(--fg);cursor:pointer;border-radius:0}
-.display .opts button:first-child{border-radius:var(--r-md) 0 0 var(--r-md)}
-.display .opts button:last-child{border-radius:var(--r-tab)}
-.display .opts button+button{border-left:0}
-.display .opts button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+   remembered in this browser and nowhere else. The filter menu is the same
+   popover, so it is the same rules rather than a second set that drifts. */
+.display,.filter{position:relative;font-size:var(--fs-base)}
+.display summary,.filter summary{list-style:none;cursor:pointer;padding:.4rem .9rem;border:1px solid var(--rule);border-radius:var(--r-md)}
+.display summary::-webkit-details-marker,.filter summary::-webkit-details-marker{display:none}
+.display[open] summary,.filter[open] summary{background:var(--card)}
+.display .panel,.filter .panel{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:.6rem;display:grid;gap:.5rem;min-width:13rem}
+.display .group,.filter .group{display:flex;align-items:center;gap:.35rem;justify-content:space-between}
+.display .group>span,.filter .group>span{color:var(--muted)}
+.display .opts,.filter .opts{display:flex}
+.display .opts button,.filter .opts button{font:inherit;font-size:var(--fs-sm);padding:.2rem .5rem;border:1px solid var(--rule);background:transparent;color:var(--fg);cursor:pointer;border-radius:0}
+.display .opts button:first-child,.filter .opts button:first-child{border-radius:var(--r-md) 0 0 var(--r-md)}
+.display .opts button:last-child,.filter .opts button:last-child{border-radius:var(--r-tab)}
+.display .opts button+button,.filter .opts button+button{border-left:0}
+.display .opts button[aria-pressed="true"],.filter .opts button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+/* Five filters do not fit a segmented row, so they stack. */
+.filter .panel{min-width:12rem}
+.filter .opts{flex-direction:column;width:100%}
+.filter .opts button{border-radius:var(--r-tab);text-align:left}
+.filter .opts button+button{border-left:1px solid var(--rule);margin-top:.2rem}
+.filter .hint{color:var(--muted);font-size:var(--fs-xs);margin:0;max-width:16rem}
+/* Progress: answered against commentable, which is the only ratio that means
+   anything. A raw comment count says nothing about how much is left. */
+.progress{display:flex;align-items:center;gap:.5rem;color:var(--muted);font-size:var(--fs-sm)}
+.progress .bar{display:block;width:6rem;height:.4rem;background:var(--rule);border-radius:var(--r-pill);overflow:hidden}
+.progress .fill{display:block;height:100%;width:0;background:var(--accent);border-radius:var(--r-pill);transition:width .2s ease}
+.progress .of{white-space:nowrap}
+@media (max-width:640px){.progress .bar{width:3rem}}
+/* What Done is still waiting for, and the way to get there. Refusing the
+   button without saying what is missing is how a reviewer learns the rule by
+   being told no. */
+.outstanding{margin:1rem auto;max-width:72ch;padding:.8rem 1rem;background:var(--card);border:1px solid var(--bad);border-radius:var(--r-lg);font-family:var(--sans);font-size:var(--fs-base)}
+.outstanding h2{font-size:var(--fs-md);margin:0 0 .2rem}
+.outstanding p{color:var(--muted);margin:0 0 .6rem}
+.outstanding .list{display:flex;flex-direction:column;gap:.25rem;margin-bottom:.6rem;max-height:14rem;overflow:auto}
+.outstanding .list button{font:inherit;font-size:var(--fs-sm);text-align:left;padding:.3rem .5rem;border:1px solid var(--rule);border-radius:var(--r-tab);background:transparent;color:var(--fg);cursor:pointer}
+.outstanding .list button:hover{border-color:var(--accent);color:var(--accent)}
+.outstanding .list .id{font-family:var(--mono);color:var(--muted);margin-right:.5rem}
+.outstanding>button{font:inherit;padding:.3rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+/* An inline block a filter would have hidden: it stays where the author put
+   it and recedes, because removing a bullet renumbers the list around it. */
+.block.dimmed{opacity:.35}
+/* A block the reviewer jumped to, so the landing is visible rather than
+   guessed at. */
+.block.landed{animation:land 1.2s ease}
+@keyframes land{from{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.block.landed{animation:none;outline:2px solid var(--accent)}.progress .fill{transition:none}}
 .layout{display:flex;align-items:flex-start}
 main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
 .nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:var(--sans);font-size:var(--fs-base);border-right:1px solid var(--rule)}
@@ -294,7 +327,22 @@ header #fold+button{margin-left:.5rem}
   <strong>{{.Title}}</strong>
   {{if and .ShowNav (ne .Title .Doc.Path)}}<span class="where">{{.Doc.Path}}</span>{{end}}
   <span class="count" id="count">0 comments</span>
+  <span class="progress" id="progress" hidden>
+    <span class="bar"><span class="fill" id="progfill"></span></span>
+    <span class="of" id="progtext"></span>
+  </span>
   <span class="actions">
+    <details class="filter" id="filter">
+      <summary>Show all</summary>
+      <div class="panel">
+        <div class="group" role="group" aria-label="Which blocks to show">
+          <span class="opts" id="filters">
+            <button type="button" data-filter="all" aria-pressed="true">All</button><button type="button" data-filter="unanswered">Not answered</button><button type="button" data-filter="mine">I answered</button><button type="button" data-filter="noted">Requester asked</button><button type="button" data-filter="recheck">To re-check</button>
+          </span>
+        </div>
+        <p class="hint">Hiding a block hides its notes with it. Nothing is lost — the count below says how many are out of view.</p>
+      </div>
+    </details>
     <details class="display" id="display">
       <summary>Display</summary>
       <div class="panel">
@@ -374,6 +422,12 @@ header #fold+button{margin-left:.5rem}
   <span>This document changed on disk.</span>
   <button type="button" id="reload">Reload</button>
 </div>
+<div class="outstanding" id="outstanding" hidden>
+  <h2 id="outstanding-title"></h2>
+  <p>This review asks for a verdict on every block. These are still waiting — click one to go there.</p>
+  <div class="list" id="outstanding-list"></div>
+  <button type="button" class="secondary" id="outstanding-close">Dismiss</button>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 window.__MARGINALIA__ = {{.DataJSON}};
@@ -423,6 +477,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         else if(st!=="confirmed" && note.event.type!=="approve" && !note.dangling) outstanding++;
       });
     });
+    progress();
     var parts=[n+" comment"+(n===1?"":"s")];
     // The second round's queue, said first, because on a re-read it is the
     // only number that tells the reviewer how much is left.
@@ -853,6 +908,208 @@ window.__MARGINALIA__ = {{.DataJSON}};
     renderFields();
     attach(el, c); ta.focus();
   }
+  // --- the shape of the review -------------------------------------------
+  //
+  // A sixty-block document is a queue, not a page. These four things make it
+  // one: how far through you are, what is left, a way to move between the
+  // blocks that still want something, and — when the review demands a verdict
+  // on everything — being told what is missing before you press Done rather
+  // than by being refused.
+
+  var requireVerdict = !!(data.review && data.review.require_verdict);
+  // Commentable is the server's own rule, not a guess: `readonly` in the
+  // payload is cfg.Locked(), which is exactly what POST /api/feedback
+  // refuses. If those two ever disagree the page is lying about the queue.
+  function commentable(b){ return !b.readonly; }
+  function answered(id){ return (byBlock[id] || []).length > 0; }
+  function askedAbout(b){ return !!(b.notes && b.notes.length); }
+  function needsRecheck(id){
+    return (byBlock[id] || []).some(function(n){ return (n.status || "outstanding") === "addressed"; });
+  }
+  // The blocks still wanting a verdict, in document order — what require_verdict
+  // is holding Done for.
+  function outstandingBlocks(){
+    return data.doc.blocks.filter(function(b){ return commentable(b) && !answered(b.id); });
+  }
+  function progress(){
+    var el = document.getElementById("progress");
+    var total = data.doc.blocks.filter(commentable).length;
+    if(!total){ el.hidden = true; return; }
+    var done = data.doc.blocks.filter(function(b){ return commentable(b) && answered(b.id); }).length;
+    el.hidden = false;
+    document.getElementById("progfill").style.width = Math.round(done/total*100) + "%";
+    var text = done + " of " + total + " answered";
+    document.getElementById("progtext").textContent = text;
+    el.title = text + (requireVerdict ? " — this review asks for a verdict on every one" : "");
+  }
+
+  // --- filters ------------------------------------------------------------
+  var filterMode = "all";
+  function passes(id){
+    var b = blockOf[id];
+    if(!b) return true;
+    switch(filterMode){
+      case "unanswered": return commentable(b) && !answered(id);
+      case "mine":       return answered(id);
+      case "noted":      return askedAbout(b);
+      case "recheck":    return needsRecheck(id);
+    }
+    return true;
+  }
+  function updateFilterLabel(){
+    var sum = document.querySelector("#filter summary");
+    if(!sum) return;
+    var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
+    var hiddenN = data.doc.blocks.filter(function(b){ return !b.inline && !passes(b.id); }).length;
+    sum.textContent = labels[filterMode] + (filterMode !== "all" ? " (" + hiddenN + " hidden)" : "");
+  }
+  (function(){
+    var box = document.getElementById("filters");
+    if(!box) return;
+    box.addEventListener("click", function(e){
+      var b = e.target.closest("button[data-filter]");
+      if(!b) return;
+      filterMode = b.dataset.filter;
+      Array.prototype.forEach.call(box.querySelectorAll("button"), function(x){
+        x.setAttribute("aria-pressed", x.dataset.filter === filterMode ? "true" : "false");
+      });
+      applyFolds();
+      document.getElementById("filter").open = false;
+    });
+  })();
+
+  // --- movement -----------------------------------------------------------
+  //
+  // The reviewer works a queue, so the shortcut that matters is "next thing
+  // that still wants me". A configured action always wins the key: the agent
+  // asked for that vocabulary, and silently stealing its letter would make a
+  // documented shortcut stop working. keyHelp() says which ones survived.
+  //
+  // A configured key is a single character (review.Config enforces that), so
+  // anything multi-character cannot be taken: the arrows always work, and the
+  // letters are a convenience that yields. Without the arrows the queue
+  // shortcut would simply be unavailable on any review that configured `n`,
+  // which is a common enough letter that "unanswered" would be the first
+  // casualty of a `nit` action.
+  var navKeys = {j:"next", k:"prev", n:"nextOpen", p:"prevOpen"};
+  function keyFree(k){ return !byKey[k]; }
+  // what returns the movement a key event asks for, or "" for none.
+  function navFor(e){
+    if(e.key === "ArrowDown") return e.shiftKey ? "nextOpen" : "next";
+    if(e.key === "ArrowUp")   return e.shiftKey ? "prevOpen" : "prev";
+    if(e.shiftKey) return "";
+    var what = navKeys[e.key];
+    return what && keyFree(e.key) ? what : "";
+  }
+  function doNav(what){
+    move(what === "next" || what === "nextOpen" ? 1 : -1, what === "nextOpen" || what === "prevOpen");
+  }
+  function visibleBlocks(){
+    return data.doc.blocks.filter(function(b){
+      var el = elOf[b.id];
+      return el && !el.hidden && !el.classList.contains("dimmed");
+    });
+  }
+  function land(el){
+    if(!el) return;
+    el.scrollIntoView({block:"center", behavior:"smooth"});
+    el.classList.remove("landed");
+    void el.offsetWidth; // restart the animation even on the same element
+    el.classList.add("landed");
+    if(el.getAttribute("tabindex") !== null) el.focus({preventScroll:true});
+  }
+  // move walks from wherever the reviewer is. Wrapping is the point: working
+  // a queue means never having to notice you reached the end.
+  function move(dir, onlyOpen){
+    var list = visibleBlocks();
+    if(onlyOpen){
+      list = list.filter(function(b){ return commentable(b) && !answered(b.id); });
+    }
+    if(!list.length){
+      toast(onlyOpen ? "Nothing left unanswered." : "Nothing to move to.");
+      return;
+    }
+    var here = document.activeElement && document.activeElement.closest && document.activeElement.closest(".block");
+    var at = here ? list.findIndex(function(b){ return b.id === here.dataset.block; }) : -1;
+    var next;
+    if(at === -1){
+      // Not on a block: start from the one nearest the top of the viewport,
+      // so the jump follows the eye rather than the DOM.
+      var from = list.findIndex(function(b){
+        var el = elOf[b.id];
+        return el && el.getBoundingClientRect().top > 80;
+      });
+      next = dir > 0 ? (from === -1 ? 0 : from) : (from <= 0 ? list.length - 1 : from - 1);
+    } else {
+      next = (at + dir + list.length) % list.length;
+    }
+    land(elOf[list[next].id]);
+  }
+  function keyHelp(){
+    var names = {next:"next block", prev:"previous block", nextOpen:"next unanswered", prevOpen:"previous unanswered"};
+    var lines = ["\u2193/\u2191 — move", "\u21e7\u2193/\u21e7\u2191 — next/previous unanswered"];
+    Object.keys(navKeys).forEach(function(k){
+      if(keyFree(k)) lines.push(k + " — " + names[navKeys[k]]);
+      else lines.push(k + " — taken by " + (byKey[k].label || byKey[k].type));
+    });
+    toast(lines.join("  \u00b7  "));
+  }
+  // Typing into anything, or composing a note, owns the keyboard outright.
+  function typing(e){
+    var t = e.target;
+    if(t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return true;
+    return !!document.querySelector(".composer");
+  }
+  document.addEventListener("keydown", function(e){
+    if(e.metaKey || e.ctrlKey || e.altKey || typing(e)) return;
+    if(e.key === "?" && keyFree("?")){ e.preventDefault(); keyHelp(); return; }
+    // A focused block has its own handler, and a configured action there beats
+    // navigation. It calls doNav itself for what is left over.
+    if(e.target && e.target.closest && e.target.closest(".block")) return;
+    var what = navFor(e);
+    if(!what) return;
+    e.preventDefault();
+    doNav(what);
+  });
+
+  // --- what Done is waiting for -------------------------------------------
+  function showOutstanding(){
+    var left = outstandingBlocks();
+    var panel = document.getElementById("outstanding");
+    if(!left.length){ panel.hidden = true; return false; }
+    document.getElementById("outstanding-title").textContent =
+      left.length + (left.length === 1 ? " block still wants a verdict" : " blocks still want a verdict");
+    var list = document.getElementById("outstanding-list");
+    list.textContent = "";
+    left.forEach(function(b){
+      var btn = document.createElement("button");
+      btn.type = "button";
+      var id = document.createElement("span"); id.className = "id"; id.textContent = b.id;
+      btn.appendChild(id);
+      btn.appendChild(document.createTextNode(b.quote || b.text || ""));
+      btn.addEventListener("click", function(){
+        // Jumping to a block the current filter hides would scroll to nothing,
+        // so drop back to showing everything first.
+        if(!passes(b.id)){
+          filterMode = "all";
+          Array.prototype.forEach.call(document.querySelectorAll("#filters button"), function(x){
+            x.setAttribute("aria-pressed", x.dataset.filter === "all" ? "true" : "false");
+          });
+          applyFolds();
+        }
+        land(elOf[b.id]);
+      });
+      list.appendChild(btn);
+    });
+    panel.hidden = false;
+    panel.scrollIntoView({block:"nearest", behavior:"smooth"});
+    return true;
+  }
+  (function(){
+    var close = document.getElementById("outstanding-close");
+    if(close) close.onclick = function(){ document.getElementById("outstanding").hidden = true; };
+  })();
+
   var isTree = document.getElementById("doc").classList.contains("tree");
   var elOf = {};
 
@@ -860,6 +1117,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // comes from the node's depth, and a subtree is hidden exactly when its
   // parent is hidden or folded — one pass, no DOM nesting to keep in sync.
   var folded = {};
+  // Folding and filtering both hide blocks, so they resolve in one pass: two
+  // independent reasons, one `hidden`. Setting it from two places is how a
+  // filter and a fold end up fighting over the same element.
   function applyFolds(){
     var hidden = {};
     data.doc.blocks.forEach(function(b){
@@ -868,12 +1128,22 @@ window.__MARGINALIA__ = {{.DataJSON}};
       hidden[b.id] = h;
       var el = elOf[b.id];
       if(!el) return;
-      el.hidden = h;
+      var shown = passes(b.id);
+      // An inline block lives inside its parent's markup, so hiding it would
+      // renumber the list around it or tear a hole in the source the author
+      // wrote. It stays and dims; only its notes go.
+      if(b.inline){
+        el.hidden = h;
+        el.classList.toggle("dimmed", !shown);
+      } else {
+        el.hidden = h || !shown;
+      }
       var box = el.nextElementSibling;
       while(box && (box.classList.contains("existing") || box.classList.contains("composer"))){
-        box.hidden = h; box = box.nextElementSibling;
+        box.hidden = el.hidden; box = box.nextElementSibling;
       }
     });
+    updateFilterLabel();
   }
   function setCaret(el){
     var c = el.querySelector(".caret");
@@ -927,11 +1197,19 @@ window.__MARGINALIA__ = {{.DataJSON}};
     el.addEventListener("keydown", function(e){
       if(e.target !== el || e.metaKey || e.ctrlKey || e.altKey) return;
       if(e.key === "Enter"){ e.preventDefault(); openComposer(el); return; }
-      // A configured shortcut: the verdict without the composer.
+      // A configured shortcut: the verdict without the composer. It is
+      // checked before movement, so the agent's vocabulary always wins its
+      // letter and only what is left over moves the cursor.
       var a = byKey[e.key];
-      if(!a) return;
+      if(a){
+        e.preventDefault();
+        if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
+        return;
+      }
+      var what = navFor(e);
+      if(!what) return;
       e.preventDefault();
-      if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
+      doNav(what);
     });
   });
   // A drawn diagram is the review surface and its source is one tap away.
@@ -1099,6 +1377,10 @@ window.__MARGINALIA__ = {{.DataJSON}};
     };
   }
   count();
+  progress();
+  // Folding is a tree's business, but filtering is every document's, and both
+  // resolve here — so this runs for a markdown page too.
+  applyFolds();
   // Display settings live in this browser only: a preference about the room
   // the document is read in has no business on the agent's disk.
   (function(){
@@ -1151,6 +1433,14 @@ window.__MARGINALIA__ = {{.DataJSON}};
     badge.hidden = false;
   }
   document.getElementById("done").onclick=function(){
+    // Say what is missing before asking the server to refuse. Learning the
+    // rule by being told no, with a number and no names, is how a reviewer
+    // ends up hunting badges down a sixty-block page.
+    if(requireVerdict && showOutstanding()){
+      toast("Some blocks still want a verdict.");
+      return;
+    }
+    document.getElementById("outstanding").hidden = true;
     if(data.static){
       keep({doc:data.doc.path,block:"",quote:"",hash:"",type:"review_done",text:"",author:author});
       revealShare();
@@ -1158,7 +1448,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
       return;
     }
     fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
-      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());});
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){
+          // The page renders the rule; the server enforces it. If they ever
+          // disagree the server is right, so show its refusal and the list.
+          if(res.status === 409) showOutstanding();
+          throw new Error(t.trim());
+        });
         var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
         if(t) t.hidden = false;
         refreshSetCount();

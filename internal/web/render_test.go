@@ -7,6 +7,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 func TestRenderSelfContained(t *testing.T) {
@@ -315,6 +316,60 @@ func TestRenderHydratesThreads(t *testing.T) {
 	for _, want := range []string{"replybtn", "openReply", "reply_to"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the page cannot answer a note: missing %q", want)
+		}
+	}
+}
+
+// The long-document controls have to reach the page, and the page has to know
+// which blocks are commentable and which are inline — a filter that hid a list
+// item would renumber the list around it.
+//
+// This asserts the *wiring*, not the behaviour: whether pressing a key moves
+// the cursor is a browser question, and issue #60 tracks the fact that nothing
+// here can answer it.
+func TestRenderCarriesTheLongDocumentControls(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# Spec\n\nOne.\n\n- a\n- b\n\nTwo.\n"))
+	cfg := &review.Config{RequireVerdict: true, ReadOnly: []string{"1/4"}}
+	if err := cfg.Validate("comment", "x", nil); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Review: cfg, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		`id="progress"`, `id="progtext"`, `id="progfill"`,
+		`data-filter="unanswered"`, `data-filter="mine"`, `data-filter="noted"`,
+		`id="outstanding"`, `id="outstanding-list"`,
+		`"require_verdict":true`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	// A list item is inline, so the payload must say so.
+	if !strings.Contains(out, `"inline":true`) {
+		t.Error("list items must be marked inline, or a filter would hide them and renumber the list")
+	}
+	// The read-only block is projected as such: the page's idea of commentable
+	// is the server's own rule, not a second guess at it.
+	if !strings.Contains(out, `"readonly":true`) {
+		t.Error("a read-only block must reach the page as read-only")
+	}
+}
+
+// The page computes "answered of commentable" from readonly, and readonly is
+// cfg.Locked(). If those ever diverge the progress bar and the Done gate would
+// disagree about the same document — the reviewer would be told they are
+// finished and then refused.
+func TestProjectedReadOnlyIsExactlyTheServersGate(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# A\n\nOne.\n\n# B\n\nTwo.\n"))
+	cfg := &review.Config{ReadOnly: []string{"2"}, Skip: []string{"1/2"}}
+	got := project(doc, cfg, nil)
+	for _, b := range got.Blocks {
+		if b.ReadOnly != cfg.Locked(b.ID) {
+			t.Errorf("%s: projected readonly=%v, server Locked=%v", b.ID, b.ReadOnly, cfg.Locked(b.ID))
 		}
 	}
 }
