@@ -6,7 +6,7 @@
     {
       "name": "marginalia",
       "source": "./",
-      "description": "Document review tool: render markdown, collect block-anchored comments, return structured feedback events."
+      "description": "Document review tool: render markdown, .proto, JSON/YAML/TOML or mermaid, collect block-anchored comments, return structured feedback events."
     }
   ]
 }

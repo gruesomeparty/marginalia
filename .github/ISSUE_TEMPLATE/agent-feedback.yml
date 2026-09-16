@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: Marginalia version
-      placeholder: v0.1.0
+      placeholder: dev, or the tag you installed
     validations:
       required: true
   - type: input
