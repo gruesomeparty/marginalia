@@ -122,7 +122,7 @@ func TestToolsAreTheOnesWeMeantToShip(t *testing.T) {
 // The whole handover, as an agent would drive it.
 func TestReviewRoundTrip(t *testing.T) {
 	root := t.TempDir()
-	doc := writeDoc(t, root, "spec.md", specDoc)
+	writeDoc(t, root, "spec.md", specDoc)
 	cs, _ := serveMCP(t, root)
 
 	var started reviewDocumentOut
@@ -156,6 +156,9 @@ func TestReviewRoundTrip(t *testing.T) {
 		t.Fatalf("the page is not being served: %d", res.StatusCode)
 	}
 
+	// The path the tool handed back, not the one we passed in: they differ
+	// wherever a path component is a symlink.
+	doc := started.Docs[0].Doc
 	post(t, started.URL, feedback.Event{Doc: doc, Block: "1/2", Type: "blocker", Text: "500 is asserted, not derived", Author: "berkay"})
 
 	var seen feedbackOut
@@ -326,5 +329,51 @@ func TestCursorSurvivesAShortenedLog(t *testing.T) {
 	}
 	if len(ev.Events) != 1 || ev.Cursor != 1 {
 		t.Errorf("an impossible cursor lost events: %+v", ev)
+	}
+}
+
+// On macOS /var is a symlink to /private/var, so the path a caller passes and
+// the path the tools hand back are different strings for the same file. The
+// tools must speak one identity, and a cursor keyed by either spelling must
+// still mean the same place in the log — a cursor that silently matches
+// nothing re-delivers the whole log on every call, which is the worst way for
+// one to fail.
+func TestPathIdentitySurvivesASymlinkedRoot(t *testing.T) {
+	real := t.TempDir()
+	writeDoc(t, real, "spec.md", specDoc)
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks unavailable here")
+	}
+	cs, _ := serveMCP(t, link)
+
+	var started reviewDocumentOut
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}}, &started); err != nil {
+		t.Fatal(err)
+	}
+	served := started.Docs[0].Doc
+	if served != filepath.Join(real, "spec.md") {
+		t.Fatalf("the tool reported %q, not the resolved path", served)
+	}
+	post(t, started.URL, feedback.Event{Doc: served, Block: "1/2", Type: "comment", Text: "one", Author: "t"})
+
+	var seen feedbackOut
+	if err := call(t, cs, "feedback_since", map[string]any{"paths": []string{"spec.md"}}, &seen); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen.Docs[0].Events) != 1 {
+		t.Fatalf("expected the event, got %d", len(seen.Docs[0].Events))
+	}
+	// The caller keys its cursor by the path it knows — the unresolved one.
+	// That must still mean "I have read this much".
+	var again feedbackOut
+	if err := call(t, cs, "feedback_since", map[string]any{
+		"paths":  []string{"spec.md"},
+		"cursor": map[string]int{filepath.Join(link, "spec.md"): seen.Docs[0].Cursor},
+	}, &again); err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Docs[0].Events) != 0 {
+		t.Errorf("a cursor keyed by the caller's own spelling was ignored: %d events came back twice", len(again.Docs[0].Events))
 	}
 }
