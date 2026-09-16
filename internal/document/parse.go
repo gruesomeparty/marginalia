@@ -21,6 +21,7 @@ const (
 	FormatYAML     = "yaml"
 	FormatTOML     = "toml"
 	FormatMermaid  = "mermaid"
+	FormatDiff     = "diff"
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -42,6 +43,8 @@ func FormatFor(path string) string {
 		return FormatTOML
 	case ".mmd", ".mermaid":
 		return FormatMermaid
+	case ".diff", ".patch":
+		return FormatDiff
 	}
 	return ""
 }
@@ -72,6 +75,8 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseTOML(path, src)
 	case FormatMermaid:
 		return parseMermaid(path, src)
+	case FormatDiff:
+		return parseDiff(path, src)
 	}
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }
