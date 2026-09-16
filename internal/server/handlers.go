@@ -346,7 +346,13 @@ func (s *Server) checkVerdicts(target *Entry) (int, error) {
 	}
 	answered := make(map[string]bool, len(events))
 	for _, ev := range events {
-		if ev.Type != feedback.TypeReviewDone {
+		// Only the review's own vocabulary answers a block. The protocol's
+		// events are *about a note* — an agent's reply or its claim to have
+		// addressed something would otherwise satisfy a gate that exists to
+		// make the reviewer look at every block, and the agent would be
+		// answering on their behalf. A confirm costs nothing here either:
+		// the note it settles already marked the block answered.
+		if !review.IsProtocol(ev.Type) {
 			answered[ev.Block] = true
 		}
 	}

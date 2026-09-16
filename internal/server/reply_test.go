@@ -124,3 +124,88 @@ func writeConfig(t *testing.T, body string) string {
 	}
 	return path
 }
+
+// The revision-loop events go through the same gate as a reply: they name a
+// note, and the note has to be one this document's log holds.
+func TestProgressEventsAreGatedLikeReplies(t *testing.T) {
+	s, store, _ := newTestServer(t)
+	id := seedQuestion(t, store)
+
+	for _, typ := range []string{"addressed", "confirm", "reopen"} {
+		rr := post(t, s, "/api/feedback", feedback.Event{
+			Block: "1/2", Type: typ, Text: "did the thing", ReplyTo: id,
+		})
+		if rr.Code != http.StatusCreated {
+			t.Errorf("%s: code=%d body=%s", typ, rr.Code, rr.Body.String())
+		}
+		if rr := post(t, s, "/api/feedback", feedback.Event{
+			Block: "1/2", Type: typ, Text: "did the thing", ReplyTo: "000000000000",
+		}); rr.Code != http.StatusBadRequest {
+			t.Errorf("%s naming an unknown note: code=%d, want 400", typ, rr.Code)
+		}
+		if rr := post(t, s, "/api/feedback", feedback.Event{
+			Block: "1/2", Type: typ, Text: "did the thing",
+		}); rr.Code != http.StatusBadRequest {
+			t.Errorf("%s naming no note at all: code=%d, want 400", typ, rr.Code)
+		}
+	}
+}
+
+// A confirm is one tap. An `addressed` is not: the reviewer is being asked to
+// re-check a block, so they are owed a sentence saying what changed.
+func TestAddressedNeedsWordsButAVerdictDoesNot(t *testing.T) {
+	s, store, _ := newTestServer(t)
+	id := seedQuestion(t, store)
+
+	if rr := post(t, s, "/api/feedback", feedback.Event{Block: "1/2", Type: "addressed", ReplyTo: id}); rr.Code != http.StatusBadRequest {
+		t.Errorf("a wordless `addressed` is the assertion this replaces: code=%d, want 400", rr.Code)
+	}
+	for _, typ := range []string{"confirm", "reopen"} {
+		if rr := post(t, s, "/api/feedback", feedback.Event{Block: "1/2", Type: typ, ReplyTo: id}); rr.Code != http.StatusCreated {
+			t.Errorf("%s should be one tap: code=%d body=%s", typ, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+// require_verdict asks the *reviewer* to look at every block. An agent's
+// reply, or its claim to have addressed a note, must not satisfy it on their
+// behalf — that would close the handover with blocks nobody read.
+func TestProtocolEventsDoNotSatisfyRequireVerdict(t *testing.T) {
+	cfg := config(t, "require_verdict: true\n")
+	s, store := framed(t, cfg)
+	// Four blocks; the reviewer judges three and asks about the fourth.
+	for _, b := range []string{"1/1", "1/2", "2/1"} {
+		if rr := post(t, s, "/api/feedback", feedback.Event{Block: b, Type: "approve"}); rr.Code != http.StatusCreated {
+			t.Fatalf("seeding %s: %d", b, rr.Code)
+		}
+	}
+	q := feedback.Event{Block: "2/2", Type: "question", Text: "and this?", Author: "berkay", Ts: "2026-07-03T10:00:00Z"}
+	if err := store.Append(q); err != nil {
+		t.Fatal(err)
+	}
+	// The question answers 2/2, so Done is available...
+	if rr := post(t, s, "/api/feedback", feedback.Event{Type: "review_done"}); rr.Code != http.StatusCreated {
+		t.Fatalf("every block has something said about it: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	// ...but on a fresh document where the agent has only *replied*, it is not.
+	s2, store2 := framed(t, config(t, "require_verdict: true\n"))
+	seed := feedback.Event{Block: "1/1", Type: "question", Text: "?", Author: "berkay", Ts: "2026-07-03T10:00:00Z"}
+	if err := store2.Append(seed); err != nil {
+		t.Fatal(err)
+	}
+	for _, typ := range []string{"reply", "addressed"} {
+		if rr := post(t, s2, "/api/feedback", feedback.Event{
+			Block: "1/1", Type: typ, Text: "answered", ReplyTo: feedback.NoteID(seed),
+		}); rr.Code != http.StatusCreated {
+			t.Fatalf("%s: %d %s", typ, rr.Code, rr.Body.String())
+		}
+	}
+	rr := post(t, s2, "/api/feedback", feedback.Event{Type: "review_done"})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("code=%d, want 409 — three blocks still have nothing said about them", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "3 still to go") {
+		t.Errorf("the agent's own events must not count toward the gate: %q", rr.Body.String())
+	}
+}

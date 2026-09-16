@@ -212,6 +212,23 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing .item.current{border-left-width:3px}
 .existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:var(--r-pill);font-size:var(--fs-xs);color:var(--muted);text-transform:none;font-weight:400}
 .existing .item .was{margin-top:.2rem;color:var(--muted);font-style:italic}
+/* Where a note stands in the revision loop, as a chip on the note itself.
+   Colour says it at a glance; the word says it for anyone who cannot use the
+   colour, which is why both are always present. */
+.existing .item .status{margin-left:.4rem;padding:0 .4rem;border-radius:var(--r-pill);font-size:var(--fs-xs);font-weight:600;text-transform:none;border:1px solid transparent}
+.existing .item[data-status="addressed"] .status{background:color-mix(in srgb,var(--accent) var(--tint-weak),transparent);color:var(--accent);border-color:var(--accent)}
+.existing .item[data-status="confirmed"] .status{background:color-mix(in srgb,var(--ok) var(--tint-weak),transparent);color:var(--ok);border-color:var(--ok)}
+.existing .item[data-status="reopened"] .status{background:color-mix(in srgb,var(--bad) var(--tint-weak),transparent);color:var(--bad);border-color:var(--bad)}
+.existing .item[data-status="confirmed"]{opacity:.72}
+/* What the agent says it changed, and the one check we can run on the claim. */
+.existing .changed{margin:.35rem 0 0 .2rem;border-left:2px solid var(--accent);padding-left:.6rem}
+.existing .changed .who{font-weight:600;color:var(--muted);font-size:var(--fs-sm);margin-right:.35rem}
+.existing .changed .unclaimed{display:block;margin-top:.2rem;color:var(--bad);font-size:var(--fs-sm)}
+.existing .verdict{display:flex;gap:.4rem;margin-top:.45rem;align-items:center;flex-wrap:wrap}
+.existing .verdict button{font:inherit;font-size:var(--fs-sm);padding:.2rem .7rem;border-radius:var(--r-pill);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+.existing .verdict .yes:hover{border-color:var(--ok);color:var(--ok)}
+.existing .verdict .no:hover{border-color:var(--bad);color:var(--bad)}
+.existing .verdict .ask{color:var(--muted);font-size:var(--fs-sm)}
 /* A thread: the answers to one note, indented under it. One level deep, so
    the rule is a rule and not the first step of a tree. */
 .existing .thread{margin:.35rem 0 0 .2rem;border-left:1px solid var(--rule);padding-left:.6rem}
@@ -224,6 +241,10 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing .replybox .row{display:flex;gap:.4rem;margin-top:.35rem}
 .existing .replybox button{font:inherit;font-size:var(--fs-sm);padding:.25rem .7rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
 .existing .replybox .send{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+/* A block waiting on the reviewer wears a ring, so the second round is a
+   scan rather than a re-read. Settled blocks recede. */
+.block[data-status="addressed"][data-count]:not([data-count="0"])::before,pre .block[data-status="addressed"][data-count]:not([data-count="0"])::after{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--accent)}
+.block[data-status="confirmed"]{--badge:var(--ok);--badge-fg:var(--on-accent)}
 /* What was decided colours the badge, wherever it sits. */
 .block[data-state="approve"]{--badge:var(--ok);--badge-fg:var(--on-accent)}
 .block[data-state="reject"]{--badge:var(--bad);--badge-fg:var(--on-accent)}
@@ -391,8 +412,22 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return n;
   }
   function count(){
-    var n=0; Object.keys(byBlock).forEach(function(k){ n+=byBlock[k].length; });
+    var n=0, outstanding=0, addressed=0;
+    Object.keys(byBlock).forEach(function(k){
+      byBlock[k].forEach(function(note){
+        n++;
+        var st = note.status || "outstanding";
+        // An approve asks for nothing, so it is not work left to do — the
+        // same rule the server's materialized view applies.
+        if(st==="addressed") addressed++;
+        else if(st!=="confirmed" && note.event.type!=="approve" && !note.dangling) outstanding++;
+      });
+    });
     var parts=[n+" comment"+(n===1?"":"s")];
+    // The second round's queue, said first, because on a re-read it is the
+    // only number that tells the reviewer how much is left.
+    if(addressed) parts.push(addressed+" to re-check");
+    if(outstanding) parts.push(outstanding+" outstanding");
     var stale=staleCount();
     if(stale) parts.push(stale+" stale");
     if(unanchored) parts.push(unanchored+" unanchored");
@@ -409,7 +444,23 @@ window.__MARGINALIA__ = {{.DataJSON}};
       el.dataset.state = current.event.type;
       if(current.stale) el.dataset.stale = "1"; else delete el.dataset.stale;
     }
+    // The most urgent thing anyone is waiting on for this block, so a
+    // returning reviewer can scan for work instead of reading. A block whose
+    // notes are all settled asks for nothing and says so quietly.
+    carry(el, "status", urgency(list));
     mirror(el);
+  }
+  // Ranked by who is being waited on: a reopened note is the agent's problem,
+  // an addressed one is the reviewer's, an outstanding one is still the
+  // agent's, and a settled one is nobody's.
+  function urgency(list){
+    var rank = {reopened:3, addressed:2, outstanding:1, confirmed:0}, best = "", top = -1;
+    list.forEach(function(note){
+      var st = note.status || "outstanding";
+      if(st==="outstanding" && note.event.type==="approve") st = "confirmed";
+      if(rank[st] > top){ top = rank[st]; best = st; }
+    });
+    return best;
   }
   // The picture and the source are one surface, so a drawn shape wears the
   // badge state of the statement it is: how much was said, what was decided,
@@ -528,11 +579,81 @@ window.__MARGINALIA__ = {{.DataJSON}};
         var was=document.createElement("div"); was.className="was"; was.textContent="was: \u201c"+e.quote+"\u201d";
         item.appendChild(was);
       }
+      renderStatus(el, note, item);
       renderThread(el, note, item);
       box.appendChild(item);
     });
     el.mg_existing = box;
     attach(el, box);
+  }
+  // Where a note stands in the revision loop, and the verdict that moves it
+  // on. This is the second round's whole interface: a reviewer coming back to
+  // a document they already read needs to see which of their notes were acted
+  // on, not re-read the document.
+  function renderStatus(el, note, item){
+    var status = note.status || "outstanding";
+    item.dataset.status = status;
+    if(status !== "outstanding"){
+      var chip=document.createElement("span");
+      chip.className="status"; chip.textContent=status;
+      item.querySelector(".type").after(chip);
+    }
+    // What the agent says it changed — the claim the reviewer is being asked
+    // to check. Only the latest one; the earlier rounds are history.
+    var last = (note.progress||[]).slice().reverse().find(function(p){ return p.event.type==="addressed"; });
+    if(last && status === "addressed"){
+      var box=document.createElement("div"); box.className="changed";
+      var who=document.createElement("span"); who.className="who";
+      who.textContent=last.event.author || "agent";
+      box.appendChild(who);
+      var body=document.createElement("span"); body.textContent=last.event.text||"";
+      box.appendChild(body);
+      // The one check that can be run on the claim, shown where the claim is.
+      if(note.unclaimed){
+        var warn=document.createElement("span"); warn.className="unclaimed";
+        warn.textContent="\u26a0 this block has not changed since — the edit may be elsewhere";
+        box.appendChild(warn);
+      }
+      item.appendChild(box);
+    }
+    if(status !== "addressed" && status !== "reopened") return;
+    var row=document.createElement("div"); row.className="verdict";
+    var ask=document.createElement("span"); ask.className="ask";
+    ask.textContent = status === "addressed" ? "Is this right now?" : "Still open.";
+    row.appendChild(ask);
+    if(status === "addressed"){
+      row.appendChild(verdictBtn(el, note, "confirm", "yes", "Yes, settled"));
+      row.appendChild(verdictBtn(el, note, "reopen", "no", "No, still open"));
+    } else {
+      row.appendChild(verdictBtn(el, note, "confirm", "yes", "Settle it anyway"));
+    }
+    item.appendChild(row);
+  }
+  function verdictBtn(el, note, type, cls, label){
+    var b=document.createElement("button");
+    b.type="button"; b.className=cls; b.textContent=label;
+    b.addEventListener("click", function(ev){ ev.stopPropagation(); saveProgress(el, note, type, ""); });
+    return b;
+  }
+  // A verdict is an event like any other: append-only, naming the note it is
+  // about. Nothing is rewritten — the status is re-derived from the log.
+  function saveProgress(el, note, type, text){
+    var id=el.dataset.block, blk=blockOf[id]||{};
+    var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:type,text:text,reply_to:note.id,author:author};
+    function landed(saved){
+      (note.progress=note.progress||[]).push({event:saved,stale:false,id:saved.id});
+      note.status = type==="confirm" ? "confirmed" : (type==="reopen" ? "reopened" : "addressed");
+      // Confirming does not un-do the check on the claim, but it does stop
+      // the page nagging about it: the reviewer has looked and decided.
+      if(type!=="addressed") note.unclaimed = false;
+      renderExisting(el); count();
+      toast(type==="confirm" ? "Settled" : "Reopened");
+    }
+    if(data.static){ landed(keep(ev)); refreshShare(); return; }
+    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
+      .then(landed)
+      .catch(function(err){ toast("Failed: "+err.message); });
   }
   // A thread: the answers to one note, and the way to add another. A note
   // without an id cannot be answered — that is a log written before replies
@@ -623,7 +744,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var ev={doc:data.doc.path,block:id,quote:blk.quote||el.dataset.quote||"",hash:blk.hash||el.dataset.hash||"",type:action.type,text:text,author:author};
     if(fields && Object.keys(fields).length) ev.fields=fields;
     function landed(saved){
-      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false,id:saved.id});
+      (byBlock[id]=byBlock[id]||[]).push({event:saved,stale:false,id:saved.id,status:"outstanding"});
       marker(el); renderExisting(el); count(); bumpCurrentCount(); closeComposer();
       toast((labelOf[action.type]||"Note")+" saved");
     }

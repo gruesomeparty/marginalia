@@ -197,3 +197,72 @@ func TestPageCarriesItsRevision(t *testing.T) {
 		t.Errorf("page should carry the revision it was rendered from (%d)", s.Revision())
 	}
 }
+
+// The revision loop under --watch, which is how a second round actually
+// happens: the reviewer leaves the page open, the agent edits the file, and
+// the claim goes from "the document does not show this" to substantiated
+// without anyone restarting anything.
+func TestWatchRevalidatesAnAddressedClaim(t *testing.T) {
+	body := "# Spec\n\nCapped at 500.\n"
+	s, path, store := watched(t, body)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.watch(ctx)
+
+	var hash string
+	for _, b := range s.docOf(&s.docs[0]).Blocks {
+		if b.ID == "1/2" {
+			hash = b.Hash
+		}
+	}
+	q := feedback.Event{
+		Block: "1/2", Quote: "Capped at 500.", Hash: hash, Type: feedback.TypeQuestion,
+		Text: "Why 500?", Author: "berkay", Ts: "2026-07-03T10:00:00Z",
+	}
+	if err := store.Append(q); err != nil {
+		t.Fatal(err)
+	}
+	// The agent claims it acted, before actually editing.
+	if err := store.Append(feedback.Event{
+		Block: "1/2", Hash: hash, Type: feedback.TypeAddressed,
+		Text: "Raised the cap.", Author: "agent", Ts: "2026-07-03T11:00:00Z",
+		ReplyTo: feedback.NoteID(q),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	note := currentNote(t, s)
+	if note.Status != feedback.StatusAddressed || !note.Unclaimed {
+		t.Fatalf("before the edit the claim is unsubstantiated: status=%q unclaimed=%v", note.Status, note.Unclaimed)
+	}
+
+	// Now the edit lands, and the watcher picks it up.
+	rewrite(t, s, path, "# Spec\n\nCapped at 2000.\n")
+
+	note = currentNote(t, s)
+	if note.Status != feedback.StatusAddressed {
+		t.Errorf("status = %q, want addressed", note.Status)
+	}
+	if note.Unclaimed {
+		t.Error("the block changed, so the claim is now borne out — a re-parse has to re-run the check")
+	}
+}
+
+// currentNote reads the note on 1/2 out of the live resolution endpoint, which
+// is what the page renders from.
+func currentNote(t *testing.T, s *Server) feedback.Note {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/resolution", nil))
+	var res feedback.Resolution
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range res.States {
+		if st.Block == "1/2" {
+			return st.Current
+		}
+	}
+	t.Fatalf("no state for 1/2 in %+v", res.States)
+	return feedback.Note{}
+}

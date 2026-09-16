@@ -83,22 +83,26 @@ and parse JSONL. `marginalia mcp` speaks MCP over stdio instead:
 { "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp", "--root", "."] } } }
 ```
 
-Six tools: `review_document` (serve a document, get the URL to hand over, and
+Seven tools: `review_document` (serve a document, get the URL to hand over, and
 the vocabulary you will read back), `feedback_since` (only what is new, by
 cursor), `review_status` (the log materialized against the document as it now
 reads, including which suggested edits are safe to apply), `reply_to_note`
-(answer one of the human's notes in place), `await_review_done` (block until
-the human finishes; a timeout reports `done: false` rather than failing), and
+(answer one of the human's notes in place), `mark_addressed` (record that you
+changed the document in answer to a note), `await_review_done` (block until the
+human finishes; a timeout reports `done: false` rather than failing), and
 `close_review`.
 
 Two things about it are deliberate. **Reads come from the log on disk**, so
 they keep working after the agent's session ends and any number of agents can
-follow the same review. And **only replies are written**: `reply_to_note` is
-the one tool that appends, it appends one type, and that type names the note
-it answers. Everything else in the log is the human's, because an agent that
-could write a `comment` or a `review_done` could answer its own question.
-`--root` confines which paths a tool call may reach, because a tool argument
-can come from text the model read and `.yaml` is a supported input.
+follow the same review. And **an agent may answer and may claim, never
+decide**: `reply_to_note` and `mark_addressed` are the only tools that append,
+each writes one fixed type, and both name the note they are about. There is
+deliberately no tool that confirms or reopens — that is the reviewer's verdict
+on the agent's work, and an agent that could settle its own note would make the
+revision loop decorative. Everything else in the log is the human's, because an
+agent that could write a `comment` or a `review_done` could answer its own
+question. `--root` confines which paths a tool call may reach, because a tool
+argument can come from text the model read and `.yaml` is a supported input.
 
 ## Quickstart
 
@@ -380,6 +384,38 @@ answer re-roots to the note that started it.
 The id is derived from the event, so every log already on disk has ids, and an
 id survives `export`/`import` unchanged.
 
+## The second round
+
+A first review tells you what to change. The second one used to mean re-reading
+the whole document, because a block edited *because of* a note and a block
+edited for unrelated reasons looked identical.
+
+Change the document, then say which note you were answering:
+
+```bash
+marginalia addressed spec.md --to 8f2a1c4b9de0 --text "Raised the cap to 2000."
+```
+
+The reviewer's next look shows that block as **addressed — is this right now?**,
+with their original note beside what the block now says, and two buttons: *Yes,
+settled* or *No, still open*. So the second round is a short queue rather than a
+full re-read, and the header says how long the queue is:
+
+```
+12 comments · 3 to re-check · 2 outstanding
+```
+
+**The claim is checkable, not just asserted.** The event records the hash the
+block had when the note was written. If a re-render finds the block still
+hashing to that, nothing changed and the page says so, next to the claim — the
+edit may be somewhere else, or may not have happened. The claim is still shown;
+this is a review tool, not a court.
+
+A note nobody addressed stays **outstanding**, however much the document moves
+around it: silence is not resolution. An `approve` is not outstanding work.
+Agents do this through `mark_addressed`; confirming and reopening are the
+reviewer's, and there is no tool for them.
+
 ## Applying the feedback
 
 After a review, ask which `suggest_edit` replacements are safe to apply:
@@ -403,7 +439,9 @@ Marginalia never edits your document: this reports, you apply.
   schema path for trees), a ~90-char quote, and a content hash — so feedback
   re-anchors on re-render and stale comments are flagged.
 - Feedback events (`comment`, `suggest_edit`, `question`, `approve`, `reject`,
-  `reply`, `review_done`) are append-only JSONL beside the document.
+  `reply`, `addressed`, `confirm`, `reopen`, `review_done`) are append-only
+  JSONL beside the document. A note's status is *derived* by replaying the log;
+  nothing is ever rewritten.
 - The page is fully self-contained (inline CSS/JS, system fonts, no external
   requests) and never touches the Clipboard API.
 

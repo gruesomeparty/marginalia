@@ -17,14 +17,19 @@ import (
 // thread is one note and what has been said back, as `reply` reports it: the
 // id an answer names it by, what it said, and whether it is still open.
 type thread struct {
-	ID      string   `json:"id"`
-	Block   string   `json:"block"`
-	Type    string   `json:"type"`
-	Text    string   `json:"text"`
-	Author  string   `json:"author"`
-	Ts      string   `json:"ts"`
-	Stale   bool     `json:"stale"`
-	Replies []string `json:"replies"`
+	ID     string `json:"id"`
+	Block  string `json:"block"`
+	Type   string `json:"type"`
+	Text   string `json:"text"`
+	Author string `json:"author"`
+	Ts     string `json:"ts"`
+	Stale  bool   `json:"stale"`
+	// Status is where the note stands in the revision loop, and Unclaimed
+	// flags an `addressed` the document does not bear out.
+	Status    string   `json:"status"`
+	Unclaimed bool     `json:"unclaimed,omitempty"`
+	Replies   []string `json:"replies"`
+	Progress  []string `json:"progress,omitempty"`
 }
 
 func newReplyCmd() *cobra.Command {
@@ -86,16 +91,23 @@ func threadsOf(doc string) ([]thread, error) {
 			t := thread{
 				ID: n.ID, Block: st.Block, Type: n.Event.Type, Text: n.Event.Text,
 				Author: n.Event.Author, Ts: n.Event.Ts, Stale: n.Stale,
+				Status: n.Status, Unclaimed: n.Unclaimed,
 				Replies: make([]string, 0, len(n.Replies)),
 			}
 			for _, r := range n.Replies {
 				t.Replies = append(t.Replies, r.Event.Text)
 			}
-			// An unanswered question is the reason this command exists, so it
-			// is what the listing leads with.
-			if n.Event.Type == feedback.TypeQuestion && len(n.Replies) == 0 {
-				open = append(open, t)
-				continue
+			for _, pr := range n.Progress {
+				t.Progress = append(t.Progress, pr.Event.Type+": "+pr.Event.Text)
+			}
+			// What still wants doing comes first: an unanswered question, or
+			// any note nobody has claimed to act on. That ordering is the
+			// point of the listing — it is the agent's work queue.
+			if n.Status == feedback.StatusOutstanding || n.Status == feedback.StatusReopened {
+				if n.Event.Type != feedback.TypeApprove {
+					open = append(open, t)
+					continue
+				}
 			}
 			answered = append(answered, t)
 		}
@@ -122,7 +134,7 @@ func listThreads(w io.Writer, doc string, asJSON bool) error {
 	}
 	var b strings.Builder
 	for _, t := range threads {
-		fmt.Fprintf(&b, "%s  %s  %s", t.ID, t.Block, t.Type)
+		fmt.Fprintf(&b, "%s  %s  %s  [%s]", t.ID, t.Block, t.Type, t.Status)
 		if t.Stale {
 			b.WriteString("  (stale — block edited since)")
 		}
@@ -133,16 +145,34 @@ func listThreads(w io.Writer, doc string, asJSON bool) error {
 		for _, r := range t.Replies {
 			fmt.Fprintf(&b, "    ↳ %s\n", r)
 		}
+		for _, pr := range t.Progress {
+			fmt.Fprintf(&b, "    · %s\n", pr)
+		}
+		if t.Unclaimed {
+			b.WriteString("    ⚠ marked addressed, but the block has not changed since\n")
+		}
 	}
 	_, err = io.WriteString(w, b.String())
 	return err
 }
 
-// appendReply writes one answer. The id has to resolve in this document's own
-// log — the same rule the server enforces, for the same reason: an answer to
-// a note nobody holds is an answer nobody reads.
+// appendReply writes one answer.
 func appendReply(w io.Writer, doc, to, text, author string) error {
-	if err := review.ValidateProtocol(review.TypeReply, text, to); err != nil {
+	return appendProgress(w, doc, to, text, author, review.TypeReply)
+}
+
+// appendProgress writes one event about an existing note — an answer, or a
+// step in the revision loop. The id has to resolve in this document's own log
+// — the same rule the server enforces, for the same reason: an event about a
+// note nobody holds is an event nobody reads.
+//
+// The hash it records is the note's own, which is the hash the block had when
+// the note was written. That is what makes an `addressed` checkable: if the
+// block still hashes to it, nothing changed and the claim is not borne out.
+// Taking it from the note rather than asking the caller for it means the
+// check costs the agent nothing and cannot be fudged by forgetting.
+func appendProgress(w io.Writer, doc, to, text, author, typ string) error {
+	if err := review.ValidateProtocol(typ, text, to); err != nil {
 		return err
 	}
 	store := feedback.NewStore(doc)
@@ -162,12 +192,50 @@ func appendReply(w io.Writer, doc, to, text, author string) error {
 	}
 	e := feedback.Event{
 		Doc: doc, Block: target.Block, Quote: target.Quote, Hash: target.Hash,
-		Type: review.TypeReply, Text: text, Author: author,
+		Type: typ, Text: text, Author: author,
 		Ts: time.Now().UTC().Format(time.RFC3339), ReplyTo: to,
 	}
 	if err := store.Append(e); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(w, "marginalia: replied to %s (%s on %s) → %s\n", to, target.Type, target.Block, store.Path())
+	verb := map[string]string{
+		review.TypeReply:     "replied to",
+		review.TypeAddressed: "marked addressed",
+		review.TypeConfirm:   "settled",
+		review.TypeReopen:    "reopened",
+	}[typ]
+	_, err = fmt.Fprintf(w, "marginalia: %s %s (%s on %s) → %s\n", verb, to, target.Type, target.Block, store.Path())
 	return err
+}
+
+func newAddressedCmd() *cobra.Command {
+	var to, text, author string
+	cmd := &cobra.Command{
+		Use:   "addressed <doc>",
+		Short: "Record that you acted on a note, so the reviewer can check it",
+		Long: `Record that you changed the document in answer to a note.
+
+Edit the document first, then say which note you were answering and what you
+did. The reviewer's next look shows that block as "addressed — is this right?"
+with their original note beside what it now says, so a second round is a short
+queue instead of a full re-read.
+
+The claim is checkable: the event records the hash the block had when the note
+was written, and a re-render that finds the block unchanged says so. Marginalia
+still never edits your document — you make the change, this records it.`,
+		Args: requirePaths("addressed"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return fmt.Errorf("addressed takes one document — e.g. `marginalia addressed spec.md --to <id> --text \"raised the cap\"`")
+			}
+			if author == "" {
+				author = defaultAuthor()
+			}
+			return appendProgress(cmd.OutOrStdout(), args[0], to, text, author, review.TypeAddressed)
+		},
+	}
+	cmd.Flags().StringVar(&to, "to", "", "id of the note you acted on (see `marginalia reply <doc>`)")
+	cmd.Flags().StringVar(&text, "text", "", "what you changed")
+	cmd.Flags().StringVar(&author, "author", "", "who acted (defaults to $USER)")
+	return cmd
 }

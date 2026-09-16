@@ -103,13 +103,34 @@ var ident = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 // `reply` is here rather than in Builtin() for the same reason review_done is:
 // it is not a verdict on a block, it answers another note, and it must not
 // appear as a chip competing with the words the agent asked for.
+//
+// `addressed`, `confirm` and `reopen` close the revision loop (issue #48).
+// They are protocol for the same reason: they say where a note *stands*, not
+// what is wrong with a block, and a review that could redefine "confirm"
+// could make the second round unreadable.
 const (
 	TypeReviewDone = "review_done"
 	TypeReply      = "reply"
+	// TypeAddressed is the agent claiming it acted on a note. Its Hash is the
+	// hash the block had before the edit, which is what makes the claim
+	// checkable instead of merely asserted.
+	TypeAddressed = "addressed"
+	// TypeConfirm settles a note: the reviewer agrees it is handled.
+	TypeConfirm = "confirm"
+	// TypeReopen un-settles one: whatever was done did not do it.
+	TypeReopen = "reopen"
 )
 
 // Protocol lists them, for the server's gate and for the validator.
-func Protocol() []string { return []string{TypeReviewDone, TypeReply} }
+func Protocol() []string {
+	return []string{TypeReviewDone, TypeReply, TypeAddressed, TypeConfirm, TypeReopen}
+}
+
+// Answers reports whether a type is one that names another note — everything
+// in the protocol except review_done, which is about the whole document.
+func Answers(typ string) bool {
+	return IsProtocol(typ) && typ != TypeReviewDone
+}
 
 // IsProtocol reports whether a type is the review's own machinery.
 func IsProtocol(typ string) bool {
@@ -121,23 +142,35 @@ func IsProtocol(typ string) bool {
 	return false
 }
 
-// ValidateProtocol checks a protocol event. A reply must say something and
-// must name the note it answers; the caller checks that the name resolves,
+// ValidateProtocol checks a protocol event. Everything that names another
+// note must actually name one; the caller checks that the name *resolves*,
 // since only it has the log.
+//
+// Text is required where the event is worthless without it. A reply with
+// nothing to say answers nothing, and an `addressed` with nothing to say is
+// the assertion this feature exists to replace — the reviewer is being asked
+// to re-check a block, so they are owed a sentence saying what changed.
+// `confirm` and `reopen` are verdicts and may be one tap, though a reopen
+// reads better with a reason.
 func ValidateProtocol(typ, text, replyTo string) error {
 	switch typ {
 	case TypeReviewDone:
 		return nil
-	case TypeReply:
+	case TypeReply, TypeAddressed:
 		if strings.TrimSpace(text) == "" {
+			if typ == TypeAddressed {
+				return fmt.Errorf("say what you changed — an `addressed` with no words is the assertion this replaces")
+			}
 			return fmt.Errorf("a reply needs something to say")
 		}
-		if strings.TrimSpace(replyTo) == "" {
-			return fmt.Errorf("a reply must name the note it answers (reply_to)")
-		}
-		return nil
+	case TypeConfirm, TypeReopen:
+	default:
+		return fmt.Errorf("%q is not a protocol event", typ)
 	}
-	return fmt.Errorf("%q is not a protocol event", typ)
+	if strings.TrimSpace(replyTo) == "" {
+		return fmt.Errorf("a %s must name the note it is about (reply_to)", typ)
+	}
+	return nil
 }
 
 // Builtin actions — the compiled-in vocabulary from M1, kept here so the page

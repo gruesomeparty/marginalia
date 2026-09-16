@@ -4,15 +4,33 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
 // ask puts one question in a document's log, the way a reviewer would, and
 // returns the id an answer names it by.
+//
+// It carries the block's real hash, because the page always writes one and
+// because the hash is what makes an `addressed` claim checkable — a fixture
+// without it would quietly test the "cannot be proven" path instead.
 func ask(t *testing.T, doc, text string) string {
 	t.Helper()
+	parsed, err := document.Parse(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hash, quote string
+	for _, b := range parsed.Blocks {
+		if b.ID == "1/2" {
+			hash, quote = b.Hash, b.Quote
+		}
+	}
+	if hash == "" {
+		t.Fatalf("fixture has no block 1/2 to hang a question on")
+	}
 	e := feedback.Event{
-		Doc: doc, Block: "1/2", Quote: "Capped at 500 for now.", Type: feedback.TypeQuestion,
+		Doc: doc, Block: "1/2", Quote: quote, Hash: hash, Type: feedback.TypeQuestion,
 		Text: text, Author: "berkay", Ts: "2026-07-03T10:00:00Z",
 	}
 	if err := feedback.NewStore(doc).Append(e); err != nil {
@@ -147,4 +165,102 @@ func TestReplyToNoteOnlyEverWritesAReply(t *testing.T) {
 	if len(events) != 2 || events[1].Type != "reply" || events[1].ReplyTo != id {
 		t.Fatalf("the log took something other than a reply: %+v", events)
 	}
+}
+
+// The acceptance criterion of issue #48 driven the way an agent would: read
+// the note, change the document, record the claim, and see the reviewer's
+// queue reflect it.
+func TestMarkAddressedClosesTheRevisionLoop(t *testing.T) {
+	root := t.TempDir()
+	doc := writeDoc(t, root, "spec.md", specDoc)
+	id := ask(t, doc, "Why 500?")
+	cs, _ := serveMCP(t, root)
+
+	// The agent edits the document — Marginalia never does this itself.
+	writeDoc(t, root, "spec.md", "# Spec\n\nCapped at 2000 now.\n\n## Retry\n\nThree attempts, no backoff.\n")
+
+	var out replyOut
+	if err := call(t, cs, "mark_addressed", map[string]any{
+		"doc": "spec.md", "note_id": id, "text": "Raised the cap to 2000.",
+	}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.ReplyTo != id || out.Answered != feedback.TypeQuestion {
+		t.Fatalf("the claim does not name what it is about: %+v", out)
+	}
+
+	var status statusOut
+	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &status); err != nil {
+		t.Fatal(err)
+	}
+	d := status.Docs[0]
+	if d.Addressed != 1 || d.Outstanding != 0 {
+		t.Fatalf("addressed = %d, outstanding = %d; want 1 and 0", d.Addressed, d.Outstanding)
+	}
+	n := d.States[0].Current
+	if n.Status != feedback.StatusAddressed || len(n.Progress) != 1 {
+		t.Fatalf("status = %q, progress = %d", n.Status, len(n.Progress))
+	}
+	if n.Unclaimed {
+		t.Error("the block really did change, so the claim is borne out")
+	}
+	// The note itself is untouched: the log is append-only and the question
+	// still reads as the question.
+	if n.Event.Type != feedback.TypeQuestion || n.Event.Text != "Why 500?" {
+		t.Errorf("the note was altered: %+v", n.Event)
+	}
+}
+
+// A claim the document does not bear out is recorded and reported as such.
+// The agent is not stopped — it may have edited a block elsewhere — but the
+// reviewer is told.
+func TestMarkAddressedWithoutEditingSaysSo(t *testing.T) {
+	root := t.TempDir()
+	doc := writeDoc(t, root, "spec.md", specDoc)
+	id := ask(t, doc, "Why 500?")
+	cs, _ := serveMCP(t, root)
+
+	if err := call(t, cs, "mark_addressed", map[string]any{
+		"doc": "spec.md", "note_id": id, "text": "Raised the cap.",
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var status statusOut
+	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &status); err != nil {
+		t.Fatal(err)
+	}
+	n := status.Docs[0].States[0].Current
+	if n.Status != feedback.StatusAddressed {
+		t.Errorf("the claim is still recorded: status = %q", n.Status)
+	}
+	if !n.Unclaimed {
+		t.Error("nothing in the document changed — the reviewer has to be told that")
+	}
+	_ = doc
+}
+
+// An `addressed` with no words is the assertion this feature replaces.
+func TestMarkAddressedNeedsToSayWhatChanged(t *testing.T) {
+	root := t.TempDir()
+	doc := writeDoc(t, root, "spec.md", specDoc)
+	id := ask(t, doc, "Why 500?")
+	cs, _ := serveMCP(t, root)
+
+	if err := call(t, cs, "mark_addressed", map[string]any{
+		"doc": "spec.md", "note_id": id, "text": "  ",
+	}, nil); err == nil {
+		t.Fatal("should have been refused")
+	}
+	if got := mustLoadN(t, doc); got != 1 {
+		t.Errorf("a refused claim must append nothing, log has %d", got)
+	}
+}
+
+func mustLoadN(t *testing.T, doc string) int {
+	t.Helper()
+	events, err := feedback.NewStore(doc).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(events)
 }

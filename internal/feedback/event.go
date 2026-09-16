@@ -3,6 +3,8 @@ package feedback
 import (
 	"crypto/sha256"
 	"encoding/hex"
+
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // Event is one append-only feedback record.
@@ -53,7 +55,19 @@ const (
 	TypeQuestion    = "question"
 	TypeApprove     = "approve"
 	TypeReject      = "reject"
-	TypeReviewDone  = "review_done"
+)
+
+// The protocol's own types, aliased from internal/review rather than spelled
+// again here. Replaying a log has to recognise them, but `review` is the
+// authority on which types exist, and `review_done` used to be written out in
+// both places — two spellings of one word, waiting to drift. A const alias
+// cannot.
+const (
+	TypeReviewDone = review.TypeReviewDone
+	TypeReply      = review.TypeReply
+	TypeAddressed  = review.TypeAddressed
+	TypeConfirm    = review.TypeConfirm
+	TypeReopen     = review.TypeReopen
 )
 
 // There is deliberately no ValidType here any more: which types a review
