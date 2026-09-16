@@ -39,7 +39,7 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
 | | |
 |---|---|
 | **Block anchoring** | Every block carries `{block, quote, hash}`. Feedback re-anchors on re-render; a comment written against text that has since changed comes back flagged **stale** rather than silently pointing at the wrong thing. |
-| **Four input families** | Markdown, `.proto`, JSON/YAML/TOML, and mermaid — including mermaid fences inside markdown. Everything but markdown renders as a folding, indented tree anchored by node path. |
+| **Five input families** | Markdown, `.proto`, JSON/YAML/TOML, mermaid, and unified diffs — including mermaid fences inside markdown. Everything but markdown renders as a folding, indented tree anchored by node path. |
 | **Drawn diagrams** | With mermaid's CLI installed, a flowchart renders as a picture whose shapes carry the same anchors as the source. Click the arrow, comment on that edge. |
 | **Framed reviews** | The requesting agent sets the instructions, the vocabulary (`blocker`, `nit`, …), structured fields, and which blocks are off-limits. Enforced server-side, not just rendered. |
 | **Four shipped framings** | `adr`, `schema`, `security`, `copy` — so the same review compares across runs instead of getting a fresh vocabulary each time. |
@@ -324,6 +324,7 @@ and a tab left open across a restart must not be able to invent vocabulary.
 | `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | what the statement connects — `client-->api`, `payments/worker-->queue`; in a fence, under the fence's own ID — `1/3/client-->api` |
+| `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -362,6 +363,30 @@ a strict CSP, and the drawing takes the reviewer's theme and light/dark.
 
 A diagram type the parser does not take apart — a sequence diagram, say — stays
 reviewable as one source block rather than failing.
+
+**Diffs and patches.** The thing a human is most often asked to approve, so the
+review is the *change* rather than the file. Each file is a top-level block and
+each hunk hangs off it, with the commit message from `git format-patch` kept as
+a block of its own — it is part of what is being signed off.
+
+```bash
+git diff main... > change.patch && marginalia serve change.patch
+```
+
+Hunks are anchored by **ordinal, not line number**: regenerating a patch after
+an earlier hunk changes shifts every line number below it, which would orphan
+every note under it. The markers are hashed with the text, because `+ if n >
+2000` and `- if n > 2000` are opposite statements. A note on the *file* —
+"this shouldn't be in the patch at all" — hashes the file's identity and tally
+rather than its hunks, so editing a hunk does not make it stale.
+
+Since the review config's patterns already treat `/` as a separator,
+`readonly: ["internal/"]` mutes a whole directory of a patch.
+
+Parsing is tolerant, like every other format here: a truncated hunk, a patch
+from something that is not git, a hunk with no file header, or a mailer that
+ate the leading space off context lines all still render. A binary file, a pure
+rename or a mode change says what it is instead of showing an empty diff.
 
 ### Where sentence-level notes apply
 
@@ -685,7 +710,7 @@ links to where it is tracked.
 
 | Gap | Detail |
 |---|---|
-| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | No OpenAPI, HCL, SQL migrations, diffs, or source code as symbols. What Marginalia accepts is what it is for, so this is the first-order gap. |
+| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs have landed. Still missing: OpenAPI anchored by operation rather than as a generic tree, HCL, SQL migrations, and source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
 | **Only flowcharts decompose** | Other mermaid diagram types stay reviewable as a single source block rather than per statement. |
 | **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. The interface is half the product and the untested half. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |

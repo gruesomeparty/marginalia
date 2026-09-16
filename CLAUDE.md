@@ -271,6 +271,21 @@ users are agents, not humans.
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
   sub-anchor needs the text anyway.
+- Unified diffs (issue #52, first of its formats) are parsed by
+  `internal/unidiff` — tolerant and structural like `protoschema` and
+  `mermaid` — and wired in by `document/diff.go` as a two-level tree: a file
+  per top-level node, its hunks beneath. A hunk is anchored by **ordinal, not
+  line number** (`handlers.go/2`): regenerating a patch after an earlier hunk
+  changes shifts every line number below it, which would orphan every note
+  under it, whereas an ordinal only moves when a hunk is inserted before and
+  the hash catches that. Line markers are hashed with the text, since `+x` and
+  `-x` are opposite statements. A *file* block hashes its identity and tally
+  and not its hunks, so a note about the file survives its hunks being edited.
+  Because file ids are real paths and `review`'s patterns already treat `/` as
+  a separator, `readonly: ["internal/"]` mutes a directory for free. The
+  `git format-patch` preamble becomes an `@message` block — the commit message
+  is part of what is signed off — and an empty patch gets an `@empty` block
+  rather than rendering a blank page.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,

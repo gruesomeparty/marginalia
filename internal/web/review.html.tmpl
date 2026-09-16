@@ -112,6 +112,33 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 .outstanding .list button:hover{border-color:var(--accent);color:var(--accent)}
 .outstanding .list .id{font-family:var(--mono);color:var(--muted);margin-right:.5rem}
 .outstanding>button{font:inherit;padding:.3rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+/* A diff. The file line is the anchor a note about "this whole file" lands
+   on; each hunk is its own block under it, which is how a reviewer talks
+   about a change. Colour says added or removed and the marker column says it
+   again, because a reviewer who cannot use the colour still has to read it. */
+.diff-file{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap;font-family:var(--mono)}
+.diff-file .status{font-family:var(--sans);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;padding:0 .4rem;border-radius:var(--r-pill);border:1px solid var(--rule);color:var(--muted)}
+.diff-file .status.added{color:var(--ok);border-color:var(--ok)}
+.diff-file .status.deleted{color:var(--bad);border-color:var(--bad)}
+.diff-file .status.renamed,.diff-file .status.binary{color:var(--accent);border-color:var(--accent)}
+.diff-file .path{font-weight:600}
+.diff-file .tally{font-family:var(--sans);font-size:var(--fs-sm)}
+.diff-file .tally .plus{color:var(--ok)}
+.diff-file .tally .minus{color:var(--bad)}
+.diff-file .note{font-family:var(--sans);font-size:var(--fs-sm);color:var(--muted);font-style:italic}
+.hunk .at{font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);padding:.1rem 0}
+.hunk .lines{margin:0;padding:0;background:transparent;border:0;overflow-x:auto}
+.hunk .ln{display:block;white-space:pre}
+.hunk .ln .no{display:inline-block;width:3.5em;text-align:right;padding-right:.6em;color:var(--muted);opacity:.65;user-select:none}
+.hunk .ln .mark{display:inline-block;width:1.2em;user-select:none}
+.hunk .ln.add{background:color-mix(in srgb,var(--ok) var(--tint-weak),transparent)}
+.hunk .ln.add .mark{color:var(--ok)}
+.hunk .ln.del{background:color-mix(in srgb,var(--bad) var(--tint-weak),transparent)}
+.hunk .ln.del .mark{color:var(--bad)}
+.hunk .ln.eof{color:var(--muted);font-style:italic}
+.patch-note{margin:0;white-space:pre-wrap;font-family:var(--mono);font-size:var(--fs-sm)}
+/* A diff is wide, so it gets the room a prose document does not need. */
+main.tree.diff{max-width:none}
 /* A note about one sentence. The mark is the quote as it now reads — found
    again by the server, never an offset we hope still points somewhere. */
 .block mark.mg-sub{background:color-mix(in srgb,var(--marker) var(--tint),transparent);color:inherit;border-radius:var(--r-tab);padding:0 .05em;box-shadow:0 1px 0 var(--marker)}
@@ -385,7 +412,7 @@ header #fold+button{margin-left:.5rem}
   </details>
 </aside>
 {{end}}
-<main id="doc"{{if .Doc.IsTree}} class="tree"{{end}}>
+<main id="doc"{{if .Doc.IsTree}} class="tree{{if eq .Doc.Format "diff"}} diff{{end}}"{{end}}>
   {{if .Review.Instructions}}
   <section class="framing" aria-label="What you are being asked to review">
     <h2>What to look at</h2>
