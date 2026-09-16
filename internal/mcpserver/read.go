@@ -12,10 +12,20 @@ import (
 // in file order, so an integer is exact, monotone, and needs nothing stored on
 // either side.
 type DocEvents struct {
-	Doc    string           `json:"doc"`
-	Events []feedback.Event `json:"events"`
-	Cursor int              `json:"cursor"`
-	Done   bool             `json:"done"`
+	Doc    string  `json:"doc"`
+	Events []Noted `json:"events"`
+	Cursor int     `json:"cursor"`
+	Done   bool    `json:"done"`
+}
+
+// Noted is an event as a tool reports it: the event, flattened, plus the id
+// that `reply_to_note` names it by. Embedding rather than a wrapper field
+// because the id is not extra information about the event — it *is* the
+// event, hashed, and a caller reading the log should not have to go somewhere
+// else to find out what to answer.
+type Noted struct {
+	feedback.Event
+	ID string `json:"id"`
 }
 
 // DocStatus is one document's log materialized against the document as it now
@@ -26,6 +36,7 @@ type DocStatus struct {
 	Doc      string                `json:"doc"`
 	Blocks   int                   `json:"blocks"`
 	Comments int                   `json:"comments"`
+	Replies  int                   `json:"replies"`
 	Stale    int                   `json:"stale"`
 	Orphaned int                   `json:"orphaned"`
 	Done     bool                  `json:"done"`
@@ -100,7 +111,7 @@ func eventsSince(path string, cursor int) (DocEvents, error) {
 	if err != nil {
 		return DocEvents{}, err
 	}
-	out := DocEvents{Doc: path, Cursor: len(events), Events: []feedback.Event{}}
+	out := DocEvents{Doc: path, Cursor: len(events), Events: []Noted{}}
 	for _, e := range events {
 		if e.Type == feedback.TypeReviewDone {
 			out.Done = true
@@ -111,7 +122,9 @@ func eventsSince(path string, cursor int) (DocEvents, error) {
 	if cursor < 0 || cursor > len(events) {
 		cursor = 0
 	}
-	out.Events = append(out.Events, events[cursor:]...)
+	for _, e := range events[cursor:] {
+		out.Events = append(out.Events, Noted{Event: e, ID: feedback.NoteID(e)})
+	}
 	return out, nil
 }
 
@@ -139,7 +152,7 @@ func statusOf(path string) (DocStatus, error) {
 	ready, needs := res.Suggestions()
 	out := DocStatus{
 		Doc: path, Blocks: len(doc.Blocks),
-		Comments: res.Comments, Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
+		Comments: res.Comments, Replies: res.Replies, Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
 		States: res.States,
 		Ready:  make([]ReadySuggestion, 0, len(ready)),
 		Needs:  needs,

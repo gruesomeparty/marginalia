@@ -278,3 +278,43 @@ func TestRenderPayloadOmitsRenderedHTML(t *testing.T) {
 		t.Error("payload should not repeat what the data attributes carry")
 	}
 }
+
+// A thread reaches the page as data, not as prose: the reply is hydrated
+// under the note it answers, carrying the id the reply box needs, and it is
+// not a state of its own.
+func TestRenderHydratesThreads(t *testing.T) {
+	doc, _ := document.ParseBytes("spec.md", []byte("# Spec\n\nCapped at 500.\n"))
+	q := feedback.Event{Block: "1/2", Type: "question", Text: "Why 500?", Author: "berkay", Ts: "2026-07-03T10:00:00Z"}
+	res := feedback.Resolution{
+		Comments: 1,
+		Replies:  1,
+		States: []feedback.State{{
+			Block:   "1/2",
+			Current: feedback.Note{Event: q, ID: feedback.NoteID(q)},
+			History: []feedback.Note{{
+				Event: q, ID: feedback.NoteID(q),
+				Replies: []feedback.Reply{{Event: feedback.Event{
+					Block: "1/2", Type: "reply", Text: "The API caps it.",
+					Author: "agent", Ts: "2026-07-03T11:00:00Z", ReplyTo: feedback.NoteID(q),
+				}}},
+			}},
+		}},
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, Page{Doc: doc, Resolution: res, Author: "berkay"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{`"replies":[`, "The API caps it.", `"id":"` + feedback.NoteID(q) + `"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the thread did not reach the page: missing %q", want)
+		}
+	}
+	// The affordance and the code that writes one: without both, a question
+	// renders as a dead end exactly as it did before.
+	for _, want := range []string{"replybtn", "openReply", "reply_to"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the page cannot answer a note: missing %q", want)
+		}
+	}
+}

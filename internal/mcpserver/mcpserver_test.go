@@ -99,18 +99,22 @@ func TestToolsAreTheOnesWeMeantToShip(t *testing.T) {
 			t.Errorf("tool %q has no description — an agent picks tools by these", tool.Name)
 		}
 	}
-	want := []string{"review_document", "feedback_since", "review_status", "await_review_done", "close_review"}
+	want := []string{"review_document", "feedback_since", "review_status", "reply_to_note", "await_review_done", "close_review"}
 	for _, name := range want {
 		if !got[name] {
 			t.Errorf("missing tool %q", name)
 		}
 	}
-	// No tool may write to a feedback log: the log is the human's answers,
-	// and an agent that could append to it could answer its own question.
+	// reply_to_note is the one tool that writes, and it writes one type. An
+	// agent must never be able to put words in the reviewer's mouth — no
+	// comment, no verdict, and above all no review_done, which is the signal
+	// it is waiting on. Answering a question is the exception the whole
+	// feature is, and it is legible as one: a reply names the note it answers
+	// and can be nothing else.
 	for name := range got {
 		for _, forbidden := range []string{"post", "append", "feedback_write", "session_done", "apply"} {
 			if strings.Contains(name, forbidden) {
-				t.Errorf("tool %q looks like it writes — nothing here may", name)
+				t.Errorf("tool %q looks like it writes the human's answers — only reply_to_note writes, and only replies", name)
 			}
 		}
 	}

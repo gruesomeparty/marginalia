@@ -142,6 +142,11 @@ func (s *Server) MCP() *mcp.Server {
 	}, s.reviewStatus)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "reply_to_note",
+		Description: "Answer one of the human's notes in place, by its id. A question you answer this way shows up under their own note the next time the page renders — the alternative is revising the document and hoping they notice.",
+	}, s.replyToNote)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "await_review_done",
 		Description: "Block until the human marks every named document done, then return everything new. A timeout is not an error: it reports done=false so you can tell the human they still have it.",
 	}, s.awaitReviewDone)

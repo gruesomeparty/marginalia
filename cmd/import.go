@@ -69,6 +69,9 @@ func importReview(path, doc string) (added, skipped int, target string, err erro
 	if err != nil {
 		return 0, 0, "", err
 	}
+	if err := checkReplies(path, shared.Events, existing, store.Path()); err != nil {
+		return 0, 0, "", err
+	}
 	seen := make(map[string]bool, len(existing))
 	for _, e := range existing {
 		seen[identity(e)] = true
@@ -90,9 +93,36 @@ func importReview(path, doc string) (added, skipped int, target string, err erro
 
 // identity is what makes two events the same event. Deliberately not the
 // whole struct: the same note imported twice differs only in the document
-// path it was exported under.
+// path it was exported under. It is the note's own id plus what it answers —
+// two replies can otherwise agree on every other word and still be answers to
+// different notes.
 func identity(e feedback.Event) string {
-	return e.Block + "\x00" + e.Type + "\x00" + e.Text + "\x00" + e.Author + "\x00" + e.Ts
+	return feedback.NoteID(e) + "\x00" + e.ReplyTo
+}
+
+// checkReplies refuses an import carrying an answer to a note nobody here
+// holds. Materialize would surface it as dangling rather than lose it, but a
+// log that accrues answers to notes it does not have is a log that reads
+// worse every merge — and the import is the last place the mismatch can still
+// be reported against a file the sender still has.
+func checkReplies(path string, incoming, existing []feedback.Event, logPath string) error {
+	var known map[string]bool
+	for i, e := range incoming {
+		if e.ReplyTo == "" {
+			continue
+		}
+		if known == nil {
+			known = make(map[string]bool, len(existing)+len(incoming))
+			for _, k := range append(append([]feedback.Event{}, existing...), incoming...) {
+				known[feedback.NoteID(k)] = true
+			}
+		}
+		if !known[e.ReplyTo] {
+			return fmt.Errorf("%s: event %d replies to note %s, which is in neither this file nor %s — import the review it answers first",
+				path, i+1, e.ReplyTo, logPath)
+		}
+	}
+	return nil
 }
 
 func newImportCmd() *cobra.Command {

@@ -1,5 +1,7 @@
 package feedback
 
+import "sort"
+
 // Resolve returns the latest event per block (chronological by Ts).
 // Events with an empty Block (e.g. review_done) are excluded.
 func Resolve(events []Event) map[string]Event {
@@ -22,6 +24,32 @@ func Resolve(events []Event) map[string]Event {
 type Note struct {
 	Event Event `json:"event"`
 	Stale bool  `json:"stale"`
+	// ID is what a reply points at. Derived from the event, never stored.
+	ID string `json:"id"`
+	// Replies are the answers to this note, oldest first. A thread is one
+	// level deep on purpose: a reply to a reply re-roots to the note that
+	// started it, because a review is a conversation about a block, not a
+	// forum. Replies are a Reply and not a Note for exactly that reason —
+	// the type cannot express a thread the design does not have.
+	Replies []Reply `json:"replies,omitempty"`
+	// Dangling marks a reply whose target is not in this log — a partial
+	// import, or a hand-edited file. It is surfaced as a note of its own
+	// rather than dropped, for the same reason an orphan is.
+	Dangling bool `json:"dangling,omitempty"`
+}
+
+// Reply is one answer to a note. It is deliberately not a Note: a thread is
+// one level deep, and a type that could nest would invite a forum.
+type Reply struct {
+	Event Event  `json:"event"`
+	Stale bool   `json:"stale"`
+	ID    string `json:"id"`
+}
+
+// note promotes a reply whose target is nowhere in the log back to a note of
+// its own, so it is read rather than dropped.
+func (r Reply) note() Note {
+	return Note{Event: r.Event, Stale: r.Stale, ID: r.ID, Dangling: true}
 }
 
 // State is one block's materialized review state: what the reviewer most
@@ -41,9 +69,13 @@ type State struct {
 type Resolution struct {
 	States   []State `json:"states"`
 	Comments int     `json:"comments"`
-	Stale    int     `json:"stale"`
-	Orphaned int     `json:"orphaned"`
-	Done     bool    `json:"done"`
+	// Replies counts answers, separately from comments: the header count is
+	// how much the *reviewer* said, and it must not inflate because the agent
+	// answered them.
+	Replies  int  `json:"replies"`
+	Stale    int  `json:"stale"`
+	Orphaned int  `json:"orphaned"`
+	Done     bool `json:"done"`
 }
 
 // Materialize replays a log against a document's current blocks. hashes maps
@@ -54,6 +86,7 @@ type Resolution struct {
 func Materialize(events []Event, hashes map[string]string, order []string) Resolution {
 	var res Resolution
 	byBlock := make(map[string][]Note, len(order))
+	replies := map[string][]Reply{}
 	var seen []string // orphan blocks, in the order the log mentions them
 	for _, e := range events {
 		if e.Type == TypeReviewDone {
@@ -63,20 +96,31 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 		if e.Block == "" {
 			continue
 		}
-		res.Comments++
 		hash, known := hashes[e.Block]
 		if !known {
 			if _, ok := byBlock[e.Block]; !ok {
 				seen = append(seen, e.Block)
 			}
 		}
-		byBlock[e.Block] = append(byBlock[e.Block], Note{
+		note := Note{
 			Event: e,
+			ID:    NoteID(e),
 			// A note with no hash predates hashing, or was written against a
 			// block that has none; it is reported as it is, not as stale.
 			Stale: known && e.Hash != "" && e.Hash != hash,
-		})
+		}
+		if e.ReplyTo != "" {
+			res.Replies++
+			replies[e.ReplyTo] = append(replies[e.ReplyTo], Reply{Event: e, Stale: note.Stale, ID: note.ID})
+			continue
+		}
+		res.Comments++
+		byBlock[e.Block] = append(byBlock[e.Block], note)
 	}
+	// Hang each reply under the note it answers, re-rooting a reply to a
+	// reply. A reply naming nothing in this log becomes a note of its own,
+	// marked dangling.
+	seen = attachReplies(byBlock, replies, seen, hashes)
 	for _, block := range order {
 		if notes, ok := byBlock[block]; ok {
 			res.States = append(res.States, state(block, notes, false))
@@ -97,6 +141,81 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 		}
 	}
 	return res
+}
+
+// attachReplies hangs each reply under the note it answers.
+//
+// Threads are one level deep: a reply to a reply re-roots to the note that
+// started the thread, because a review is a conversation about a block, not a
+// forum. The walk is bounded, so a hand-edited file that makes a cycle stops
+// rather than spinning.
+func attachReplies(byBlock map[string][]Note, replies map[string][]Reply, seen []string, hashes map[string]string) []string {
+	if len(replies) == 0 {
+		return seen
+	}
+	// Where every root note lives, so a reply can find it.
+	type place struct{ block string }
+	at := map[string]place{}
+	for block, notes := range byBlock {
+		for _, n := range notes {
+			at[n.ID] = place{block: block}
+		}
+	}
+	// A reply may name another reply; resolve to the root it belongs to.
+	root := map[string]string{}
+	var resolve func(id string, depth int) (string, bool)
+	resolve = func(id string, depth int) (string, bool) {
+		if depth > 16 {
+			return "", false
+		}
+		if _, ok := at[id]; ok {
+			return id, true
+		}
+		for target, group := range replies {
+			for _, r := range group {
+				if r.ID == id {
+					return resolve(target, depth+1)
+				}
+			}
+		}
+		return "", false
+	}
+	for target := range replies {
+		if r, ok := resolve(target, 0); ok {
+			root[target] = r
+		}
+	}
+	for target, group := range replies {
+		rootID, ok := root[target]
+		if !ok {
+			// Nothing in this log answers to that id. Surface the reply as a
+			// note of its own rather than dropping it — the same reason an
+			// orphan is listed instead of discarded.
+			for _, r := range group {
+				n := r.note()
+				if _, known := hashes[n.Event.Block]; !known {
+					if _, listed := byBlock[n.Event.Block]; !listed {
+						seen = append(seen, n.Event.Block)
+					}
+				}
+				byBlock[n.Event.Block] = append(byBlock[n.Event.Block], n)
+			}
+			continue
+		}
+		block := at[rootID].block
+		notes := byBlock[block]
+		for i := range notes {
+			if notes[i].ID != rootID {
+				continue
+			}
+			notes[i].Replies = append(notes[i].Replies, group...)
+			sort.SliceStable(notes[i].Replies, func(a, b int) bool {
+				return notes[i].Replies[a].Event.Ts < notes[i].Replies[b].Event.Ts
+			})
+		}
+		byBlock[block] = notes
+	}
+	return seen
 }
 
 // state assembles one block's view. The current note is the latest by

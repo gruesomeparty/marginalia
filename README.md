@@ -83,19 +83,22 @@ and parse JSONL. `marginalia mcp` speaks MCP over stdio instead:
 { "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp", "--root", "."] } } }
 ```
 
-Five tools: `review_document` (serve a document, get the URL to hand over, and
+Six tools: `review_document` (serve a document, get the URL to hand over, and
 the vocabulary you will read back), `feedback_since` (only what is new, by
 cursor), `review_status` (the log materialized against the document as it now
-reads, including which suggested edits are safe to apply), `await_review_done`
-(block until the human finishes; a timeout reports `done: false` rather than
-failing), and `close_review`.
+reads, including which suggested edits are safe to apply), `reply_to_note`
+(answer one of the human's notes in place), `await_review_done` (block until
+the human finishes; a timeout reports `done: false` rather than failing), and
+`close_review`.
 
 Two things about it are deliberate. **Reads come from the log on disk**, so
 they keep working after the agent's session ends and any number of agents can
-follow the same review. And **no tool writes to a feedback log** — the log is
-the human's answers, and an agent that could append to it could answer its own
-question. `--root` confines which paths a tool call may reach, because a tool
-argument can come from text the model read and `.yaml` is a supported input.
+follow the same review. And **only replies are written**: `reply_to_note` is
+the one tool that appends, it appends one type, and that type names the note
+it answers. Everything else in the log is the human's, because an agent that
+could write a `comment` or a `review_done` could answer its own question.
+`--root` confines which paths a tool call may reach, because a tool argument
+can come from text the model read and `.yaml` is a supported input.
 
 ## Quickstart
 
@@ -352,6 +355,31 @@ curl -s localhost:8787/api/resolution | jq '.stale, .orphaned'
 Nothing is rewritten to produce it: the log stays append-only and staleness is a
 view over it, not a fact on disk.
 
+## Answering a question
+
+A reviewer's question used to be a dead end: you could revise the document and
+hope they noticed. Now you answer it, and the answer hangs under their own note
+the next time the page renders.
+
+```bash
+marginalia reply spec.md                         # the notes, and the ids to answer
+marginalia reply spec.md --to 8f2a1c4b9de0 \
+  --text "The cap comes from the upstream API."
+```
+
+Agents do the same through `reply_to_note`; the page shows a **Reply** box under
+every note, so the human can answer back.
+
+A reply is an event like any other — append-only, anchored to the same block,
+pointing at the note it answers by that note's id. It changes nothing about the
+note it answers: the question stays the block's current state, the header count
+still says how much the *reviewer* said, and a thread is assembled when the log
+is read, never stored. Threads are one level deep on purpose; an answer to an
+answer re-roots to the note that started it.
+
+The id is derived from the event, so every log already on disk has ids, and an
+id survives `export`/`import` unchanged.
+
 ## Applying the feedback
 
 After a review, ask which `suggest_edit` replacements are safe to apply:
@@ -375,7 +403,7 @@ Marginalia never edits your document: this reports, you apply.
   schema path for trees), a ~90-char quote, and a content hash — so feedback
   re-anchors on re-render and stale comments are flagged.
 - Feedback events (`comment`, `suggest_edit`, `question`, `approve`, `reject`,
-  `review_done`) are append-only JSONL beside the document.
+  `reply`, `review_done`) are append-only JSONL beside the document.
 - The page is fully self-contained (inline CSS/JS, system fonts, no external
   requests) and never touches the Clipboard API.
 
