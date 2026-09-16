@@ -30,7 +30,7 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
 - [Framing a review](#framing-a-review) · [Supported inputs](#supported-inputs)
 - [The review loop](#the-review-loop) · [Sharing off your machine](#sharing-off-your-machine)
 - [Reference](#reference) · [Why it works this way](#why-it-works-this-way)
-- [Gaps](#gaps) · [In flight](#in-flight) · [Planned](#planned) · [Development](#development)
+- [Gaps](#gaps) · [Direction](#direction) · [Development](#development)
 
 ---
 
@@ -677,63 +677,69 @@ choices above, and none of them is negotiable:
 
 ## Gaps
 
-Honest limitations of what is on `main` today. Each links to where it is tracked.
+Honest limitations of what is on `main` today, in the order they matter. Each
+links to where it is tracked.
 
 | Gap | Detail |
 |---|---|
-| **No authentication or provenance** ([#54](https://github.com/gruesomeparty/marginalia/issues/54)) | Anyone who can reach the URL can write to the log, and `author` is whatever the client says. Bind to loopback or a Tailscale interface; do not put a review on an untrusted network. |
-| **One reviewer at a time** ([#53](https://github.com/gruesomeparty/marginalia/issues/53)) | Two people on the same document both write to one log with no identity and no conflict story. |
-| **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. |
-| **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, though the phone is a stated goal. |
+| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | No OpenAPI, HCL, SQL migrations, diffs, or source code as symbols. What Marginalia accepts is what it is for, so this is the first-order gap. |
+| **Only flowcharts decompose** | Other mermaid diagram types stay reviewable as a single source block rather than per statement. |
+| **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. The interface is half the product and the untested half. |
+| **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
 | **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
 | **No blocking handoff from the CLI** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | MCP has `await_review_done`. There is no `serve --until-done`, no long-poll endpoint, and no outbound notification. |
-| **Only flowcharts decompose** | Other mermaid diagram types stay reviewable as a single source block rather than per statement. |
-| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | No OpenAPI, HCL, SQL migrations, diffs, or source code as symbols. |
 | **Drawing needs Node** | `mmdc` is the only non-Go dependency anywhere near this tool. It is optional and degrades to anchored source. |
 
 ---
 
-## In flight
+## Direction
 
-Open pull requests, as of 2026-09-16. This list rots; the
-[live one](https://github.com/gruesomeparty/marginalia/pulls) does not.
+Two things come first, in this order, because they are what the tool *is*:
 
-They are a stack — each based on the one before — so they land in order.
+**1. What it accepts.** Marginalia is worth reaching for exactly as often as it
+can read the thing you want reviewed. Every format it cannot take is a review
+that happens somewhere worse. More inputs, and finer anchoring within the ones
+it already has, is the first call on the time
+([#52](https://github.com/gruesomeparty/marginalia/issues/52),
+[#31](https://github.com/gruesomeparty/marginalia/issues/31)).
 
-| PR | Closes | What |
-|---|---|---|
-| [#56](https://github.com/gruesomeparty/marginalia/pull/56) | [#45](https://github.com/gruesomeparty/marginalia/issues/45) | Shipped review framings |
-| [#57](https://github.com/gruesomeparty/marginalia/pull/57) | [#43](https://github.com/gruesomeparty/marginalia/issues/43) | The MCP server |
-| [#58](https://github.com/gruesomeparty/marginalia/pull/58) | [#51](https://github.com/gruesomeparty/marginalia/issues/51) | A design language for the page |
-| [#59](https://github.com/gruesomeparty/marginalia/pull/59) | [#47](https://github.com/gruesomeparty/marginalia/issues/47) | Threaded replies |
-| [#61](https://github.com/gruesomeparty/marginalia/pull/61) | [#48](https://github.com/gruesomeparty/marginalia/issues/48) | The revision loop |
-| [#62](https://github.com/gruesomeparty/marginalia/pull/62) | [#46](https://github.com/gruesomeparty/marginalia/issues/46) | Long-document flow |
-| [#63](https://github.com/gruesomeparty/marginalia/pull/63) | — | This README |
-| [#64](https://github.com/gruesomeparty/marginalia/pull/64) | [#49](https://github.com/gruesomeparty/marginalia/issues/49) | Sentence-level notes |
+**2. The interface.** The page is the whole product from the human's side, and
+it is the part with no automated tests
+([#60](https://github.com/gruesomeparty/marginalia/issues/60)) and no
+accessibility pass ([#50](https://github.com/gruesomeparty/marginalia/issues/50)).
+A reviewer who finds it tiring stops reviewing, and no amount of event schema
+fixes that.
 
-Much of what this README documents lives in that stack rather than on `main`.
+After those, in no fixed order: the agent's half of `suggest_edit`
+([#55](https://github.com/gruesomeparty/marginalia/issues/55)) and a blocking
+handoff from the CLI ([#44](https://github.com/gruesomeparty/marginalia/issues/44)).
 
----
-
-## Planned
-
-The [tracker](https://github.com/gruesomeparty/marginalia/issues) is the
+The [tracker](https://github.com/gruesomeparty/marginalia/issues) is the live
 roadmap; every milestone in the PRD's build order has shipped.
 
-**Next:** browser tests for the page
-([#60](https://github.com/gruesomeparty/marginalia/issues/60)) — the largest
-gap, and the one every recent change has widened.
+### Deliberately not now
 
-**After that**, roughly by weight: more reviewable inputs
-([#52](https://github.com/gruesomeparty/marginalia/issues/52),
-[#31](https://github.com/gruesomeparty/marginalia/issues/31)), accessibility and
-touch ([#50](https://github.com/gruesomeparty/marginalia/issues/50)), the
-agent's half of `suggest_edit`
-([#55](https://github.com/gruesomeparty/marginalia/issues/55)), blocking handoff
-from the CLI ([#44](https://github.com/gruesomeparty/marginalia/issues/44)),
-multiple reviewers ([#53](https://github.com/gruesomeparty/marginalia/issues/53)),
-and auth before a review crosses a trust boundary
-([#54](https://github.com/gruesomeparty/marginalia/issues/54)).
+Marginalia is a local tool. You run it on your machine and hand the URL to
+someone who can reach your machine — usually you, sometimes a colleague on the
+same Tailnet, and otherwise through `export`, which needs no server at all.
+
+Everything that would follow from *hosting* a review instead — authentication
+and provenance ([#54](https://github.com/gruesomeparty/marginalia/issues/54)),
+more than one reviewer on one document
+([#53](https://github.com/gruesomeparty/marginalia/issues/53)) — is downstream
+of a decision that has not been made and may never be. So they are not on the
+list above, and their absence is a scope choice rather than a gap:
+
+- There is **no authentication**. Anyone who can reach the URL can write to the
+  log, and `author` is whatever the client says it is. That is fine for
+  `127.0.0.1` and for a Tailnet; it is not fine on an untrusted network, and
+  Marginalia will not pretend otherwise by growing a token flag.
+- There is **one reviewer**. Two people on one document write to one log with no
+  identity and no conflict story.
+
+If remote review ever becomes the point, both become real work. Until then,
+building auth for a threat model nobody has would be the expensive kind of
+speculation — and share mode already covers the case it would serve.
 
 ### How work gets picked up
 
