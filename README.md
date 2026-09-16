@@ -45,7 +45,7 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
 | **Four shipped framings** | `adr`, `schema`, `security`, `copy` — so the same review compares across runs instead of getting a fresh vocabulary each time. |
 | **Sentence-level notes** | Select a sentence in a paragraph and comment on *that*. The note survives unrelated edits around it and goes honestly stale when its own sentence changes. |
 | **Threads** | A reviewer's question gets an answer, in place, under their own note. |
-| **A revision loop** | The agent records *which note* a change answered; the reviewer confirms or reopens. The claim is checkable against the block's hash. |
+| **A revision loop** | The agent records *which note* a change answered; the reviewer confirms or reopens. The claim is checked against whatever the note is about — the block, or the one sentence. |
 | **Long-document flow** | Progress as answered-of-commentable, keyboard movement between unanswered blocks, filters, and a Done button that names what is missing. |
 | **Multi-document sets** | A directory, several paths, or a curated `.marginalia.yml`. One page per document, one log per document. |
 | **An MCP server** | Seven tools over stdio, so an agent stops scraping banners and parsing JSONL. |
@@ -477,11 +477,14 @@ their original note beside what the block now says, and two buttons: *Yes,
 settled* or *No, still open*. The second round is a short queue instead of a
 full re-read.
 
-**The claim is checkable, not just asserted.** The event records the hash the
-block had when the note was written. If a re-render finds the block still
-hashing to that, nothing changed, and the page says so next to the claim — the
+**The claim is checkable, not just asserted.** If a re-render finds that the
+thing the note is about has not moved, the page says so next to the claim — the
 edit may be somewhere else, or may not have happened. The claim is still shown;
 this is a review tool, not a court.
+
+What gets checked is what the note is about: the block's hash for a block-level
+note, and the *sentence* for a sentence-level one. So editing a different
+sentence in the same paragraph does not make an unrelated claim look borne out.
 
 A note nobody addressed stays **outstanding**, however much the document moves
 around it: silence is not resolution. An `approve` is not outstanding work.
