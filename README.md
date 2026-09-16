@@ -384,6 +384,39 @@ answer re-roots to the note that started it.
 The id is derived from the event, so every log already on disk has ids, and an
 id survives `export`/`import` unchanged.
 
+## Long documents
+
+A sixty-block document is a queue, not a page. The header shows how far through
+it you are — **answered of commentable**, not a raw comment count, because only
+that ratio says how much is left:
+
+```
+12 of 61 answered · 12 comments · 3 to re-check
+```
+
+Move through it without the mouse:
+
+| | |
+|---|---|
+| `↓` / `↑` | next / previous block |
+| `⇧↓` / `⇧↑` | next / previous **unanswered** block, wrapping |
+| `j` `k` `n` `p` | the same, when the review has not claimed those letters |
+| `?` | what is actually bound right now |
+
+A configured action always wins its key — the agent asked for that vocabulary,
+and silently stealing its letter would break a documented shortcut. That is why
+the arrows exist: a configured key is a single character, so `ArrowDown` can
+never be taken.
+
+The **Show all** menu filters to the way you are working: not answered, ones you
+answered, ones the requester left a note on, or ones waiting to be re-checked.
+The label says how many blocks are out of view, so a filter is never a silent
+lie. An inline block — a list item, a diagram statement — dims instead of
+hiding, because removing a bullet renumbers the list around it.
+
+With `require_verdict`, **Done** names the blocks still waiting and takes you to
+any of them, instead of only refusing.
+
 ## The second round
 
 A first review tells you what to change. The second one used to mean re-reading

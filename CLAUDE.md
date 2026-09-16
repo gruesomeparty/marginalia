@@ -222,6 +222,24 @@ users are agents, not humans.
   an agent's reply or claim cannot satisfy `require_verdict` on the reviewer's
   behalf. `marginalia addressed` and `mark_addressed` are the agent's side;
   confirm and reopen exist only in the page, deliberately.
+- The long-document flow (issue #46) is four things in the page, all built on
+  the token layer. **Progress is answered-of-commentable**, where commentable
+  is `!b.readonly` and `readonly` in the payload *is* `cfg.Locked()` — the
+  server's own gate, not a second guess; if they diverged the bar would say
+  finished and Done would refuse, so `render_test.go` asserts the projection
+  equals `Locked` for every block. **Movement** binds `ArrowDown`/`ArrowUp`
+  (and shifted, for next/previous *unanswered*, wrapping) plus `j`/`k`/`n`/`p`
+  when free: a configured action key always wins, because the agent asked for
+  that vocabulary, and since `review` requires a key to be a single character,
+  the arrows can never be taken — without them a review configuring `nit` with
+  key `n` would silently lose the queue shortcut. **Filters** resolve in the
+  same pass as folding (`applyFolds`), because two places setting `hidden`
+  fight; an inline block dims rather than hides, since removing a list item
+  renumbers the list around it, and the menu label always says how many blocks
+  are out of view. **`require_verdict`** now names the outstanding blocks and
+  scrolls to one on click, computed in the page but still enforced by the
+  server — a 409 re-opens the same panel, so if the two ever disagree the
+  server wins visibly.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
