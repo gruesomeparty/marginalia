@@ -32,10 +32,17 @@ for a `question` — the answer shows under their own note the next time the pag
 renders, which beats revising the document and hoping they notice. `note_id`
 comes back with every note from `review_status` and `feedback_since`.
 
-That is the only tool that writes, and it writes one type. The rest of the log
-is the human's answers — `review_done` above all, since it is the one signal the
-handover exists to produce. Apply suggested edits yourself, to the document,
-never through Marginalia.
+`mark_addressed {doc, note_id, text}` records that you changed the document in
+answer to a note. Edit the document first; this records the claim, it never
+writes the document. Their next look shows that block as "addressed — is this
+right?" so the second round is a short queue instead of a full re-read.
+
+Those two are the only tools that write, and each writes one fixed type. Note
+what is missing: you cannot confirm or reopen. That is their verdict on your
+work, and an agent that could settle its own note would make the whole loop
+decorative. The rest of the log is theirs — `review_done` above all, since it is
+the one signal the handover exists to produce. Apply suggested edits yourself,
+to the document, never through Marginalia.
 
 Everything below is the CLI path: use it when the MCP server is not connected.
 
@@ -288,7 +295,8 @@ the file.
 
 Event types: `comment`, `suggest_edit` (the `text` is the proposed replacement),
 `question`, `approve`, `reject`, `reply` (an answer to another note, naming it
-in `reply_to`) — plus any action you configured, which arrives
+in `reply_to`), `addressed`/`confirm`/`reopen` (the revision loop, also naming a
+note) — plus any action you configured, which arrives
 as its own `type` (`blocker`, `nit`) with its structured values in `fields`
 (`{"severity":"high"}`). You asked for that vocabulary, so treat it as binding:
 a `blocker` is not a `comment`. If a `hash` no longer matches the current block
@@ -312,7 +320,33 @@ resolving.
 Do this before you revise, not after: an answer they read in the page is worth
 more than a diff they have to infer it from.
 
-## 5. Revise and, if needed, re-review
+## 5. Revise, and say so
+
+Change the document, then record which note each change answers:
+
+```bash
+marginalia addressed spec.md --to <id> --text "Raised the cap to 2000."
+```
+
+(or `mark_addressed` over MCP). Do this for every note you acted on. It is what
+turns their second pass into a short queue — `marginalia reply <doc>` lists
+what still wants doing first, and the page shows each changed block as
+"addressed — is this right now?" with their note beside the new text.
+
+Two rules:
+
+- **Edit first, then record.** The event carries the hash the block had when
+  the note was written, and a re-render that finds the block unchanged says so,
+  in red, next to your claim. Claiming without changing anything is worse than
+  saying nothing.
+- **You do not get to settle it.** Confirming and reopening are theirs. A note
+  you addressed is not resolved, it is *waiting on them* — so do not treat
+  `addressed` as done when deciding whether to proceed.
+
+A note you did not act on stays outstanding, which is correct. If you disagree
+with a note, say so with a `reply` rather than quietly leaving it.
+
+## 6. Re-review if needed
 
 If you change the document, offer another `marginalia serve` pass — or serve it
 with `--watch` in the first place, and your edits appear in the reviewer's page

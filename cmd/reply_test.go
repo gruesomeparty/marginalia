@@ -159,3 +159,116 @@ func mustLoad(t *testing.T, doc string) []feedback.Event {
 	}
 	return events
 }
+
+// The acceptance criterion of #48, driven through the CLI: note → edit →
+// record → the listing shows it addressed, and it leaves the work queue.
+func TestAddressedRecordsTheClaimAndItChecksOut(t *testing.T) {
+	doc := seed(t, replyDoc, question("Why 500?"))
+	id := feedback.NoteID(mustLoad(t, doc)[0])
+
+	// The agent edits the document. Marginalia never does this itself.
+	if err := os.WriteFile(doc, []byte("# Spec\n\nCapped at 2000 now.\n\n## Retry\n\nThree attempts.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCmd(t, "addressed", doc, "--to", id, "--text", "Raised the cap to 2000.", "--author", "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "marked addressed") {
+		t.Errorf("unhelpful confirmation: %q", out)
+	}
+	events := mustLoad(t, doc)
+	if len(events) != 2 || events[1].Type != "addressed" || events[1].ReplyTo != id {
+		t.Fatalf("the claim does not name the note: %+v", events)
+	}
+	// It records the hash the block had when the note was written — that is
+	// what the re-render checks the claim against.
+	if events[1].Hash != events[0].Hash || events[1].Hash == "" {
+		t.Errorf("the pre-edit hash was not recorded: %q vs %q", events[1].Hash, events[0].Hash)
+	}
+
+	var threads []thread
+	jsonOut, err := runCmd(t, "reply", doc, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &threads); err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 || threads[0].Status != "addressed" {
+		t.Fatalf("status = %+v", threads)
+	}
+	if threads[0].Unclaimed {
+		t.Error("the block changed, so the claim is borne out")
+	}
+}
+
+// Claiming without editing is recorded and flagged, in the listing an agent
+// reads as well as in the page a human reads.
+func TestAddressedWithoutEditingIsFlagged(t *testing.T) {
+	doc := seed(t, replyDoc, question("Why 500?"))
+	id := feedback.NoteID(mustLoad(t, doc)[0])
+	if _, err := runCmd(t, "addressed", doc, "--to", id, "--text", "Raised the cap."); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCmd(t, "reply", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "has not changed since") {
+		t.Errorf("an unsubstantiated claim should say so: %q", out)
+	}
+}
+
+func TestAddressedNeedsToSayWhatChanged(t *testing.T) {
+	doc := seed(t, replyDoc, question("Why 500?"))
+	id := feedback.NoteID(mustLoad(t, doc)[0])
+	if _, err := runCmd(t, "addressed", doc, "--to", id, "--text", "  "); err == nil {
+		t.Fatal("a wordless claim should be refused")
+	}
+	if len(mustLoad(t, doc)) != 1 {
+		t.Error("a refused claim must append nothing")
+	}
+}
+
+// The work queue: what still wants doing comes first, and a settled note
+// drops out of it. This is what makes a second round short.
+func TestTheListingLeadsWithWhatStillWantsDoing(t *testing.T) {
+	doc := seed(t, replyDoc,
+		question("Why 500?"),
+		// 1.1/2, not 2/2: `## Retry` is a subsection of `# Spec`, so its
+		// paragraph is 1.1/2. A note on a block the document does not have
+		// would be orphaned, and would test the orphan path by accident.
+		feedback.Event{Block: "1.1/2", Hash: "auto", Type: "comment", Text: "tighten this", Author: "berkay", Ts: "2026-07-03T10:01:00Z"},
+	)
+	events := mustLoad(t, doc)
+	first := feedback.NoteID(events[0])
+
+	// Address and settle the first; the second is untouched.
+	if _, err := runCmd(t, "addressed", doc, "--to", first, "--text", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "reply", doc, "--to", first, "--text", "x"); err != nil {
+		t.Fatal(err)
+	}
+	var threads []thread
+	jsonOut, _ := runCmd(t, "reply", doc, "--json")
+	if err := json.Unmarshal([]byte(jsonOut), &threads); err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 2 {
+		t.Fatalf("expected two notes, got %d", len(threads))
+	}
+	for _, th := range threads {
+		if th.Ts == "" || th.Block == "" {
+			t.Fatalf("malformed thread: %+v", th)
+		}
+	}
+	// The untouched comment leads; the addressed question follows.
+	if threads[0].Text != "tighten this" || threads[0].Status != "outstanding" {
+		t.Errorf("the outstanding note should lead: %+v", threads[0])
+	}
+	if threads[1].Status != "addressed" {
+		t.Errorf("the addressed note should follow: %+v", threads[1])
+	}
+}

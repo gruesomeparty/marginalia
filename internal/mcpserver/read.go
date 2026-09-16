@@ -33,16 +33,23 @@ type Noted struct {
 // apply. It is deliberately the same shape the HTTP API and `suggestions`
 // already serve: a parallel schema would be a copy waiting to drift.
 type DocStatus struct {
-	Doc      string                `json:"doc"`
-	Blocks   int                   `json:"blocks"`
-	Comments int                   `json:"comments"`
-	Replies  int                   `json:"replies"`
-	Stale    int                   `json:"stale"`
-	Orphaned int                   `json:"orphaned"`
-	Done     bool                  `json:"done"`
-	States   []feedback.State      `json:"states"`
-	Ready    []ReadySuggestion     `json:"applicable_suggestions"`
-	Needs    []feedback.Suggestion `json:"suggestions_needing_confirmation"`
+	Doc      string `json:"doc"`
+	Blocks   int    `json:"blocks"`
+	Comments int    `json:"comments"`
+	Replies  int    `json:"replies"`
+	// The revision loop, as a queue length: what still wants doing, what the
+	// agent says it did and the reviewer has not ruled on yet, and what is
+	// settled. Reading these beats re-reading every state.
+	Outstanding int                   `json:"outstanding"`
+	Addressed   int                   `json:"addressed"`
+	Confirmed   int                   `json:"confirmed"`
+	Reopened    int                   `json:"reopened"`
+	Stale       int                   `json:"stale"`
+	Orphaned    int                   `json:"orphaned"`
+	Done        bool                  `json:"done"`
+	States      []feedback.State      `json:"states"`
+	Ready       []ReadySuggestion     `json:"applicable_suggestions"`
+	Needs       []feedback.Suggestion `json:"suggestions_needing_confirmation"`
 }
 
 // ReadySuggestion carries the block's current text beside the replacement, so
@@ -152,7 +159,10 @@ func statusOf(path string) (DocStatus, error) {
 	ready, needs := res.Suggestions()
 	out := DocStatus{
 		Doc: path, Blocks: len(doc.Blocks),
-		Comments: res.Comments, Replies: res.Replies, Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
+		Comments: res.Comments, Replies: res.Replies,
+		Outstanding: res.Outstanding, Addressed: res.Addressed,
+		Confirmed: res.Confirmed, Reopened: res.Reopened,
+		Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
 		States: res.States,
 		Ready:  make([]ReadySuggestion, 0, len(ready)),
 		Needs:  needs,

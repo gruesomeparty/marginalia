@@ -32,10 +32,51 @@ type Note struct {
 	// forum. Replies are a Reply and not a Note for exactly that reason —
 	// the type cannot express a thread the design does not have.
 	Replies []Reply `json:"replies,omitempty"`
+	// Progress is the addressed/confirm/reopen events on this note, oldest
+	// first — where it stands in the revision loop, as opposed to what was
+	// said about it. Same shape as a reply because it is the same kind of
+	// thing: an event that names this note.
+	Progress []Reply `json:"progress,omitempty"`
+	// Status is where the note stands: outstanding until something says
+	// otherwise, then whatever the latest progress event made it.
+	//
+	// Deliberately orthogonal to Stale. Stale says the *text* moved; Status
+	// says whether anyone claimed to act on the note. Conflating them is the
+	// bug this exists to fix: before it, a block edited in answer to a note
+	// and a block edited for unrelated reasons looked identical, so a second
+	// round meant re-reading the whole document.
+	Status string `json:"status"`
+	// Unclaimed marks an `addressed` the document does not bear out: the
+	// block still hashes to what it did before the claimed edit, so nothing
+	// changed. The claim is shown either way — this is a review tool, not a
+	// court — but it is shown as unsubstantiated.
+	Unclaimed bool `json:"unclaimed,omitempty"`
 	// Dangling marks a reply whose target is not in this log — a partial
 	// import, or a hand-edited file. It is surfaced as a note of its own
 	// rather than dropped, for the same reason an orphan is.
 	Dangling bool `json:"dangling,omitempty"`
+}
+
+// Where a note stands in the revision loop.
+const (
+	StatusOutstanding = "outstanding"
+	StatusAddressed   = "addressed"
+	StatusConfirmed   = "confirmed"
+	StatusReopened    = "reopened"
+)
+
+// statusAfter maps a progress event's type to the status it produces. A note
+// nobody has touched is outstanding: silence is not resolution.
+func statusAfter(typ string) string {
+	switch typ {
+	case TypeAddressed:
+		return StatusAddressed
+	case TypeConfirm:
+		return StatusConfirmed
+	case TypeReopen:
+		return StatusReopened
+	}
+	return StatusOutstanding
 }
 
 // Reply is one answer to a note. It is deliberately not a Note: a thread is
@@ -72,10 +113,20 @@ type Resolution struct {
 	// Replies counts answers, separately from comments: the header count is
 	// how much the *reviewer* said, and it must not inflate because the agent
 	// answered them.
-	Replies  int  `json:"replies"`
-	Stale    int  `json:"stale"`
-	Orphaned int  `json:"orphaned"`
-	Done     bool `json:"done"`
+	Replies int `json:"replies"`
+	// Outstanding is how many notes still ask for something: nobody has
+	// claimed to address them and nobody has settled them. It is the length
+	// of the second round's queue, which is the number that makes a re-review
+	// short instead of a full re-read.
+	Outstanding int `json:"outstanding"`
+	// Addressed counts notes the agent says it acted on and the reviewer has
+	// not yet ruled on — the "is this right now?" queue.
+	Addressed int  `json:"addressed"`
+	Confirmed int  `json:"confirmed"`
+	Reopened  int  `json:"reopened"`
+	Stale     int  `json:"stale"`
+	Orphaned  int  `json:"orphaned"`
+	Done      bool `json:"done"`
 }
 
 // Materialize replays a log against a document's current blocks. hashes maps
@@ -110,7 +161,12 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 			Stale: known && e.Hash != "" && e.Hash != hash,
 		}
 		if e.ReplyTo != "" {
-			res.Replies++
+			// An answer and a status both name another note, so both travel
+			// the same road here and are split apart when they are attached.
+			// Only an answer counts as something said.
+			if e.Type == TypeReply {
+				res.Replies++
+			}
 			replies[e.ReplyTo] = append(replies[e.ReplyTo], Reply{Event: e, Stale: note.Stale, ID: note.ID})
 			continue
 		}
@@ -121,6 +177,11 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 	// reply. A reply naming nothing in this log becomes a note of its own,
 	// marked dangling.
 	seen = attachReplies(byBlock, replies, seen, hashes)
+	// Status is derived after attaching, because it is a reading of the
+	// progress events — never a field anyone wrote.
+	for block := range byBlock {
+		settle(byBlock[block], hashes)
+	}
 	for _, block := range order {
 		if notes, ok := byBlock[block]; ok {
 			res.States = append(res.States, state(block, notes, false))
@@ -138,6 +199,26 @@ func Materialize(events []Event, hashes map[string]string, order []string) Resol
 		}
 		if s.Orphaned {
 			res.Orphaned++
+		}
+		for _, n := range s.History {
+			switch n.Status {
+			case StatusAddressed:
+				res.Addressed++
+			case StatusConfirmed:
+				res.Confirmed++
+			case StatusReopened:
+				res.Reopened++
+				res.Outstanding++
+			default:
+				// An approve asks for nothing, so counting it as outstanding
+				// would make a fully-approved document read as a full queue.
+				// Every other note is outstanding until something says
+				// otherwise — a configured `nit` included, because the agent
+				// asked for that word and has to answer for it.
+				if n.Event.Type != TypeApprove && !n.Dangling {
+					res.Outstanding++
+				}
+			}
 		}
 	}
 	return res
@@ -208,14 +289,55 @@ func attachReplies(byBlock map[string][]Note, replies map[string][]Reply, seen [
 			if notes[i].ID != rootID {
 				continue
 			}
-			notes[i].Replies = append(notes[i].Replies, group...)
-			sort.SliceStable(notes[i].Replies, func(a, b int) bool {
-				return notes[i].Replies[a].Event.Ts < notes[i].Replies[b].Event.Ts
-			})
+			// An answer goes in the thread; a status goes in the revision
+			// loop. They arrive mixed because both name this note.
+			for _, r := range group {
+				if r.Event.Type == TypeReply {
+					notes[i].Replies = append(notes[i].Replies, r)
+					continue
+				}
+				notes[i].Progress = append(notes[i].Progress, r)
+			}
+			byTime(notes[i].Replies)
+			byTime(notes[i].Progress)
 		}
 		byBlock[block] = notes
 	}
 	return seen
+}
+
+// byTime orders events oldest first, which is how a conversation and a
+// revision loop both read.
+func byTime(rs []Reply) {
+	sort.SliceStable(rs, func(a, b int) bool { return rs[a].Event.Ts < rs[b].Event.Ts })
+}
+
+// settle derives where each note stands from its progress events, and checks
+// the one claim that can be checked.
+//
+// An `addressed` says "I edited this block; before my edit it hashed X". If
+// the block *still* hashes to X, nothing changed and the claim is not borne
+// out by the document. That is reported, not suppressed: the agent may have
+// edited a different block, or meant to and did not, and either way the
+// reviewer should see the claim next to the fact that the text did not move.
+func settle(notes []Note, hashes map[string]string) {
+	for i := range notes {
+		n := &notes[i]
+		n.Status = StatusOutstanding
+		if len(n.Progress) == 0 {
+			continue
+		}
+		last := n.Progress[len(n.Progress)-1]
+		n.Status = statusAfter(last.Event.Type)
+		if last.Event.Type != TypeAddressed {
+			continue
+		}
+		// A claim with no hash cannot be checked — same rule Suggestions()
+		// applies: "cannot be proven" is not the same as "false".
+		if now, known := hashes[n.Event.Block]; known && last.Event.Hash != "" && now == last.Event.Hash {
+			n.Unclaimed = true
+		}
+	}
 }
 
 // state assembles one block's view. The current note is the latest by

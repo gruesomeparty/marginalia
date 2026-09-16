@@ -147,6 +147,11 @@ func (s *Server) MCP() *mcp.Server {
 	}, s.replyToNote)
 
 	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "mark_addressed",
+		Description: "Record that you changed the document in answer to a note. Edit the document first — this records the claim, it never writes the document. The reviewer's next look shows that block as \"addressed \u2014 is this right?\" with their note beside what it now says, so a second round is a short queue instead of a full re-read. You cannot settle your own note: confirming or reopening is the reviewer's.",
+	}, s.markAddressed)
+
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "await_review_done",
 		Description: "Block until the human marks every named document done, then return everything new. A timeout is not an error: it reports done=false so you can tell the human they still have it.",
 	}, s.awaitReviewDone)

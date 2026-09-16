@@ -43,7 +43,7 @@ users are agents, not humans.
 ## Planned architecture (from PRD §6)
 
 - **Single Go binary**, cobra subcommands: `serve`, `suggestions`, `export`,
-  `import`, `reply`, `review`, `mcp`, `version`. `suggestions` reads a document and its log from disk (no
+  `import`, `reply`, `addressed`, `review`, `mcp`, `version`. `suggestions` reads a document and its log from disk (no
   server) and splits `suggest_edit` events into applicable and
   needs-confirmation via `feedback.Resolution.Suggestions()`. Applying requires
   all three of: the suggestion is the note that stands for its block, its hash
@@ -53,18 +53,21 @@ users are agents, not humans.
   document*.
 - `internal/mcpserver` is the agent-facing surface (`marginalia mcp`, stdio):
   `review_document`, `feedback_since`, `review_status`, `reply_to_note`,
-  `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the
+  `mark_addressed`, `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the
   protocol** — that is why `server.Options.Log` exists and why every notice
   goes through `s.logf`; one stray `fmt.Println` corrupts a whole session and
   looks like a broken client. **Reads are disk-backed**, never served from the
   running HTTP server, so they survive the agent's session ending and let any
   number of agents follow one review; the wait polls the log's size+mtime, not
   `/api/revision`, which counts document re-parses and moves for a different
-  reason. **Only `reply_to_note` writes, and it writes one type**: the rest of
-  the log is the human's answers, and `review_done` is the signal the handover
-  exists to produce — an agent that could append one could answer its own
-  question. A reply is legible as the exception it is, because it names the
-  note it answers. `--root` confines
+  reason. **An agent may answer and may claim, never decide**: `reply_to_note`
+  and `mark_addressed` are the only tools that write, each writes one fixed
+  type, and both name the note they are about. There is deliberately **no**
+  confirm or reopen tool — that is the reviewer's verdict on the agent's work,
+  and an agent that could settle its own note would make the revision loop
+  decorative. The rest of the log is the human's answers, and `review_done` is
+  the signal the handover exists to produce — an agent that could append one
+  could answer its own question. `--root` confines
   every path a tool names (relative paths resolve against it), because a tool
   argument can come from text the model read and `.yaml` is a supported input.
 - `internal/session` is the pipeline both callers share — `Build` turns paths
@@ -199,6 +202,26 @@ users are agents, not humans.
   incoming file nor the existing log. `reply_to_note` is the **only** MCP tool
   that writes, and it writes one type: an agent that could append a `comment` or
   a `review_done` could answer its own question.
+- The revision loop (issue #48) is three more protocol types — `addressed`,
+  `confirm`, `reopen` — all carrying `reply_to`, so they travel the same road
+  as a reply and are split apart when attached: an answer goes to
+  `Note.Replies`, a status to `Note.Progress`. `Note.Status` is the latest
+  progress event's, defaulting to `outstanding`, and is **orthogonal to
+  `Stale`**: stale says the *text* moved, status says whether anyone claimed to
+  act on the note. Conflating them is the bug #48 exists to fix — before it, a
+  block edited in answer to a note and one edited for unrelated reasons looked
+  identical, so a second round meant re-reading the whole document. An
+  `addressed` records the hash the block had when the note was written (taken
+  from the note itself, so the check costs the agent nothing and cannot be
+  fudged by forgetting); if the block *still* hashes to it, nothing changed and
+  the note is marked `Unclaimed` — reported, never suppressed, because the edit
+  may be elsewhere. A hash-less claim is not marked, the same "cannot be
+  proven is not false" rule `Suggestions()` applies. `Resolution.Outstanding`
+  excludes `approve` (it asks for nothing) so a fully-approved document does
+  not read as a full queue. `checkVerdicts` counts only non-protocol events, so
+  an agent's reply or claim cannot satisfy `require_verdict` on the reviewer's
+  behalf. `marginalia addressed` and `mark_addressed` are the agent's side;
+  confirm and reopen exist only in the page, deliberately.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
@@ -276,7 +299,8 @@ one surface and a note from either is the same event.
 makes events self-describing, `hash` flags a comment as **stale** on re-render
 instead of silently misanchoring. Feedback event types: `comment`,
 `suggest_edit` (text = replacement), `question`, `approve`, `reject`, `reply`
-(an answer to another note, carrying `reply_to`), plus any
+(an answer to another note, carrying `reply_to`), `addressed`/`confirm`/`reopen`
+(the revision loop, also carrying `reply_to`), plus any
 action the requesting agent configured (`blocker`, `nit`, …) — an action with
 nothing to fill in is one tap, and one that declares `fields` carries them in
 the event's `fields` map. A **Done**
