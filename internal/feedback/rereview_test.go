@@ -205,3 +205,79 @@ func TestStatusSurvivesAnOrphanedBlock(t *testing.T) {
 		t.Error("the block is gone, which is a change — not an unsubstantiated claim")
 	}
 }
+
+// Issue #67: the claim has to be checked against the thing the note is about.
+// #48 and #49 were each right alone — #48's check predates sentence anchors —
+// so the bug only existed once both were on main, which is why it needs a test
+// that exercises the two together.
+func TestAnAddressedClaimOnASentenceIsCheckedAgainstThatSentence(t *testing.T) {
+	const para = "The cap is 500. Retries use no backoff. Failures go to the log."
+	sub := MakeSub(para, "Retries use no backoff.")
+	if sub == nil {
+		t.Fatal("the quote is in the paragraph")
+	}
+	note := Event{
+		Block: "1/2", Type: TypeComment, Text: "no backoff is wrong",
+		Hash: "original", Author: "berkay", Ts: "2026-07-03T10:00:00Z", Sub: sub,
+	}
+	claim := progress(TypeAddressed, "Added backoff.", "original", NoteID(note), "2026-07-03T11:00:00Z")
+
+	// The agent edited a *different* sentence. The block hash moved, so the
+	// old rule called this substantiated; the sentence the note is about is
+	// untouched, so it is not.
+	elsewhere := "The cap is 2000, raised last week. Retries use no backoff. Failures go to the log."
+	n := only(t, Materialize([]Event{note, claim}, []Block{{ID: "1/2", Hash: "moved", Text: elsewhere}}))
+	if n.Status != StatusAddressed {
+		t.Fatalf("status = %q, want addressed — the claim is still reported", n.Status)
+	}
+	if !n.Unclaimed {
+		t.Error("the sentence this note is about did not change, so the claim is not borne out")
+	}
+	if n.Stale {
+		t.Error("its sentence is intact, so the note itself is not stale")
+	}
+
+	// Now the agent edits the sentence it was actually asked about.
+	fixed := "The cap is 500. Retries use exponential backoff. Failures go to the log."
+	n = only(t, Materialize([]Event{note, claim}, []Block{{ID: "1/2", Hash: "moved", Text: fixed}}))
+	if n.Unclaimed {
+		t.Error("the sentence changed — the claim is borne out")
+	}
+	// Both readings hold at once, and that is correct: "you asked about this
+	// sentence, I rewrote it" is a stale note that has been addressed.
+	if !n.Stale {
+		t.Error("the sentence it was written against is gone, so the note is stale")
+	}
+	if n.Status != StatusAddressed {
+		t.Errorf("status = %q, want addressed", n.Status)
+	}
+}
+
+// A block-level note keeps exactly the old rule, and a claim on a block that
+// is gone is unprovable rather than false.
+func TestTheBlockLevelClaimRuleIsUnchanged(t *testing.T) {
+	q := noteOn("Why 500?", "aaaa", "2026-07-03T10:00:00Z")
+	id := NoteID(q)
+	claim := progress(TypeAddressed, "Raised it.", "aaaa", id, "2026-07-03T11:00:00Z")
+
+	if n := only(t, Materialize([]Event{q, claim}, []Block{{ID: "1/2", Hash: "aaaa", Text: "unchanged"}})); !n.Unclaimed {
+		t.Error("block unchanged, so the claim is unsubstantiated — as before")
+	}
+	if n := only(t, Materialize([]Event{q, claim}, []Block{{ID: "1/2", Hash: "bbbb", Text: "changed"}})); n.Unclaimed {
+		t.Error("block changed, so the claim stands — as before")
+	}
+
+	// A sub-anchored note whose block is gone: nothing to search, so nothing
+	// is asserted either way.
+	withSub := q
+	withSub.Sub = MakeSub("The cap is 500.", "The cap is 500.")
+	subClaim := progress(TypeAddressed, "Cut the paragraph.", "aaaa", NoteID(withSub), "2026-07-03T11:00:00Z")
+	res := Materialize([]Event{withSub, subClaim}, nil)
+	n := res.States[0].History[0]
+	if !res.States[0].Orphaned {
+		t.Fatal("the block is gone")
+	}
+	if n.Unclaimed {
+		t.Error("there is no text to check against — unprovable is not false")
+	}
+}

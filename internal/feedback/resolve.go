@@ -219,7 +219,7 @@ func Materialize(events []Event, blocks []Block) Resolution {
 	// Status is derived after attaching, because it is a reading of the
 	// progress events — never a field anyone wrote.
 	for block := range byBlock {
-		settle(byBlock[block], hashes)
+		settle(byBlock[block], hashes, texts)
 	}
 	for _, block := range order {
 		if notes, ok := byBlock[block]; ok {
@@ -354,12 +354,21 @@ func byTime(rs []Reply) {
 // settle derives where each note stands from its progress events, and checks
 // the one claim that can be checked.
 //
-// An `addressed` says "I edited this block; before my edit it hashed X". If
-// the block *still* hashes to X, nothing changed and the claim is not borne
-// out by the document. That is reported, not suppressed: the agent may have
-// edited a different block, or meant to and did not, and either way the
-// reviewer should see the claim next to the fact that the text did not move.
-func settle(notes []Note, hashes map[string]string) {
+// An `addressed` says "I acted on this note". If the thing the note is about
+// has not moved, the claim is not borne out by the document. That is
+// reported, not suppressed: the agent may have edited elsewhere, or meant to
+// and did not, and either way the reviewer should see the claim next to the
+// fact that the text did not change.
+//
+// **The claim is checked against whatever the note is about**, which is the
+// whole subtlety. For a block-level note that is the block's hash. For a note
+// about one sentence it is that sentence — checking the block would mean
+// editing any other sentence in the paragraph made an unrelated claim read as
+// substantiated, which is issue #67 and was the bug this rule exists to
+// avoid. It also makes the two readings symmetric: a sub-anchored note is
+// **stale** when its sentence is *gone*, and its claim is **unsubstantiated**
+// when its sentence is *still there*.
+func settle(notes []Note, hashes, texts map[string]string) {
 	for i := range notes {
 		n := &notes[i]
 		n.Status = StatusOutstanding
@@ -369,6 +378,16 @@ func settle(notes []Note, hashes map[string]string) {
 		last := n.Progress[len(n.Progress)-1]
 		n.Status = statusAfter(last.Event.Type)
 		if last.Event.Type != TypeAddressed {
+			continue
+		}
+		if n.Event.Sub != nil {
+			// The sentence is the subject, so the sentence is what is
+			// checked. A block that is gone leaves nothing to search, and an
+			// unprovable claim is not a false one.
+			if text, known := texts[n.Event.Block]; known {
+				_, stillThere := Locate(n.Event.Sub, text)
+				n.Unclaimed = stillThere
+			}
 			continue
 		}
 		// A claim with no hash cannot be checked — same rule Suggestions()

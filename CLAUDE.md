@@ -213,9 +213,15 @@ users are agents, not humans.
   identical, so a second round meant re-reading the whole document. An
   `addressed` records the hash the block had when the note was written (taken
   from the note itself, so the check costs the agent nothing and cannot be
-  fudged by forgetting); if the block *still* hashes to it, nothing changed and
-  the note is marked `Unclaimed` — reported, never suppressed, because the edit
-  may be elsewhere. A hash-less claim is not marked, the same "cannot be
+  fudged by forgetting); if the thing the note is about *still* reads the same,
+  nothing changed and the note is marked `Unclaimed` — reported, never
+  suppressed, because the edit may be elsewhere. **The claim is checked against
+  whatever the note is about**: the block's hash for a block-level note, and
+  the *sentence* for a sub-anchored one (issue #67 — checking the block meant
+  editing any other sentence in the paragraph made an unrelated claim read as
+  substantiated). That also makes the two readings symmetric: a sub-anchored
+  note is stale when its sentence is gone, and its claim is unsubstantiated
+  when its sentence is still there. A hash-less claim is not marked, the same "cannot be
   proven is not false" rule `Suggestions()` applies. `Resolution.Outstanding`
   excludes `approve` (it asks for nothing) so a fully-approved document does
   not read as a full queue. `checkVerdicts` counts only non-protocol events, so

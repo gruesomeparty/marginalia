@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 )
 
@@ -270,5 +271,50 @@ func TestTheListingLeadsWithWhatStillWantsDoing(t *testing.T) {
 	}
 	if threads[1].Status != "addressed" {
 		t.Errorf("the addressed note should follow: %+v", threads[1])
+	}
+}
+
+// Issue #67, through the CLI an agent actually reads: a claim on a sentence
+// note is judged by that sentence, and the listing says which sentence.
+func TestAddressedOnASentenceIsJudgedByThatSentence(t *testing.T) {
+	doc := seed(t, replyDoc)
+	parsed, err := document.Parse(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text string
+	for _, b := range parsed.Blocks {
+		if b.ID == "1/2" {
+			text = b.PlainText
+		}
+	}
+	note := feedback.Event{
+		Block: "1/2", Hash: "original", Type: feedback.TypeComment, Text: "no backoff is wrong",
+		Author: "berkay", Ts: "2026-07-03T10:00:00Z",
+		Sub: feedback.MakeSub(text, "Capped at 500 for now."),
+	}
+	if note.Sub == nil {
+		t.Fatalf("quote not in %q", text)
+	}
+	if err := feedback.NewStore(doc).Append(note); err != nil {
+		t.Fatal(err)
+	}
+
+	// The agent edits a different sentence and claims the note is addressed.
+	if err := os.WriteFile(doc, []byte("# Spec\n\nCapped at 500 for now. And a new sentence.\n\n## Retry\n\nThree attempts.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "addressed", doc, "--to", feedback.NoteID(note), "--text", "done"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCmd(t, "reply", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "the sentence has not changed since") {
+		t.Errorf("an unsubstantiated sentence claim must say so, and say sentence: %q", out)
+	}
+	if !strings.Contains(out, "Capped at 500 for now.") {
+		t.Errorf("the listing should name the sentence the note is about: %q", out)
 	}
 }

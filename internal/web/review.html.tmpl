@@ -691,7 +691,11 @@ window.__MARGINALIA__ = {{.DataJSON}};
       // The one check that can be run on the claim, shown where the claim is.
       if(note.unclaimed){
         var warn=document.createElement("span"); warn.className="unclaimed";
-        warn.textContent="\u26a0 this block has not changed since — the edit may be elsewhere";
+        // Name the thing that did not move. For a note about one sentence,
+        // "this block has not changed" would be false as often as not.
+        warn.textContent = note.event.sub
+          ? "\u26a0 this sentence has not changed since — the edit may be elsewhere"
+          : "\u26a0 this block has not changed since — the edit may be elsewhere";
         box.appendChild(warn);
       }
       item.appendChild(box);
