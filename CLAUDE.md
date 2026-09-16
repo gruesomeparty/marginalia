@@ -177,6 +177,17 @@ users are agents, not humans.
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
   numbers, keywords, a handful of languages, passthrough for the rest.
+- The page's CSS is a **design language in two layers**, and the split is the
+  rule: `:root` defines palette-invariant tokens — type scale (`--fs-*`),
+  spacing (`--sp-*`), radii (`--r-*`), elevation (`--e-*`), focus ring, accent
+  tints — and a palette may define **colour tokens only**. A palette that has
+  to redefine a radius is a bug in the component. `internal/web/tokens_test.go`
+  enforces it mechanically, because the way this decayed the first time was one
+  reasonable-looking rule at a time: it fails on a raw hex in a rule, a font
+  size off the scale, a spelled-out font stack, a variable read but never
+  defined, and a palette that omits a colour the others define. That last one
+  is not hypothetical — `--marker` was defined for light and never redefined
+  for dark, so every dark-mode badge wore the light palette's yellow.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,

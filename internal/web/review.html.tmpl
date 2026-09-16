@@ -19,56 +19,86 @@
 })();
 </script>
 <style>
+/* The design language. Two layers, and the split is the rule: everything here
+   is palette-invariant — type scale, spacing, radii, elevation, focus ring,
+   accent tints — and a palette below may define colour tokens only. A palette
+   that has to redefine a radius is a bug in the component, not in the palette.
+
+   This exists because the stylesheet grew a rule at a time: eighteen distinct
+   font sizes, ten radii, the same sans stack written out twelve times, and
+   thirteen raw hexes outside the palette blocks. Adding a surface meant
+   guessing which existing rule to imitate. */
+:root{
+  /* Type. --fs-base is the UI size everything else steps from. */
+  --fs-2xs:.68rem;--fs-xs:.72rem;--fs-sm:.78rem;--fs-base:.85rem;--fs-md:.9rem;--fs-lg:1rem;
+  --lh-tight:1.25;--lh-ui:1.5;--lh-body:1.6;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  /* Space. Six steps, which is what the thirty-two hand-picked paddings
+     actually wanted to be. */
+  --sp-1:.2rem;--sp-2:.35rem;--sp-3:.5rem;--sp-4:.75rem;--sp-5:1rem;--sp-6:1.5rem;
+  /* Shape. --r-tab is the left-ruled card: square where the rule is. */
+  --r-sm:4px;--r-md:6px;--r-lg:8px;--r-pill:999px;--r-round:50%;
+  --r-tab:0 var(--r-md) var(--r-md) 0;--r-tab-lg:0 var(--r-lg) var(--r-lg) 0;
+  /* Depth and focus. */
+  --e-1:0 1px 3px rgba(0,0,0,.12);--e-2:0 2px 10px rgba(0,0,0,.18);
+  --ring:0 0 0 2px var(--accent);
+  /* Accent tints, named rather than spelled as percentages at each use. */
+  --tint-weak:6%;--tint:7%;--tint-strong:12%;
+}
 /* A palette is a set of variables and light/dark is a mode, so the theme the
    agent served and the one the reviewer picked are the same mechanism. Order
-   matters here: the palette blocks come after the default ones. */
-:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:0 1px 3px rgba(0,0,0,.12);--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#8a8a84}
-:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}
-@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--card:#242424;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}}
+   matters here: the palette blocks come after the default ones.
+
+   Colour only. --on-accent and --on-marker are the text that goes *on* those
+   fills, which is why they are palette-defined rather than assumed white. */
+:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:var(--e-1);--on-accent:#fff;--on-marker:#000;--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#8a8a84}
+:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}
+@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}}
 /* Catppuccin Latte / Mocha, as a named option beside the default. */
-:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#6c6f85;--rule:#ccd0da;--accent:#1e66f5;--marker:#df8e1d;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--ok:#40a02b;--bad:#d20f39;--tok-kw:#8839ef;--tok-str:#40a02b;--tok-num:#fe640b;--tok-com:#9ca0b0}
-:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
-@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 1px 3px rgba(0,0,0,.5);--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
+:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#6c6f85;--rule:#ccd0da;--accent:#1e66f5;--marker:#df8e1d;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--on-accent:#eff1f5;--on-marker:#4c4f69;--ok:#40a02b;--bad:#d20f39;--tok-kw:#8839ef;--tok-str:#40a02b;--tok-num:#fe640b;--tok-com:#9ca0b0}
+:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
+@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
 /* Mono stack: prefer a programming font the reviewer may already have — no
    webfont may be fetched — and ligate =>, != and -> where one is present. */
 :root{--mono:"JetBrains Mono","Fira Code","Cascadia Code","Iosevka","Victor Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{margin:0;background:var(--bg);color:var(--fg);font-family:Georgia,'Times New Roman',serif;line-height:1.6}
-header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1.6}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:var(--sans);font-size:var(--fs-base)}
 header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .count{color:var(--muted)}
 header .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
-header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
+header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
 header button.secondary{background:transparent;color:var(--fg);border-color:var(--rule)}
 /* Display settings: the reviewer's, not the agent's — theme and ligatures,
    remembered in this browser and nowhere else. */
-.display{position:relative;font-size:.85rem}
-.display summary{list-style:none;cursor:pointer;padding:.4rem .9rem;border:1px solid var(--rule);border-radius:6px}
+.display{position:relative;font-size:var(--fs-base)}
+.display summary{list-style:none;cursor:pointer;padding:.4rem .9rem;border:1px solid var(--rule);border-radius:var(--r-md)}
 .display summary::-webkit-details-marker{display:none}
 .display[open] summary{background:var(--card)}
-.display .panel{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:8px;box-shadow:var(--shadow);padding:.6rem;display:grid;gap:.5rem;min-width:13rem}
+.display .panel{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:.6rem;display:grid;gap:.5rem;min-width:13rem}
 .display .group{display:flex;align-items:center;gap:.35rem;justify-content:space-between}
 .display .group>span{color:var(--muted)}
 .display .opts{display:flex}
-.display .opts button{font:inherit;font-size:.8rem;padding:.2rem .5rem;border:1px solid var(--rule);background:transparent;color:var(--fg);cursor:pointer;border-radius:0}
-.display .opts button:first-child{border-radius:6px 0 0 6px}
-.display .opts button:last-child{border-radius:0 6px 6px 0}
+.display .opts button{font:inherit;font-size:var(--fs-sm);padding:.2rem .5rem;border:1px solid var(--rule);background:transparent;color:var(--fg);cursor:pointer;border-radius:0}
+.display .opts button:first-child{border-radius:var(--r-md) 0 0 var(--r-md)}
+.display .opts button:last-child{border-radius:var(--r-tab)}
 .display .opts button+button{border-left:0}
-.display .opts button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.display .opts button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .layout{display:flex;align-items:flex-start}
 main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
-.nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem;border-right:1px solid var(--rule)}
+.nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:var(--sans);font-size:var(--fs-base);border-right:1px solid var(--rule)}
 .nav summary{cursor:pointer;color:var(--muted);margin-bottom:.5rem}
 .nav ul{list-style:none;margin:.15rem 0;padding-left:.85rem}
 .nav>details>ul{padding-left:0}
 .nav li{margin:.1rem 0}
-.nav a{color:var(--fg);text-decoration:none;padding:.1rem .35rem;border-radius:4px;display:inline-block;overflow-wrap:anywhere}
-.nav a:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.nav a[aria-current="page"]{background:var(--accent);color:#fff}
+.nav a{color:var(--fg);text-decoration:none;padding:.1rem .35rem;border-radius:var(--r-sm);display:inline-block;overflow-wrap:anywhere}
+.nav a:hover{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent)}
+.nav a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
 .nav .dir{color:var(--muted)}
-.nav .n{display:inline-block;min-width:1.15rem;height:1.15rem;line-height:1.15rem;text-align:center;background:var(--marker);color:#000;border-radius:999px;font-size:.7rem;margin-left:.3rem}
+.nav .n{display:inline-block;min-width:1.15rem;height:1.15rem;line-height:1.15rem;text-align:center;background:var(--marker);color:var(--on-marker);border-radius:var(--r-pill);font-size:var(--fs-xs);margin-left:.3rem}
 .nav .tick{margin-left:.3rem;color:var(--accent)}
 /* A phone gets the buttons, not the breadcrumb: the nav already says which
    file is open, and a header that overflows scrolls the whole page sideways. */
@@ -77,7 +107,7 @@ main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
    would keep its 68ch reading width and scroll the whole page sideways on a
    phone. Both children take the width they are given instead. */
 @media (max-width:900px){.layout{flex-direction:column}main{width:100%}.nav{position:static;flex:none;width:100%;max-height:none;padding:1rem 2.5rem 0;border-right:0;border-bottom:1px solid var(--rule)}}
-h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.25}
+h1,h2,h3,h4,h5,h6{font-family:var(--sans);line-height:1.25}
 code,pre{font-family:var(--mono);font-variant-ligatures:contextual;font-feature-settings:"calt" 1}
 /* Ligatures are opt-outable: they can hide a real `!`, and some readers
    simply dislike them. */
@@ -86,16 +116,16 @@ code,pre{font-family:var(--mono);font-variant-ligatures:contextual;font-feature-
 .tok.str{color:var(--tok-str)}
 .tok.num{color:var(--tok-num)}
 .tok.com{color:var(--tok-com);font-style:italic}
-pre{background:var(--card);padding:1rem;border-radius:6px;overflow:auto;font-size:.9em}
-:not(pre)>code{background:var(--card);padding:.1em .35em;border-radius:4px;font-size:.9em}
+pre{background:var(--card);padding:1rem;border-radius:var(--r-md);overflow:auto;font-size:.9em}
+:not(pre)>code{background:var(--card);padding:.1em .35em;border-radius:var(--r-sm);font-size:.9em}
 table{border-collapse:collapse;width:100%}
 th,td{border:1px solid var(--rule);padding:.4rem .6rem}
 blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:var(--muted)}
 /* How the agent framed the review, at the top of what it is about. */
-.framing{margin:0 0 1.6rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem;line-height:1.5}
+.framing{margin:0 0 1.6rem;padding:.75rem 1rem;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:var(--r-tab-lg);font-family:var(--sans);font-size:var(--fs-md);line-height:1.5}
 .framing .text{white-space:pre-wrap}
-.framing h2{font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;font-weight:600}
-.block{position:relative;border-radius:6px;padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
+.framing h2{font-size:var(--fs-sm);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;font-weight:600}
+.block{position:relative;border-radius:var(--r-md);padding:.15rem .5rem;margin:.2rem -.5rem;outline:none;transition:background .15s}
 /* A drawn diagram. The picture is the review surface: its own shapes carry
    the anchors, so the arrow that is wrong is the thing you click. The source
    is a toggle away, with the same anchors on the same statements. */
@@ -103,9 +133,9 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .diagram .pic{overflow-x:auto;padding:.6rem 0}
 .diagram svg{max-width:100%;height:auto}
 .diagram figcaption{margin:.1rem 0 .2rem}
-.diagram .flip{font:inherit;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--rule);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.diagram .flip{font:inherit;font-family:var(--sans);font-size:var(--fs-sm);padding:.15rem .55rem;border:1px solid var(--rule);border-radius:var(--r-md);background:transparent;color:var(--muted);cursor:pointer}
 .diagram .flip:hover{color:var(--fg)}
-.diagram figcaption .hint{margin-left:.5rem;color:var(--muted);font-size:.74rem}
+.diagram figcaption .hint{margin-left:.5rem;color:var(--muted);font-size:var(--fs-xs)}
 /* The drawing is rendered by mermaid's own CLI, with mermaid's own palette —
    but the SVG is rewritten on the way out (internal/diagram/palette.go) so
    every colour it chose reads one of these variables instead. That is why
@@ -130,13 +160,13 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
 .diagram .pic path[data-anchor]:not(.mg-hit)[data-hover],.diagram .pic path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke-width:3px!important}
 /* The requester's own note about a block — the agent asking, not the human
    answering, so it reads differently from a feedback item. */
-.sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:0 6px 6px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.83rem;white-space:pre-wrap}
-.sidenote .who{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.03em}
-.framing .unanchored{margin-top:.5rem;color:var(--muted);font-size:.83rem}
+.sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) var(--tint-weak),transparent);border-radius:var(--r-tab);font-family:var(--sans);font-size:var(--fs-base);white-space:pre-wrap}
+.sidenote .who{display:block;color:var(--muted);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.03em}
+.framing .unanchored{margin-top:.5rem;color:var(--muted);font-size:var(--fs-base)}
 /* Skipped blocks: collapsed behind one summary so the page opens on the part
    that is actually under review. */
-.skipped{margin:.6rem 0;border:1px dashed var(--rule);border-radius:8px;padding:0 .7rem}
-.skipped>summary{cursor:pointer;color:var(--muted);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.82rem;padding:.45rem 0}
+.skipped{margin:.6rem 0;border:1px dashed var(--rule);border-radius:var(--r-lg);padding:0 .7rem}
+.skipped>summary{cursor:pointer;color:var(--muted);font-family:var(--sans);font-size:var(--fs-base);padding:.45rem 0}
 .skipped[open]{padding-bottom:.5rem}
 /* Read-only blocks are context, not questions: they read normally and do
    nothing when tapped. */
@@ -145,69 +175,69 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
    wanted rather than finding out by tapping. */
 .block[data-readonly="1"]{cursor:default;color:var(--muted)}
 @media (prefers-reduced-motion:reduce){.block,.toast{transition:none}}
-.block:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
-.block:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.block:hover{background:color-mix(in srgb,var(--accent) var(--tint),transparent)}
+.block:focus-visible{box-shadow:var(--ring)}
 li.block{list-style-position:outside}
 /* A mermaid fence anchors statement by statement, so its anchors are inline
    spans over the source itself: no box, no margin, nothing that would move a
    character of the diagram the author wrote. */
-pre .block{display:inline;margin:0;padding:0 .1rem;border-radius:3px}
+pre .block{display:inline;margin:0;padding:0 .1rem;border-radius:var(--r-sm)}
 /* Its comment badge therefore follows the statement instead of sitting in the
    margin, which inside a <pre> would push the line sideways. */
 pre .block[data-count]:not([data-count="0"])::before{content:none}
-pre .block[data-count]:not([data-count="0"])::after{display:inline-block;margin-left:.4rem;min-width:1.15rem;height:1.15rem;line-height:1.15rem;font-size:.68rem;vertical-align:.05rem}
-.existing .on,.composer .on{color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.78rem;margin-bottom:.35rem;overflow-wrap:anywhere}
-li.block>.existing,li.block>.composer{font-size:.85rem}
+pre .block[data-count]:not([data-count="0"])::after{display:inline-block;margin-left:.4rem;min-width:1.15rem;height:1.15rem;line-height:1.15rem;font-size:var(--fs-2xs);vertical-align:.05rem}
+.existing .on,.composer .on{color:var(--muted);font-family:var(--mono);font-size:var(--fs-sm);margin-bottom:.35rem;overflow-wrap:anywhere}
+li.block>.existing,li.block>.composer{font-size:var(--fs-base)}
 li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 /* One badge, two places it can sit: in the margin beside a block, or after a
    statement inside a diagram, where the margin belongs to the source. */
-.block[data-count]:not([data-count="0"])::before,pre .block[data-count]:not([data-count="0"])::after{content:attr(data-count);min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--badge,var(--marker));color:var(--badge-fg,#000);border-radius:50%;font-size:.72rem;font-family:-apple-system,sans-serif}
+.block[data-count]:not([data-count="0"])::before,pre .block[data-count]:not([data-count="0"])::after{content:attr(data-count);min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--badge,var(--marker));color:var(--badge-fg,var(--on-marker));border-radius:var(--r-round);font-size:var(--fs-xs);font-family:var(--sans)}
 .block[data-count]:not([data-count="0"])::before{position:absolute;left:-2.4rem;top:.3rem}
-.composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:.8rem;box-shadow:var(--shadow);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.9rem}
+.composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:.8rem;box-shadow:var(--shadow);font-family:var(--sans);font-size:var(--fs-md)}
 .composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
-.composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:999px;background:transparent;color:var(--fg);cursor:pointer;font:inherit}
-.composer .chip[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
-.composer .chip .k{margin-left:.35rem;opacity:.65;font-size:.78em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--fg);cursor:pointer;font:inherit}
+.composer .chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.composer .chip .k{margin-left:.35rem;opacity:.65;font-size:.78em;font-family:var(--mono)}
 .composer .fields{display:flex;flex-wrap:wrap;gap:.5rem;margin:.1rem 0 .5rem}
-.composer .fields label{display:flex;flex-direction:column;gap:.15rem;font-size:.8rem;color:var(--muted)}
-.composer .fields select,.composer .fields input{font:inherit;font-size:.85rem;padding:.3rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg)}
+.composer .fields label{display:flex;flex-direction:column;gap:.15rem;font-size:var(--fs-sm);color:var(--muted)}
+.composer .fields select,.composer .fields input{font:inherit;font-size:var(--fs-base);padding:.3rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg)}
 .existing .item .vals{margin-top:.2rem;color:var(--muted);font-size:.95em}
-.composer textarea{width:100%;min-height:4rem;font:inherit;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg);resize:vertical}
+.composer textarea{width:100%;min-height:4rem;font:inherit;padding:.5rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
 .composer .actions{display:flex;gap:.5rem;margin-top:.5rem}
-.composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:6px;cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
-.composer .actions .save{background:var(--accent);color:#fff;border-color:var(--accent)}
-.existing{margin:.3rem 0 .6rem;font-family:-apple-system,sans-serif;font-size:.82rem}
-.existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:0 6px 6px 0}
+.composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+.composer .actions .save{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.existing{margin:.3rem 0 .6rem;font-family:var(--sans);font-size:var(--fs-base)}
+.existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:var(--r-tab)}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
 .existing .item.current{border-left-width:3px}
-.existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:999px;font-size:.72rem;color:var(--muted);text-transform:none;font-weight:400}
+.existing .item .tag{margin-left:.4rem;padding:0 .35rem;border:1px solid var(--rule);border-radius:var(--r-pill);font-size:var(--fs-xs);color:var(--muted);text-transform:none;font-weight:400}
 .existing .item .was{margin-top:.2rem;color:var(--muted);font-style:italic}
 /* What was decided colours the badge, wherever it sits. */
-.block[data-state="approve"]{--badge:#2f7d32;--badge-fg:#fff}
-.block[data-state="reject"]{--badge:#b3261e;--badge-fg:#fff}
+.block[data-state="approve"]{--badge:var(--ok);--badge-fg:var(--on-accent)}
+.block[data-state="reject"]{--badge:var(--bad);--badge-fg:var(--on-accent)}
 .block[data-stale="1"][data-count]:not([data-count="0"])::before,pre .block[data-stale="1"][data-count]:not([data-count="0"])::after{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--muted)}
 /* Share mode: the one place a human has to copy something out. */
-.share{margin:2rem 0 1rem;padding:.8rem 1rem;background:var(--card);border:1px solid var(--rule);border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
-.share h2{font-size:.95rem;margin:0 0 .3rem}
+.share{margin:2rem 0 1rem;padding:.8rem 1rem;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);font-family:var(--sans);font-size:var(--fs-base)}
+.share h2{font-size:var(--fs-md);margin:0 0 .3rem}
 .share p{color:var(--muted);margin:0 0 .5rem}
-.share textarea{width:100%;min-height:8rem;font-family:var(--mono);font-size:.8rem;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--fg)}
+.share textarea{width:100%;min-height:8rem;font-family:var(--mono);font-size:var(--fs-sm);padding:.5rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg)}
 .share .row{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;flex-wrap:wrap}
-.share .row button{font:inherit;padding:.35rem .8rem;border-radius:6px;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fff}
+.share .row button{font:inherit;padding:.35rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent)}
 .share .hint{color:var(--muted)}
 .offline{color:var(--muted);font-style:italic}
 .offline code{font-style:normal;font-size:.9em}
-.orphans{margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.85rem}
-.orphans h2{font-size:1rem;margin:0 0 .2rem}
+.orphans{margin:2.5rem 0 1rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:var(--sans);font-size:var(--fs-base)}
+.orphans h2{font-size:var(--fs-lg);margin:0 0 .2rem}
 .orphans p{color:var(--muted);margin:0 0 .8rem}
-.orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:0 6px 6px 0}
+.orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:var(--r-tab)}
 .orphans .meta{color:var(--muted)}
 .orphans .was{color:var(--muted);font-style:italic;margin:.15rem 0}
-main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:.88rem;line-height:1.5}
+main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
 main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:2}main.tree .block[data-level="3"]{--lvl:3}main.tree .block[data-level="4"]{--lvl:4}main.tree .block[data-level="5"]{--lvl:5}main.tree .block[data-level="6"]{--lvl:6}main.tree .block[data-level="7"]{--lvl:7}main.tree .block[data-level="8"]{--lvl:8}main.tree .block[data-level="9"]{--lvl:9}main.tree .block[data-level="10"]{--lvl:10}main.tree .block[data-level="11"]{--lvl:11}main.tree .block[data-level="12"]{--lvl:12}main.tree .block[data-level="13"]{--lvl:13}main.tree .block[data-level="14"]{--lvl:14}main.tree .block[data-level="15"]{--lvl:15}main.tree .block[data-level="16"]{--lvl:16}main.tree .block[data-level="17"]{--lvl:17}main.tree .block[data-level="18"]{--lvl:18}main.tree .block[data-level="19"]{--lvl:19}main.tree .block[data-level="20"]{--lvl:20}main.tree .block[data-level="21"]{--lvl:21}main.tree .block[data-level="22"]{--lvl:22}main.tree .block[data-level="23"]{--lvl:23}main.tree .block[data-level="24"]{--lvl:24}
 /* Deep trees on a phone: tighten the indent step rather than scroll sideways. */
-@media (max-width:640px){main.tree{--step:.7rem;font-size:.82rem}}
+@media (max-width:640px){main.tree{--step:.7rem;font-size:var(--fs-base)}}
 main.tree .body{flex:1;min-width:0}
 main.tree .cmt{display:block;color:var(--muted);font-style:italic;overflow-wrap:break-word}
 main.tree .body>code{background:none;padding:0;font-size:1em;white-space:pre-wrap;overflow-wrap:break-word}
@@ -217,12 +247,12 @@ main.tree .punct,main.tree .meta{color:var(--muted)}
 main.tree .caret{flex:0 0 1.1rem;font:inherit;line-height:1.5;width:1.1rem;padding:0;border:0;background:none;color:var(--muted);cursor:pointer;text-align:left}
 main.tree .caret[hidden]{display:block!important;visibility:hidden;cursor:default}
 main.tree .trail{display:inline;margin-left:.5rem}
-main.tree .existing,main.tree .composer{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+main.tree .existing,main.tree .composer{font-family:var(--sans)}
 header #fold{background:transparent;color:var(--fg);border-color:var(--rule);margin-left:auto}
 header #fold+button{margin-left:.5rem}
-.reloader{position:fixed;bottom:1rem;right:1rem;display:flex;align-items:center;gap:.6rem;background:var(--card);border:1px solid var(--accent);box-shadow:var(--shadow);border-radius:8px;padding:.5rem .7rem;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:.82rem}
-.reloader button{font:inherit;padding:.25rem .6rem;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;cursor:pointer}
-.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.5rem 1rem;border-radius:6px;font-family:sans-serif;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none}
+.reloader{position:fixed;bottom:1rem;right:1rem;display:flex;align-items:center;gap:.6rem;background:var(--card);border:1px solid var(--accent);box-shadow:var(--shadow);border-radius:var(--r-lg);padding:.5rem .7rem;font-family:var(--sans);font-size:var(--fs-base)}
+.reloader button{font:inherit;padding:.25rem .6rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
+.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.5rem 1rem;border-radius:var(--r-md);font-family:var(--sans);font-size:var(--fs-base);opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
 </head>
