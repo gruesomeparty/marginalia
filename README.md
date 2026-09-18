@@ -57,11 +57,13 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
 ## Install
 
 ```bash
+brew install --cask gruesomeparty/tap/marginalia   # macOS
 go install github.com/gruesomeparty/marginalia@latest
 ```
 
-Or grab a build from the [releases page](https://github.com/gruesomeparty/marginalia/releases).
-It is a single Go binary with no runtime dependencies.
+Or grab a build from the [releases page](https://github.com/gruesomeparty/marginalia/releases)
+— Linux and macOS, amd64 and arm64. It is a single Go binary with no runtime
+dependencies.
 
 ### Claude plugin
 

@@ -36,3 +36,10 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pushes the Homebrew cask to gruesomeparty/homebrew-tap.
+          # GITHUB_TOKEN cannot push cross-repo, so this is a PAT with
+          # contents:write on the tap — the same reason severance carries one.
+          # Always exported, even when the secret does not exist: goreleaser
+          # skips the cask on an empty value, so a release without it still
+          # produces the archives and the GitHub release.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
