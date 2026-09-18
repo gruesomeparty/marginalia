@@ -1,0 +1,13 @@
+title: Ingest rework — sign-off
+instructions: |
+  This is a live Marginalia review page. Click any block to comment — nothing
+  leaves your browser, and no request is made.
+actions:
+  - type: blocker
+    label: Blocker
+    key: b
+  - type: nit
+    key: n
+notes:
+  - block: "1/2"
+    text: the cap came from the queue's batch limit — is that still right?
