@@ -1,3 +1,7 @@
+# The landing page's live demo is generated from the binary at deploy time,
+# so it can never drift from the product it demonstrates. Never committed.
+/site/demo.html
+
 # Compiled binary + release artifacts
 /marginalia
 /dist/

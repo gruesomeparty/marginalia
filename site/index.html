@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marginalia — a document-review tool an agent hands to a human</title>
+<meta name="description" content="An agent writes a spec, schema, diagram or diff. Marginalia renders it as a page a human can annotate, and returns the comments as append-only JSONL events the agent reads directly.">
+<meta property="og:title" content="Marginalia">
+<meta property="og:description" content="A document-review tool an agent hands to a human.">
+<meta property="og:type" content="website">
+<style>
+/* The palette and the scale are the product's own (internal/web/review.html.tmpl).
+   The site should look like the tool, not like a separate marketing skin. */
+:root{
+  --bg:#fbfbf9; --fg:#1a1a1a; --muted:#666; --rule:#e3e3dd;
+  --accent:#3b5bdb; --marker:#e8b339; --card:#fff;
+  --ok:#2f7d32; --bad:#b3261e; --on-accent:#fff;
+  --shadow:0 1px 3px rgba(0,0,0,.12);
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  --r-md:6px; --r-lg:8px; --r-pill:999px; --r-tab:0 6px 6px 0;
+  --gutter:1.25rem;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1a1a1a; --fg:#e8e8e6; --muted:#9a9a94; --rule:#333;
+    --accent:#8aa0ff; --marker:#d9a441; --card:#242424;
+    --ok:#7bc47f; --bad:#f2857c; --on-accent:#12142a;
+    --shadow:0 2px 10px rgba(0,0,0,.5);
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--sans); font-size:1rem; line-height:1.6;
+}
+.wrap{max-width:62rem;margin:0 auto;padding:0 var(--gutter)}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+code,pre{font-family:var(--mono)}
+h1,h2,h3{line-height:1.25;font-weight:600}
+
+/* ---- header ---- */
+header{border-bottom:1px solid var(--rule)}
+header .wrap{display:flex;align-items:center;gap:1rem;padding-top:1rem;padding-bottom:1rem;flex-wrap:wrap}
+.logo{font-weight:600;font-size:1.05rem;letter-spacing:-.01em}
+.logo .mark{
+  display:inline-block;width:.55em;height:1.1em;vertical-align:-.18em;
+  margin-right:.45em;background:var(--marker);border-radius:var(--r-tab);
+}
+header nav{margin-left:auto;display:flex;gap:1.1rem;font-size:.92rem}
+header nav a{color:var(--muted);text-decoration:none}
+header nav a:hover{color:var(--fg)}
+
+/* ---- hero ---- */
+.hero{padding:3.5rem 0 2rem}
+.hero h1{font-size:clamp(1.9rem,5vw,2.9rem);margin:0 0 .6rem;letter-spacing:-.02em;text-wrap:balance}
+.hero .lede{font-family:var(--serif);font-size:clamp(1.05rem,2.4vw,1.3rem);color:var(--fg);max-width:52ch;margin:0 0 1.1rem;text-wrap:pretty}
+.hero p.sub{color:var(--muted);max-width:56ch;margin:0 0 1.6rem}
+.install{display:flex;flex-direction:column;gap:.4rem;max-width:44rem}
+.install pre{
+  margin:0;padding:.7rem .9rem;background:var(--card);border:1px solid var(--rule);
+  border-radius:var(--r-lg);overflow-x:auto;font-size:.88rem;
+}
+.install .alt{color:var(--muted);font-size:.85rem}
+.badges{display:flex;gap:.5rem;flex-wrap:wrap;margin:1.3rem 0 0}
+.badge{
+  font-size:.78rem;color:var(--muted);border:1px solid var(--rule);
+  border-radius:var(--r-pill);padding:.15rem .7rem;
+}
+
+/* ---- the live demo ---- */
+.demo{margin:2.5rem 0 3rem}
+.demo .frameline{
+  display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;
+  font-size:.88rem;color:var(--muted);margin-bottom:.5rem;
+}
+.demo .frameline strong{color:var(--fg);font-weight:600}
+.demo .shell{
+  border:1px solid var(--rule);border-radius:var(--r-lg);overflow:hidden;
+  box-shadow:var(--shadow);background:var(--card);
+}
+.demo iframe{display:block;width:100%;height:34rem;border:0;background:var(--bg)}
+@media (max-width:640px){.demo iframe{height:26rem}}
+
+/* ---- sections ---- */
+section{padding:2.5rem 0;border-top:1px solid var(--rule)}
+section h2{font-size:1.45rem;margin:0 0 .4rem;letter-spacing:-.01em;text-wrap:balance}
+section > .wrap > p.intro{color:var(--muted);max-width:60ch;margin:0 0 1.8rem}
+
+.grid{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))}
+.feature{
+  background:var(--card);border:1px solid var(--rule);
+  border-left:3px solid var(--marker);border-radius:var(--r-tab);
+  padding:.9rem 1.1rem;
+}
+.feature h3{margin:0 0 .35rem;font-size:1rem}
+.feature p{margin:0;color:var(--muted);font-size:.93rem}
+.feature code{font-size:.85em;color:var(--fg)}
+
+/* ---- the loop ---- */
+.loop{background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:1.2rem}
+.loop svg{display:block;width:100%;height:auto;max-width:44rem;margin:0 auto}
+.loop text{font-family:var(--sans);font-size:11px;fill:var(--fg)}
+.loop text.small{fill:var(--muted);font-size:9.5px}
+.loop rect{fill:var(--bg);stroke:var(--rule)}
+.loop path,.loop line{stroke:var(--accent);fill:none}
+
+/* ---- not-doing ---- */
+.honest{background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:1.2rem 1.4rem}
+.honest ul{margin:.6rem 0 0;padding-left:1.1rem;color:var(--muted)}
+.honest li{margin:.35rem 0}
+.honest strong{color:var(--fg)}
+
+footer{border-top:1px solid var(--rule);padding:2rem 0 3rem;color:var(--muted);font-size:.9rem}
+footer .wrap{display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center}
+footer a{color:var(--muted)}
+footer .right{margin-left:auto}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="logo"><span class="mark" aria-hidden="true"></span>Marginalia</span>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#what">What it does</a>
+      <a href="#limits">Limits</a>
+      <a href="https://github.com/gruesomeparty/marginalia">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <h1>A document-review tool an agent hands to a human.</h1>
+  <p class="lede">An agent writes a spec, a schema, a diagram or a diff, and needs a person to actually read it.</p>
+  <p class="sub">
+    Marginalia renders that document as a page worth reading, collects comments
+    anchored to individual blocks, and writes them back as append-only JSONL the
+    agent consumes directly. No database, no accounts, no copy-and-paste step.
+  </p>
+
+  <div class="install">
+    <pre><code>brew install --cask gruesomeparty/tap/marginalia</code></pre>
+    <span class="alt">or <code>go install github.com/gruesomeparty/marginalia@latest</code> · single Go binary, no runtime dependencies</span>
+  </div>
+
+  <div class="badges">
+    <span class="badge">markdown · proto · JSON/YAML/TOML · mermaid · diffs</span>
+    <span class="badge">MCP server</span>
+    <span class="badge">append-only</span>
+    <span class="badge">never edits your file</span>
+  </div>
+</div>
+
+<div class="wrap demo">
+  <div class="frameline">
+    <strong>This is the real thing, not a screenshot.</strong>
+    <span>Click any paragraph to comment. Select a sentence to comment on just that. Nothing leaves your browser.</span>
+  </div>
+  <div class="shell">
+    <iframe src="demo.html" title="A live Marginalia review page" loading="lazy"></iframe>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>The loop</h2>
+    <p class="intro">
+      The agent serves a document and gets a URL. You annotate. The agent reads
+      the events, revises, and records which note each change answered — and you
+      confirm or reopen. Nothing in the log is ever rewritten.
+    </p>
+    <div class="loop">
+      <svg viewBox="0 0 640 150" role="img" aria-label="Agent serves a document; the human annotates it; feedback is written to a JSONL log the agent reads; the agent revises and says what changed; the human confirms.">
+        <rect x="8" y="46" width="112" height="42" rx="6"/>
+        <text x="64" y="66" text-anchor="middle">agent</text>
+        <text x="64" y="79" text-anchor="middle" class="small">serve / MCP</text>
+
+        <rect x="184" y="46" width="112" height="42" rx="6"/>
+        <text x="240" y="66" text-anchor="middle">the page</text>
+        <text x="240" y="79" text-anchor="middle" class="small">a human reads</text>
+
+        <rect x="360" y="46" width="128" height="42" rx="6"/>
+        <text x="424" y="66" text-anchor="middle">feedback.jsonl</text>
+        <text x="424" y="79" text-anchor="middle" class="small">append-only</text>
+
+        <rect x="552" y="46" width="80" height="42" rx="6"/>
+        <text x="592" y="71" text-anchor="middle">agent</text>
+
+        <path d="M120 67 H176" marker-end="url(#a)"/>
+        <path d="M296 67 H352" marker-end="url(#a)"/>
+        <path d="M488 67 H544" marker-end="url(#a)"/>
+        <path d="M592 90 V120 H64 V90" marker-end="url(#a)"/>
+        <text x="328" y="136" text-anchor="middle" class="small">answers the question · revises · says which note it addressed</text>
+        <defs>
+          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L8 4 L0 8 z" fill="currentColor" stroke="none" style="fill:var(--accent)"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section id="what">
+  <div class="wrap">
+    <h2>What makes it different</h2>
+    <p class="intro">
+      Every one of these exists because a review that misleads you is worse than
+      no review at all.
+    </p>
+    <div class="grid">
+      <div class="feature">
+        <h3>Comments survive edits — or admit they didn't</h3>
+        <p>Each block carries an ID, a quote and a content hash. Edit the document and notes re-anchor themselves; a note written against text that has since changed comes back flagged <strong>stale</strong> rather than silently pointing at the wrong paragraph.</p>
+      </div>
+      <div class="feature">
+        <h3>Comment on a sentence</h3>
+        <p>Select text and the note is about <em>that</em>. It survives unrelated edits elsewhere in the paragraph, and goes stale only when its own sentence changes.</p>
+      </div>
+      <div class="feature">
+        <h3>Click the arrow in the diagram</h3>
+        <p>Mermaid flowcharts render as real pictures whose shapes carry the same anchors as the source. Click the retry edge, comment on the retry edge. Source is one toggle away.</p>
+      </div>
+      <div class="feature">
+        <h3>Review a diff</h3>
+        <p>Unified diffs anchor by file and hunk — the thing a human is most often asked to approve. Markdown, <code>.proto</code>, JSON, YAML and TOML too.</p>
+      </div>
+      <div class="feature">
+        <h3>The agent answers back</h3>
+        <p>A question gets a reply threaded under it. The agent records which note a change addressed — and the claim is checked against the document, so claiming a fix without touching the text says so.</p>
+      </div>
+      <div class="feature">
+        <h3>Built for agents to call</h3>
+        <p>Ships an MCP server: serve a review, read only what's new by cursor, block until the human is done. No scraping terminal output.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <h2>What it deliberately doesn't do</h2>
+    <p class="intro">Scope choices, not a roadmap.</p>
+    <div class="honest">
+      <ul>
+        <li><strong>No authentication.</strong> Anyone who can reach the URL can write to the log. That's fine for <code>127.0.0.1</code> and for a Tailnet; it is not fine on an untrusted network, and it won't pretend otherwise by growing a token flag.</li>
+        <li><strong>One reviewer at a time.</strong> Two people on one document write to one log with no identity and no conflict story.</li>
+        <li><strong>It never edits your document.</strong> Suggested edits are reported, with whether they still apply cleanly. You apply them.</li>
+        <li><strong>No database, no accounts, no hosted service.</strong> A log file next to your document. For someone off your machine there's a one-file export that loads nothing at all.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/gruesomeparty/marginalia">GitHub</a>
+    <a href="https://github.com/gruesomeparty/marginalia#readme">Docs</a>
+    <a href="https://github.com/gruesomeparty/marginalia/releases">Releases</a>
+    <span class="right">MIT licensed.</span>
+  </div>
+</footer>
+
+</body>
+</html>
