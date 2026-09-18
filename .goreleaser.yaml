@@ -22,6 +22,49 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: checksums.txt
+
+# Publishes a cask to gruesomeparty/homebrew-tap, beside severance.
+#
+# A cask rather than a formula, and not because Marginalia is an app: goreleaser
+# deprecated `brews` in favour of `homebrew_casks`, which follows Homebrew's own
+# line that a formula builds from source while a prebuilt binary belongs in a
+# cask. `binaries:` is what makes it a CLI on PATH rather than an .app.
+#
+# goreleaser emits on_linux blocks too, but a cask is a macOS mechanism: Linux
+# stays served by the tarball and `go install`, which is what the four builds
+# above are for.
+homebrew_casks:
+  - name: marginalia
+    binaries: [marginalia]
+    homepage: https://github.com/gruesomeparty/marginalia
+    description: Hand an agent-authored document to a human for block-anchored review
+    repository:
+      owner: gruesomeparty
+      name: homebrew-tap
+      branch: main
+      # GITHUB_TOKEN cannot push cross-repo, so this needs a PAT with
+      # contents:write on the tap — the same reason severance carries one.
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+    directory: Casks
+    commit_author:
+      name: marginalia-release
+      email: noreply@github.com
+    commit_msg_template: "feat: marginalia {{ .Version }}"
+    # Without the token the release still has to succeed: the tarballs and the
+    # GitHub release are the product, and the cask is a convenience on top.
+    # `index .Env` rather than `.Env.X` deliberately — the latter is a hard
+    # template error when the key is absent, so a repo that never set the
+    # secret would fail its release at the very last step. index yields "".
+    skip_upload: '{{ if eq (index .Env "HOMEBREW_TAP_TOKEN") "" }}true{{ else }}false{{ end }}'
+    # An ad-hoc-signed binary from a release archive is quarantined by
+    # Gatekeeper, exactly as severance's cask warns. Clearing it on install is
+    # what makes `brew install` actually leave a working binary behind.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"], print_stderr: false).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/marginalia"]
+          end
 changelog:
   disable: true
 release:
