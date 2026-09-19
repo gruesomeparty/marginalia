@@ -55,12 +55,13 @@ jobs:
           MARGINALIA_MMDC_ARGS: -p /tmp/puppeteer.json
         run: ./scripts/demo.sh site/demo.html auto
 
-      # `enablement` turns Pages on through the API if it is off, so the
-      # first deploy does not depend on someone having clicked
-      # Settings → Pages → Source → GitHub Actions first.
+      # No `enablement: true` here, though the action offers it and the error
+      # you get with Pages switched off recommends it: creating a Pages site
+      # is repo-admin, which GITHUB_TOKEN does not have and no `permissions:`
+      # block can grant it, so it fails with "Resource not accessible by
+      # integration" after doing the whole build. Turning Pages on is a
+      # one-time click at Settings → Pages → Source → GitHub Actions.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
