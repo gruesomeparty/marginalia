@@ -2,271 +2,702 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Marginalia — a document-review tool an agent hands to a human</title>
-<meta name="description" content="An agent writes a spec, schema, diagram or diff. Marginalia renders it as a page a human can annotate, and returns the comments as append-only JSONL events the agent reads directly.">
-<meta property="og:title" content="Marginalia">
-<meta property="og:description" content="A document-review tool an agent hands to a human.">
-<meta property="og:type" content="website">
+<meta name="description" content="An agent writes a spec, a schema, a diagram or a diff. Marginalia renders it as a page, a human comments on individual blocks, and every comment lands on disk as an append-only JSONL event the agent reads directly.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='1' width='3' height='14' rx='1' fill='%23e8b339'/></svg>">
 <style>
-/* The palette and the scale are the product's own (internal/web/review.html.tmpl).
-   The site should look like the tool, not like a separate marketing skin. */
+/* ------------------------------------------------------------------
+   Tokens. Colour only — every size, radius and space is palette-blind,
+   the same split the product's own stylesheet enforces.
+------------------------------------------------------------------ */
 :root{
-  --bg:#fbfbf9; --fg:#1a1a1a; --muted:#666; --rule:#e3e3dd;
-  --accent:#3b5bdb; --marker:#e8b339; --card:#fff;
-  --ok:#2f7d32; --bad:#b3261e; --on-accent:#fff;
-  --shadow:0 1px 3px rgba(0,0,0,.12);
-  --serif:Georgia,'Times New Roman',serif;
-  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
-  --r-md:6px; --r-lg:8px; --r-pill:999px; --r-tab:0 6px 6px 0;
-  --gutter:1.25rem;
+  --bg:#fbfbf9; --card:#ffffff; --band:#f6f6f2; --inset:#eeeee8; --rule:#e3e3dd;
+  --fg:#1a1a1a; --muted:#666666;
+  --accent:#3b5bdb; --accent-hover:#2f4bc0; --on-accent:#ffffff;
+  --marker:#e8b339; --ok:#2f7d32; --bad:#b3261e;
+  --accent-wash:#3b5bdb14; --marker-wash:#e8b33947; --ok-wash:#2f7d3214; --bad-wash:#b3261e14;
+
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --serif:Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+
+  --gutter:80px; --container:1120px;
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --bg:#1a1a1a; --fg:#e8e8e6; --muted:#9a9a94; --rule:#333;
-    --accent:#8aa0ff; --marker:#d9a441; --card:#242424;
-    --ok:#7bc47f; --bad:#f2857c; --on-accent:#12142a;
-    --shadow:0 2px 10px rgba(0,0,0,.5);
+    --bg:#1a1a1a; --card:#242424; --band:#202020; --inset:#2c2c2c; --rule:#333333;
+    --fg:#e8e8e6; --muted:#9a9a94;
+    --accent:#8aa0ff; --accent-hover:#a8b8ff; --on-accent:#14161f;
+    --marker:#d9a441; --ok:#7bc47f; --bad:#f2857c;
+    --accent-wash:#8aa0ff24; --marker-wash:#d9a44154; --ok-wash:#7bc47f24; --bad-wash:#f2857c24;
   }
 }
+
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{
-  margin:0; background:var(--bg); color:var(--fg);
-  font-family:var(--sans); font-size:1rem; line-height:1.6;
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:var(--sans);font-size:16.5px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:62rem;margin:0 auto;padding:0 var(--gutter)}
-a{color:var(--accent)}
-a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
-code,pre{font-family:var(--mono)}
-h1,h2,h3{line-height:1.25;font-weight:600}
+h1,h2,h3{font-family:var(--serif);font-weight:700;margin:0}
+h1{font-size:54px;line-height:1.08;letter-spacing:-.02em}
+h2{font-size:36px;line-height:1.15;letter-spacing:-.015em}
+h3{font-size:28px;line-height:1.2;letter-spacing:-.012em}
+p{margin:0}
+code,.m{font-family:var(--mono)}
+a{color:var(--accent);text-underline-offset:2px}
+a:hover{color:var(--accent-hover)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+img,svg{max-width:100%}
 
-/* ---- header ---- */
-header{border-bottom:1px solid var(--rule)}
-header .wrap{display:flex;align-items:center;gap:1rem;padding-top:1rem;padding-bottom:1rem;flex-wrap:wrap}
-.logo{font-weight:600;font-size:1.05rem;letter-spacing:-.01em}
-.logo .mark{
-  display:inline-block;width:.55em;height:1.1em;vertical-align:-.18em;
-  margin-right:.45em;background:var(--marker);border-radius:var(--r-tab);
-}
-header nav{margin-left:auto;display:flex;gap:1.1rem;font-size:.92rem}
-header nav a{color:var(--muted);text-decoration:none}
-header nav a:hover{color:var(--fg)}
+.wrap{max-width:var(--container);margin:0 auto;padding:0 var(--gutter)}
+section{border-top:1px solid var(--rule);padding:88px 0}
+section.tight{padding:72px 0}
+.band{background:var(--band)}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.lead{font-size:20px;line-height:1.55;max-width:68ch}
+.intro{font-size:16.5px;color:var(--muted);max-width:62ch}
+.prose{max-width:62ch}
+
+/* the one signature move: anything annotated wears a left rule with the
+   corners squared on that side only. Nothing else on the page gets it. */
+.anno{border-left:3px solid var(--rule);border-radius:0 6px 6px 0;background:var(--card);
+      border-top:1px solid var(--rule);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+      padding:14px 16px}
+.anno.accent{border-left-color:var(--accent)}
+.anno.marker{border-left-color:var(--marker)}
+.anno.ok{border-left-color:var(--ok)}
+.anno.bad{border-left-color:var(--bad)}
+.wash{border-left:3px solid var(--accent);border-radius:0 6px 6px 0;background:var(--accent-wash);padding:11px 13px}
+.wash.marker{border-left-color:var(--marker);background:var(--marker-wash)}
+.wash.bad{border-left-color:var(--bad);background:var(--bad-wash)}
+
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;
+      font-size:11.5px;font-weight:600;font-family:var(--sans)}
+.pill.ok{background:var(--ok-wash);color:var(--ok)}
+.pill.bad{background:var(--bad-wash);color:var(--bad);box-shadow:inset 0 0 0 1px var(--bad)}
+.pill.stale{background:var(--bad-wash);color:var(--bad);font-size:10px;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;
+     border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;
+     transition:background-color 120ms,color 120ms,border-color 120ms}
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-hover);color:var(--on-accent)}
+.btn.secondary{background:var(--card);color:var(--fg);border-color:var(--rule)}
+.btn.secondary:hover{background:var(--band);color:var(--fg)}
+
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;z-index:9;background:var(--card);border:1px solid var(--rule);
+            border-radius:6px;padding:10px 14px;color:var(--fg);text-decoration:none}
+
+/* ---- nav ---- */
+header.nav{border-bottom:1px solid var(--rule);background:var(--bg)}
+.nav .wrap{height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.mark{display:flex;align-items:center;gap:10px}
+.mark i{width:4px;height:20px;background:var(--accent);border-radius:0 2px 2px 0;display:block}
+.mark span{font-family:var(--serif);font-size:19px;font-weight:700;letter-spacing:-.015em}
+.nav nav{display:flex;align-items:center;gap:28px;font-size:13px}
+.nav nav a{color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+.nav nav a:hover{color:var(--fg)}
+.nav .ghlink{color:var(--fg);border:1px solid var(--rule);border-radius:999px;padding:0 14px;
+             background:var(--card);gap:7px;min-height:36px}
 
 /* ---- hero ---- */
-.hero{padding:3.5rem 0 2rem}
-.hero h1{font-size:clamp(1.9rem,5vw,2.9rem);margin:0 0 .6rem;letter-spacing:-.02em;text-wrap:balance}
-.hero .lede{font-family:var(--serif);font-size:clamp(1.05rem,2.4vw,1.3rem);color:var(--fg);max-width:52ch;margin:0 0 1.1rem;text-wrap:pretty}
-.hero p.sub{color:var(--muted);max-width:56ch;margin:0 0 1.6rem}
-.install{display:flex;flex-direction:column;gap:.4rem;max-width:44rem}
-.install pre{
-  margin:0;padding:.7rem .9rem;background:var(--card);border:1px solid var(--rule);
-  border-radius:var(--r-lg);overflow-x:auto;font-size:.88rem;
-}
-.install .alt{color:var(--muted);font-size:.85rem}
-.badges{display:flex;gap:.5rem;flex-wrap:wrap;margin:1.3rem 0 0}
-.badge{
-  font-size:.78rem;color:var(--muted);border:1px solid var(--rule);
-  border-radius:var(--r-pill);padding:.15rem .7rem;
-}
+.hero{padding:80px 0 88px}
+.hero .stack{display:flex;flex-direction:column;gap:22px;max-width:840px}
+.badge{display:inline-flex;align-self:flex-start;align-items:center;gap:8px;border:1px solid var(--rule);
+       background:var(--card);border-radius:999px;padding:5px 12px;font-size:11px;letter-spacing:.06em;
+       text-transform:uppercase;color:var(--muted);font-weight:600}
+.badge i{width:6px;height:6px;border-radius:999px;background:var(--marker);display:block}
+.cta{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:6px}
+.cta .meta{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-left:8px}
 
-/* ---- the live demo ---- */
-.demo{margin:2.5rem 0 3rem}
-.demo .frameline{
-  display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;
-  font-size:.88rem;color:var(--muted);margin-bottom:.5rem;
-}
-.demo .frameline strong{color:var(--fg);font-weight:600}
-.demo .shell{
-  border:1px solid var(--rule);border-radius:var(--r-lg);overflow:hidden;
-  box-shadow:var(--shadow);background:var(--card);
-}
-.demo iframe{display:block;width:100%;height:44rem;border:0;background:var(--bg)}
-@media (max-width:640px){.demo iframe{height:30rem}}
+.demo-caption{display:flex;align-items:baseline;flex-wrap:wrap;gap:12px;
+              border-top:1px solid var(--rule);padding-top:20px;margin-top:40px}
+.demo-caption .said{font-size:14px;color:var(--muted)}
+kbd,.tok{font-family:var(--mono);font-size:12.5px;color:var(--fg);background:var(--band);
+         border:1px solid var(--rule);border-radius:4px;padding:1px 6px}
 
-/* ---- sections ---- */
-section{padding:2.5rem 0;border-top:1px solid var(--rule)}
-section h2{font-size:1.45rem;margin:0 0 .4rem;letter-spacing:-.01em;text-wrap:balance}
-section > .wrap > p.intro{color:var(--muted);max-width:60ch;margin:0 0 1.8rem}
+.frame{margin-top:20px;border:1px solid var(--rule);border-radius:8px;background:var(--card);overflow:hidden}
+.frame .chrome{min-height:42px;padding:8px 14px;border-bottom:1px solid var(--rule);background:var(--band);
+               display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.frame .chrome .who{display:flex;align-items:center;gap:9px;font-size:12px}
+.frame .chrome .who .file{font-family:var(--mono);color:var(--fg)}
+.frame .chrome .note{font-size:11px;color:var(--muted)}
+.frame iframe{display:block;width:100%;height:44rem;border:0;background:var(--bg)}
 
-.grid{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))}
-.feature{
-  background:var(--card);border:1px solid var(--rule);
-  border-left:3px solid var(--marker);border-radius:var(--r-tab);
-  padding:.9rem 1.1rem;
-}
-.feature h3{margin:0 0 .35rem;font-size:1rem}
-.feature p{margin:0;color:var(--muted);font-size:.93rem}
-.feature code{font-size:.85em;color:var(--fg)}
+/* ---- install ---- */
+.rows{display:flex;flex-direction:column;gap:12px;max-width:900px}
+.row{display:flex;align-items:center;gap:16px}
+.row>.label{width:92px;flex-shrink:0;font-size:12px;color:var(--muted);text-align:right}
+.cmd{flex-grow:1;display:flex;align-items:center;justify-content:space-between;gap:16px;
+     background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;min-width:0}
+.cmd code{font-size:13.5px;color:var(--fg);overflow-x:auto;white-space:nowrap}
+.cmd code .sig{color:var(--muted)}
+.copy{flex-shrink:0;font-size:11px;color:var(--muted);background:transparent;border:1px solid var(--rule);
+      border-radius:4px;padding:8px 10px;cursor:pointer;font-family:var(--sans);min-height:34px}
+.copy:hover{background:var(--band);color:var(--fg)}
+.then{flex-grow:1;display:flex;flex-direction:column;gap:8px}
+.then code{font-size:13.5px;display:block;overflow-x:auto}
+.then .out{font-family:var(--mono);font-size:12.5px;color:var(--muted);white-space:pre-wrap}
 
 /* ---- the loop ---- */
-.loop{background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:1.2rem}
-.loop svg{display:block;width:100%;height:auto;max-width:44rem;margin:0 auto}
-.loop text{font-family:var(--sans);font-size:11px;fill:var(--fg)}
-.loop text.small{fill:var(--muted);font-size:9.5px}
-.loop rect{fill:var(--bg);stroke:var(--rule)}
-.loop path,.loop line{stroke:var(--accent);fill:none}
+.loop{display:flex;align-items:stretch;gap:0}
+.step{flex:1 1 0;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);
+      border-radius:0 8px 8px 0;padding:16px;display:flex;flex-direction:column;gap:9px}
+.step.marker{border-left-color:var(--marker)}
+.step.ok{border-left-color:var(--ok)}
+.step .n{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent)}
+.step.marker .n{color:var(--muted)}
+.step.ok .n{color:var(--ok)}
+.step .t{font-size:14.5px;font-weight:700}
+.step .d{font-size:12.5px;line-height:1.5;color:var(--muted)}
+.step .tag{font-family:var(--mono);font-size:11px;background:var(--band);border-radius:4px;
+           padding:4px 7px;margin-top:auto;align-self:flex-start}
+.step.marker .tag{background:var(--marker-wash)}
+.step.ok .tag{background:var(--ok-wash);color:var(--ok)}
+.arrow{width:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.return{position:relative;height:62px;color:var(--muted)}
+.return svg{display:block;width:100%;height:62px}
+.return span{position:absolute;left:50%;top:32px;transform:translateX(-50%);background:var(--band);
+             padding:0 12px;font-size:12px;color:var(--muted);text-align:center}
+.mcp{margin-top:34px;max-width:900px;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+.mcp b{font-size:14px;flex-shrink:0}
+.mcp span{font-size:14px;line-height:1.55;color:var(--muted)}
 
-/* ---- not-doing ---- */
-.honest{background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:1.2rem 1.4rem}
-.honest ul{margin:.6rem 0 0;padding-left:1.1rem;color:var(--muted)}
-.honest li{margin:.35rem 0}
-.honest strong{color:var(--fg)}
+/* ---- two-column capability rows ---- */
+.split{display:flex;align-items:flex-start;gap:72px}
+.split.center{align-items:center}
+.split.flip{flex-direction:row-reverse}
+.split .side{width:440px;flex-shrink:0}
+.split .body{flex-grow:1;min-width:0}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:22px 24px}
+.panel.flush{padding:0;overflow:hidden}
+.log{font-family:var(--mono);font-size:12.5px;line-height:1.85;background:var(--card);
+     border:1px solid var(--rule);border-radius:8px;padding:18px 20px}
+.log .name{color:var(--muted);margin-bottom:10px;font-family:var(--sans);font-size:11px;
+           letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.log pre{margin:0;white-space:pre-wrap;word-break:break-word}
+.log .k{color:var(--accent)}
+.log .g{color:var(--ok)}
+.log .dim{color:var(--muted)}
+.pairs{display:flex;gap:14px;margin-top:14px}
+.pairs .anno{flex:1 1 0;padding:12px 14px}
+.pairs b{display:block;font-size:12.5px;margin-bottom:5px}
+.pairs span{font-size:12.5px;line-height:1.5;color:var(--muted)}
 
-footer{border-top:1px solid var(--rule);padding:2rem 0 3rem;color:var(--muted);font-size:.9rem}
-footer .wrap{display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center}
-footer a{color:var(--muted)}
-footer .right{margin-left:auto}
+.quote{font-family:var(--serif);font-size:15.5px;line-height:1.7}
+.hl{background:var(--marker-wash);box-shadow:0 0 0 1px var(--marker);border-radius:3px;padding:1px 2px}
+.note-meta{font-size:11px;color:var(--muted);margin-top:6px}
+.states{border-top:1px dashed var(--rule);padding-top:12px;margin-top:14px;
+        display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.states .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+
+.diagram-card{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.diagram-card figure{margin:0;flex:1 1 280px;min-width:0}
+.diagram-card figure svg{width:100%;height:auto}
+.diagram-card .beside{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.diagram-card figcaption{font-size:11px;color:var(--muted);margin-top:8px}
+.dg-box{fill:var(--card);stroke:var(--fg)}
+.dg-txt{fill:var(--fg);font-family:var(--serif);font-size:13px}
+.dg-line{stroke:var(--fg);fill:none}
+.dg-sel{stroke:var(--accent);fill:none}
+.dg-sel-txt{fill:var(--accent);font-family:var(--serif);font-size:11px;font-weight:700}
+.dg-dim{fill:var(--muted);font-family:var(--serif);font-size:11px}
+.meta-mono{font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--muted);
+           background:var(--band);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;
+           white-space:pre;overflow-x:auto}
+
+.diff-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+           padding:10px 14px;border-bottom:1px solid var(--rule);background:var(--band);font-size:11px;color:var(--muted)}
+.diff-head .path{font-family:var(--mono);font-size:12px;color:var(--fg)}
+.diff{font-family:var(--mono);font-size:12.5px;line-height:1.75;overflow-x:auto}
+.diff div{padding:0 14px;white-space:pre}
+.diff .hunk{color:var(--muted);background:var(--band);padding:6px 14px}
+.diff .del{color:var(--bad);background:var(--bad-wash)}
+.diff .add{color:var(--ok);background:var(--ok-wash)}
+.diff-note{border-top:1px solid var(--rule);padding:12px 14px}
+
+.threads{display:flex;flex-direction:column;gap:14px}
+.thread .said{font-family:var(--serif);font-size:13px;color:var(--muted);font-style:italic}
+.thread .ask{font-size:14px;line-height:1.55;margin-top:10px}
+.thread .by{font-size:11px;color:var(--muted);margin-top:8px}
+.thread .reply{margin:10px 0 0 10px;display:flex;flex-direction:column;gap:8px}
+.thread .reply .who{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+.thread .reply.bad .who{color:var(--bad)}
+
+.formats{display:flex;align-items:center;gap:48px}
+.formats .side{width:240px;flex-shrink:0}
+.formats .tags{display:flex;flex-wrap:wrap;gap:10px}
+.formats .tags span{font-family:var(--mono);background:var(--card);border:1px solid var(--rule);
+                    border-radius:999px;padding:7px 16px;font-size:13px}
+
+.scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px}
+.scope .anno{padding:18px 20px}
+.scope b{display:block;font-size:16px;margin-bottom:7px}
+.scope span{font-size:15px;line-height:1.6;color:var(--muted)}
+
+.closing{display:flex;align-items:center;justify-content:space-between;gap:48px;flex-wrap:wrap}
+.closing .box{background:var(--card);border:1px solid var(--rule);border-radius:6px;padding:13px 16px}
+.closing code{font-size:13.5px}
+
+footer{border-top:1px solid var(--rule)}
+footer .wrap{padding:32px var(--gutter);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+footer .mark i{background:var(--rule);height:16px}
+footer .mark span{font-size:14px;color:var(--muted)}
+footer .said{font-size:13px;color:var(--muted)}
+footer nav{display:flex;align-items:center;gap:24px;font-size:13px}
+footer nav a{color:var(--muted);text-decoration:none}
+footer nav a:hover{color:var(--fg)}
+
+/* ---- breakpoints: 900 stacks the two-column rows, 640 is the phone ---- */
+@media (max-width:900px){
+  :root{--gutter:32px}
+  .split,.formats{flex-direction:column;gap:32px}
+  .split.flip{flex-direction:column}
+  .split .side,.formats .side{width:auto}
+  .split .side,.split .body{width:100%;min-width:0;max-width:100%}
+  .loop{flex-direction:column;gap:12px}
+  .arrow{width:auto;height:24px;transform:rotate(90deg)}
+  .return{display:none}
+  .scope{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  :root{--gutter:20px}
+  body{font-size:15px}
+  h1{font-size:34px}
+  h2{font-size:26px}
+  h3{font-size:23px}
+  .lead{font-size:17px}
+  .intro{font-size:15px}
+  section{padding:48px 0}
+  section.tight{padding:44px 0}
+  .hero{padding:44px 0 48px}
+  .nav nav{gap:14px;font-size:12px}
+  .nav nav a.hide-sm{display:none}
+  .cta{gap:10px}
+  .cta .btn{width:100%}
+  .cta .meta{margin-left:0}
+  .row{flex-direction:column;align-items:stretch;gap:6px}
+  .row>.label{width:auto;text-align:left}
+  .frame iframe{height:30rem}
+  .diagram-card{flex-direction:column;align-items:stretch}
+  .pairs{flex-direction:column}
+  .closing{flex-direction:column;align-items:flex-start}
+}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
-<header>
+<header class="nav">
   <div class="wrap">
-    <span class="logo"><span class="mark" aria-hidden="true"></span>Marginalia</span>
-    <nav>
-      <a href="#how">How it works</a>
-      <a href="#what">What it does</a>
-      <a href="#limits">Limits</a>
-      <a href="https://github.com/gruesomeparty/marginalia">GitHub</a>
+    <div class="mark"><i></i><span>marginalia</span></div>
+    <nav aria-label="Primary">
+      <a href="#loop" class="hide-sm">How it works</a>
+      <a href="#does" class="hide-sm">What it does</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/gruesomeparty/marginalia#readme" class="hide-sm">Docs</a>
+      <a class="ghlink" href="https://github.com/gruesomeparty/marginalia">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.49-2.7-1.07-2.7-1.07-.36-.93-.89-1.18-.89-1.18-.73-.5.05-.49.05-.49.81.06 1.23.83 1.23.83.72 1.23 1.89.87 2.35.67.07-.52.28-.88.51-1.08-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
     </nav>
   </div>
 </header>
 
-<main>
-<div class="wrap hero">
-  <h1>A document-review tool an agent hands to a human.</h1>
-  <p class="lede">An agent writes a spec, a schema, a diagram or a diff, and needs a person to actually read it.</p>
-  <p class="sub">
-    Marginalia renders that document as a page worth reading, collects comments
-    anchored to individual blocks, and writes them back as append-only JSONL the
-    agent consumes directly. No database, no accounts, no copy-and-paste step.
-  </p>
+<main id="main">
 
-  <div class="install">
-    <pre><code>brew install --cask gruesomeparty/tap/marginalia</code></pre>
-    <span class="alt">or <code>go install github.com/gruesomeparty/marginalia@latest</code> · single Go binary, no runtime dependencies</span>
-  </div>
-
-  <div class="badges">
-    <span class="badge">markdown · proto · JSON/YAML/TOML · mermaid · diffs</span>
-    <span class="badge">MCP server</span>
-    <span class="badge">append-only</span>
-    <span class="badge">never edits your file</span>
-  </div>
-</div>
-
-<div class="wrap demo">
-  <div class="frameline">
-    <strong>This is the real thing, not a screenshot.</strong>
-    <span>Click a shape in the diagram, a paragraph, or one selected sentence. Nothing leaves your browser, and the page makes no request.</span>
-  </div>
-  <div class="shell">
-    <iframe src="demo.html" title="A live Marginalia review page" loading="lazy"></iframe>
-  </div>
-</div>
-
-<section id="how">
+<div class="hero">
   <div class="wrap">
-    <h2>The loop</h2>
-    <p class="intro">
-      The agent serves a document and gets a URL. You annotate. The agent reads
-      the events, revises, and records which note each change answered — and you
-      confirm or reopen. Nothing in the log is ever rewritten.
-    </p>
+    <div class="stack">
+      <span class="badge"><i></i>Document review for agent output</span>
+      <h1>Hand a document to a human.<br>Get structured comments back.</h1>
+      <p class="lead">An agent writes a spec, a schema, a config, a diagram, a diff. Marginalia renders it as a page, the reviewer clicks a block and comments, and every comment lands on disk as an append-only JSONL event the agent reads directly.</p>
+      <p class="intro">No database. No accounts. No copy-paste step between the browser and the agent.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Install it</a>
+        <a class="btn secondary" href="https://github.com/gruesomeparty/marginalia">Read the source</a>
+        <span class="meta">MIT · single binary · no runtime deps</span>
+      </div>
+    </div>
+
+    <div class="demo-caption">
+      <span class="eyebrow">Live, not a screenshot</span>
+      <span class="said">This is the output of <span class="tok">marginalia export</span> — one self-contained HTML file, running below. Click a shape in the diagram, a paragraph, or one selected sentence.</span>
+    </div>
+
+    <div class="frame">
+      <div class="chrome">
+        <span class="who">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" style="color:var(--muted)"><path d="M9.5 1.5H4a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 4 14.5h8a1.5 1.5 0 0 0 1.5-1.5V5.5L9.5 1.5Z"/><path d="M9.5 1.5v4h4"/></svg>
+          <span class="file">handover.md</span>
+        </span>
+        <span class="note">the real export, with a review already in progress · makes no network request</span>
+      </div>
+      <iframe src="demo.html" title="A live Marginalia review page"></iframe>
+    </div>
+  </div>
+</div>
+
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2 style="margin:14px 0">One binary. It serves a page and writes a log beside your file.</h2>
+    <p class="intro" style="margin-bottom:32px">Nothing to configure before the first review. Point it at a document and it prints a URL.</p>
+
+    <div class="rows">
+      <div class="row">
+        <span class="label">macOS</span>
+        <div class="cmd"><code class="m"><span class="sig">$ </span>brew install --cask gruesomeparty/tap/marginalia</code></div>
+      </div>
+      <div class="row">
+        <span class="label">Go</span>
+        <div class="cmd"><code class="m"><span class="sig">$ </span>go install github.com/gruesomeparty/marginalia@latest</code></div>
+      </div>
+      <div class="row">
+        <span class="label">Claude Code</span>
+        <div class="cmd"><code class="m"><span class="sig">$ </span>/plugin marketplace add gruesomeparty/marginalia</code></div>
+      </div>
+      <div class="row">
+        <span class="label"></span>
+        <div class="cmd"><code class="m"><span class="sig">$ </span>/plugin install marginalia</code></div>
+      </div>
+
+      <div class="row" style="margin-top:18px;align-items:stretch">
+        <span class="label" style="padding-top:14px">Then</span>
+        <div class="anno accent then">
+          <code class="m"><span class="sig" style="color:var(--muted)">$ </span>marginalia serve plan.md</code>
+          <span class="out">marginalia: serving plan.md at http://127.0.0.1:8787
+marginalia: feedback → plan.md.feedback.jsonl</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="loop" class="band">
+  <div class="wrap">
+    <p class="eyebrow">The loop</p>
+    <h2 style="margin:14px 0">How a review actually goes.</h2>
+    <p class="intro" style="margin-bottom:40px">Five steps, and then it goes round again. Nothing in the middle is a human retyping something into a chat window.</p>
+
     <div class="loop">
-      <svg viewBox="0 0 640 150" role="img" aria-label="Agent serves a document; the human annotates it; feedback is written to a JSONL log the agent reads; the agent revises and says what changed; the human confirms.">
-        <rect x="8" y="46" width="112" height="42" rx="6"/>
-        <text x="64" y="66" text-anchor="middle">agent</text>
-        <text x="64" y="79" text-anchor="middle" class="small">serve / MCP</text>
+      <div class="step">
+        <span class="n">01</span><span class="t">Agent serves</span>
+        <span class="d">Renders the document, prints a URL.</span>
+        <span class="tag">marginalia serve</span>
+      </div>
+      <div class="arrow"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 6h18M13.5 1.5 18.5 6l-5 4.5"/></svg></div>
+      <div class="step marker">
+        <span class="n">02</span><span class="t">Human annotates</span>
+        <span class="d">Clicks a block or selects a sentence and writes.</span>
+        <span class="tag">in the browser</span>
+      </div>
+      <div class="arrow"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 6h18M13.5 1.5 18.5 6l-5 4.5"/></svg></div>
+      <div class="step">
+        <span class="n">03</span><span class="t">Agent reads events</span>
+        <span class="d">One JSON object per line, appended as they save.</span>
+        <span class="tag">feedback.jsonl</span>
+      </div>
+      <div class="arrow"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 6h18M13.5 1.5 18.5 6l-5 4.5"/></svg></div>
+      <div class="step">
+        <span class="n">04</span><span class="t">Agent revises</span>
+        <span class="d">Edits the file and records which note the change addressed.</span>
+        <span class="tag">type: addressed</span>
+      </div>
+      <div class="arrow"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M0 6h18M13.5 1.5 18.5 6l-5 4.5"/></svg></div>
+      <div class="step ok">
+        <span class="n">05</span><span class="t">Human confirms</span>
+        <span class="d">Re-reads. The claim is checked against the text, not taken on trust.</span>
+        <span class="tag">review_done</span>
+      </div>
+    </div>
 
-        <rect x="184" y="46" width="112" height="42" rx="6"/>
-        <text x="240" y="66" text-anchor="middle">the page</text>
-        <text x="240" y="79" text-anchor="middle" class="small">a human reads</text>
-
-        <rect x="360" y="46" width="128" height="42" rx="6"/>
-        <text x="424" y="66" text-anchor="middle">feedback.jsonl</text>
-        <text x="424" y="79" text-anchor="middle" class="small">append-only</text>
-
-        <rect x="552" y="46" width="80" height="42" rx="6"/>
-        <text x="592" y="71" text-anchor="middle">agent</text>
-
-        <path d="M120 67 H176" marker-end="url(#a)"/>
-        <path d="M296 67 H352" marker-end="url(#a)"/>
-        <path d="M488 67 H544" marker-end="url(#a)"/>
-        <path d="M592 90 V120 H64 V90" marker-end="url(#a)"/>
-        <text x="328" y="136" text-anchor="middle" class="small">answers the question · revises · says which note it addressed</text>
-        <defs>
-          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M0 0 L8 4 L0 8 z" fill="currentColor" stroke="none" style="fill:var(--accent)"/>
-          </marker>
-        </defs>
+    <div class="return" aria-hidden="true">
+      <svg viewBox="0 0 1120 62" preserveAspectRatio="none" fill="none">
+        <path d="M1060 2 C1060 34, 1060 44, 1020 44 L100 44 C60 44, 60 34, 60 2" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 4"/>
+        <path d="M55.5 8 L60 2 L64.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
+      <span>until the reviewer signs off — or asks for one more pass</span>
+    </div>
+
+    <div class="anno accent mcp">
+      <b>Ships as an MCP server.</b>
+      <span>Agents call tools — serve a review, read what is new, reply to a note, mark it addressed, wait for the human to finish — instead of scraping terminal output.</span>
     </div>
   </div>
 </section>
 
-<section id="what">
+<section id="does">
   <div class="wrap">
-    <h2>What makes it different</h2>
-    <p class="intro">
-      Every one of these exists because a review that misleads you is worse than
-      no review at all.
-    </p>
-    <div class="grid">
-      <div class="feature">
-        <h3>Comments survive edits — or admit they didn't</h3>
-        <p>Each block carries an ID, a quote and a content hash. Edit the document and notes re-anchor themselves; a note written against text that has since changed comes back flagged <strong>stale</strong> rather than silently pointing at the wrong paragraph.</p>
+    <div class="split">
+      <div class="side">
+        <p class="eyebrow">Anchoring</p>
+        <h2 style="margin:14px 0 16px">Every block is anchored three ways.</h2>
+        <p style="margin-bottom:14px">A stable id, the quote the note was written against, and a hash of the block's content. Edit the document and the comments re-anchor themselves.</p>
+        <p style="color:var(--muted)">When the text a note points at has itself changed, the note comes back flagged <span class="pill stale">stale</span> rather than silently pointing at the wrong paragraph. That is the whole trick, and it is the reason the loop can survive more than one round.</p>
       </div>
-      <div class="feature">
-        <h3>Comment on a sentence</h3>
-        <p>Select text and the note is about <em>that</em>. It survives unrelated edits elsewhere in the paragraph, and goes stale only when its own sentence changes.</p>
-      </div>
-      <div class="feature">
-        <h3>Click the arrow in the diagram</h3>
-        <p>Mermaid flowcharts render as real pictures whose shapes carry the same anchors as the source. Click the retry edge, comment on the retry edge. Source is one toggle away.</p>
-      </div>
-      <div class="feature">
-        <h3>Review a diff</h3>
-        <p>Unified diffs anchor by file and hunk — the thing a human is most often asked to approve. Markdown, <code>.proto</code>, JSON, YAML and TOML too.</p>
-      </div>
-      <div class="feature">
-        <h3>The agent answers back</h3>
-        <p>A question gets a reply threaded under it. The agent records which note a change addressed — and the claim is checked against the document, so claiming a fix without touching the text says so.</p>
-      </div>
-      <div class="feature">
-        <h3>Built for agents to call</h3>
-        <p>Ships an MCP server: serve a review, read only what's new by cursor, block until the human is done. No scraping terminal output.</p>
+      <div class="body">
+        <div class="log">
+          <div class="name">plan.md.feedback.jsonl</div>
+<pre>{"doc":"plan.md","<span class="k">block</span>":"1.2/2","<span class="k">quote</span>":"The batch cap is 500 records.","<span class="k">hash</span>":"83be6e423f0d","type":"question","text":"why no backoff? the queue will hammer the upstream","author":"berkay","ts":"2026-09-18T23:53:25Z"}</pre>
+          <div style="height:10px"></div>
+<pre class="dim">{"doc":"plan.md","block":"1.2/2","type":"reply","<span class="g">reply_to</span>":"e206687d85b0","text":"Fair — switching to exponential with jitter.","author":"agent"}</pre>
+        </div>
+        <div class="pairs">
+          <div class="anno"><b>Append-only</b><span>Nothing is rewritten. The history of a review is the file.</span></div>
+          <div class="anno"><b>Beside your document</b><span>It never edits your file. The log is its own file.</span></div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<section id="limits">
+<section class="tight">
   <div class="wrap">
-    <h2>What it deliberately doesn't do</h2>
-    <p class="intro">Scope choices, not a roadmap.</p>
-    <div class="honest">
-      <ul>
-        <li><strong>No authentication.</strong> Anyone who can reach the URL can write to the log. That's fine for <code>127.0.0.1</code> and for a Tailnet; it is not fine on an untrusted network, and it won't pretend otherwise by growing a token flag.</li>
-        <li><strong>One reviewer at a time.</strong> Two people on one document write to one log with no identity and no conflict story.</li>
-        <li><strong>It never edits your document.</strong> Suggested edits are reported, with whether they still apply cleanly. You apply them.</li>
-        <li><strong>No database, no accounts, no hosted service.</strong> A log file next to your document. For someone off your machine there's a one-file export that loads nothing at all.</li>
-      </ul>
+    <div class="split center">
+      <div class="side">
+        <p class="eyebrow">01 · Selection</p>
+        <h3 style="margin:12px 0 14px">Comment on a sentence, not the paragraph.</h3>
+        <p style="margin-bottom:12px;font-size:16px">Select text and the note anchors to that sentence. Rewrite the sentence before it and the note stays exactly where it was.</p>
+        <p style="color:var(--muted);font-size:16px">Rewrite the sentence itself and it goes stale — honestly, and in the reviewer's face rather than quietly.</p>
+      </div>
+      <div class="body">
+        <div class="panel">
+          <p class="quote">Tokens are minted by the auth service and verified at the edge. <span class="hl">Rotation happens weekly, on Sunday at 03:00 UTC.</span> Clients cache the JWKS document for one hour.</p>
+          <div class="wash marker" style="margin-top:14px">
+            <div style="font-size:13px;line-height:1.5">Weekly rotation with a one-hour JWKS cache means up to an hour of 401s. Is that intended?</div>
+            <div class="note-meta">anchored to the sentence, by quote and surrounding context — not by an offset</div>
+          </div>
+          <div class="states">
+            <span class="lbl">After an edit elsewhere</span><span class="pill ok">still anchored</span>
+            <span class="lbl" style="margin-left:12px">After editing the sentence</span><span class="pill stale">stale</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="split center flip">
+      <div class="side">
+        <p class="eyebrow">02 · Diagrams</p>
+        <h3 style="margin:12px 0 14px">Click the arrow in a diagram.</h3>
+        <p style="margin-bottom:12px;font-size:16px">Mermaid flowcharts are drawn as real pictures whose shapes carry the same anchors as the source.</p>
+        <p style="color:var(--muted);font-size:16px">Click a node and you are commenting on that node. Click an edge and you are commenting on that edge — not on the line of Mermaid that drew it. The picture is in the demo above; this is what a note on one looks like.</p>
+      </div>
+      <div class="body">
+        <div class="panel diagram-card">
+          <figure>
+            <svg width="400" height="150" viewBox="0 0 400 150" fill="none" role="img" aria-label="A flowchart in which the retry edge from worker back to queue is selected.">
+              <rect class="dg-box" x="6" y="54" width="86" height="38" rx="6" stroke-width="1.3"/>
+              <text class="dg-txt" x="49" y="78" text-anchor="middle">queue</text>
+              <rect class="dg-box" x="160" y="54" width="86" height="38" rx="6" stroke-width="1.3"/>
+              <text class="dg-txt" x="203" y="78" text-anchor="middle">worker</text>
+              <rect class="dg-box" x="306" y="8" width="88" height="38" rx="6" stroke-width="1.3"/>
+              <text class="dg-txt" x="350" y="32" text-anchor="middle">store</text>
+              <rect class="dg-box" x="306" y="100" width="88" height="38" rx="6" stroke-width="1.3"/>
+              <text class="dg-txt" x="350" y="124" text-anchor="middle">dlq</text>
+              <path class="dg-line" d="M92 66h62" stroke-width="1.3"/>
+              <path class="dg-line" d="M149 62 154 66 149 70" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="dg-line" d="M246 66 C270 66, 280 28, 302 27" stroke-width="1.3"/>
+              <path class="dg-line" d="M297 23 302 27 297 31" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="dg-line" d="M246 80 C270 80, 280 118, 302 119" stroke-width="1.3"/>
+              <path class="dg-line" d="M297 115 302 119 297 123" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="dg-sel" d="M200 92 C200 122, 160 126, 120 126 C80 126, 49 122, 49 96" stroke-width="3" stroke-dasharray="6 5"/>
+              <path class="dg-sel" d="M44 101 49 95 54 101" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <text class="dg-sel-txt" x="124" y="142" text-anchor="middle">retry</text>
+            </svg>
+            <figcaption>The dashed retry edge is the selected shape.</figcaption>
+          </figure>
+          <div class="beside">
+            <div class="wash">
+              <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px">note on edge</div>
+              <div style="font-size:13px;line-height:1.5">This retry edge should go to the dead letter queue after N attempts, not back to the queue.</div>
+            </div>
+            <div class="meta-mono">source  worker -.retry.-&gt; queue
+anchor  1.1/2/worker--&gt;queue</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="split center">
+      <div class="side">
+        <p class="eyebrow">03 · Diffs</p>
+        <h3 style="margin:12px 0 14px">Review a unified diff the way you'd review prose.</h3>
+        <p style="margin-bottom:12px;font-size:16px">Anchored by file and hunk — the thing a human is most often asked to approve.</p>
+        <p style="color:var(--muted);font-size:16px">A hunk is anchored by its position in the file, not by line number, so regenerating the patch after an earlier hunk changes doesn't orphan the notes below it.</p>
+      </div>
+      <div class="body">
+        <div class="panel flush">
+          <div class="diff-head"><span class="path">internal/gateway/limit.go</span><span>2 hunks · 1 note</span></div>
+          <div class="diff">
+            <div class="hunk">@@ -41,7 +41,11 @@ func (g *Gateway) allow(key string)</div>
+            <div>   ttl := g.redis.PTTL(ctx, k).Val()</div>
+            <div class="del">-  if n &gt; limit { return false }</div>
+            <div class="add">+  if n &gt; limit {</div>
+            <div class="add">+    w.Header().Set("Retry-After", secs(ttl))</div>
+            <div class="add">+    return false</div>
+            <div class="add">+  }</div>
+            <div style="padding-bottom:8px">   return true</div>
+          </div>
+          <div class="diff-note">
+            <div class="wash marker">
+              <div style="font-size:13px;line-height:1.5">secs() rounds down. At 400ms left this sends Retry-After: 0 and the client retries immediately.</div>
+              <div class="note-meta">anchored to <span class="m">internal/gateway/limit.go/2</span> — the file's second hunk</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="split center flip">
+      <div class="side">
+        <p class="eyebrow">04 · Replies</p>
+        <h3 style="margin:12px 0 14px">The agent answers back, and the answer is checked.</h3>
+        <p style="margin-bottom:12px;font-size:16px">A reviewer's question gets a reply threaded under it. The agent records which note a change addressed.</p>
+        <p style="color:var(--muted);font-size:16px">That claim is checked against whatever the note is about — the block, or the one sentence. Claim you fixed it without touching the text and the page says so, in front of the person who asked.</p>
+      </div>
+      <div class="body threads">
+        <div class="anno marker thread">
+          <p class="said">“the counter is reset at midnight”</p>
+          <p class="ask">Midnight in which timezone? This will be wrong for half our customers twice a year.</p>
+          <p class="by">reviewer</p>
+          <div class="wash reply">
+            <span class="who">agent · addressed</span>
+            <p style="font-size:14px;line-height:1.55">Changed to a rolling window anchored on first request. No midnight, no timezone.</p>
+            <span class="pill ok">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6.5 4.6 9 10 3"/></svg>
+              the text changed · claim holds
+            </span>
+          </div>
+        </div>
+
+        <div class="anno marker thread">
+          <p class="said">“retries are capped at three”</p>
+          <p class="ask">Three retries against a cold upstream is a thundering herd. Add jitter.</p>
+          <p class="by">reviewer</p>
+          <div class="wash bad reply bad">
+            <span class="who">agent · addressed</span>
+            <p style="font-size:14px;line-height:1.55">Added jitter to the retry schedule.</p>
+            <span class="pill bad">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 2.5v4.2M6 9.3v.2"/></svg>
+              unchanged since the note · claim not supported
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band tight">
+  <div class="wrap formats">
+    <div class="side">
+      <p class="eyebrow" style="margin-bottom:8px">Also reads</p>
+      <p style="font-size:14px;line-height:1.55;color:var(--muted)">Same anchoring model, different parser.</p>
+    </div>
+    <div class="tags">
+      <span>markdown</span><span>unified diff</span><span>.proto</span>
+      <span>json</span><span>yaml</span><span>toml</span><span>mermaid</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Scope</p>
+    <h2 style="margin:14px 0">What it deliberately does not do.</h2>
+    <p class="intro" style="margin-bottom:36px">Worth knowing before you install it rather than after.</p>
+    <div class="scope">
+      <div class="anno"><b>No auth.</b><span>Anyone who can reach the URL can comment. There is no login, no invite, no permission model. You run it on your machine and hand over the link to one person.</span></div>
+      <div class="anno"><b>One reviewer at a time.</b><span>No presence, no cursors, no merge of two people's notes. Two people on one document write to one log with no identity and no conflict story.</span></div>
+      <div class="anno"><b>Local-first, and only local.</b><span>No hosted service, no account, no telemetry. Nothing leaves the machine you started it on — which also means nothing is backed up for you.</span></div>
+      <div class="anno"><b>It never edits your file.</b><span>Marginalia only writes its own log. Applying a change to the document is the agent's job, and the page will tell you whether it actually happened.</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap closing">
+    <div>
+      <h2 style="font-size:30px;margin-bottom:10px">Try it on the next thing your agent writes.</h2>
+      <p style="font-size:16px;color:var(--muted)">Takes one command and a document you were going to have to read anyway.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="box"><code class="m"><span style="color:var(--muted)">$ </span>brew install --cask gruesomeparty/tap/marginalia</code></div>
+      <a class="btn primary" href="https://github.com/gruesomeparty/marginalia">GitHub</a>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer>
   <div class="wrap">
-    <a href="https://github.com/gruesomeparty/marginalia">GitHub</a>
-    <a href="https://github.com/gruesomeparty/marginalia#readme">Docs</a>
-    <a href="https://github.com/gruesomeparty/marginalia/releases">Releases</a>
-    <span class="right">MIT licensed.</span>
+    <div class="mark"><i></i><span>marginalia</span><span class="said">— a document-review tool an agent hands to a human.</span></div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/gruesomeparty/marginalia">GitHub</a>
+      <a href="https://github.com/gruesomeparty/marginalia#readme">README</a>
+      <a href="https://github.com/gruesomeparty/marginalia/blob/main/LICENSE">MIT licence</a>
+    </nav>
   </div>
 </footer>
 
+<script>
+// Copy buttons exist only when scripting does; without them the command is
+// still selectable text, and the Clipboard API is never the only way out —
+// if it is unavailable or refuses, the command is selected for a manual copy.
+(function () {
+  document.querySelectorAll(".cmd").forEach(function (cmd) {
+    var code = cmd.querySelector("code");
+    if (!code) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy";
+    btn.textContent = "Copy";
+    btn.setAttribute("aria-label", "Copy command: " + code.textContent.replace(/^\$\s*/, ""));
+    btn.addEventListener("click", function () {
+      var text = code.textContent.replace(/^\$\s*/, "");
+      var said = function (word) {
+        btn.textContent = word;
+        setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+      };
+      var select = function () {
+        try {
+          var r = document.createRange();
+          r.selectNodeContents(code);
+          var s = window.getSelection();
+          s.removeAllRanges();
+          s.addRange(r);
+          said("Selected");
+        } catch (e) { said("Copy"); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { said("Copied"); }, select);
+      } else {
+        select();
+      }
+    });
+    cmd.appendChild(btn);
+  });
+})();
+</script>
 </body>
 </html>
