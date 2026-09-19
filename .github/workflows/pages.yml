@@ -33,31 +33,27 @@ jobs:
         with:
           go-version: '1.26'
 
+      # The diagram in the demo is drawn, and every shape in it is anchored —
+      # that is the hero's whole argument, so the page is not published
+      # without it. mermaid's own CLI is the only way to draw one; as root it
+      # needs puppeteer told not to sandbox.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install mermaid-cli
+        run: |
+          npm i -g @mermaid-js/mermaid-cli
+          echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > /tmp/puppeteer.json
+
       # The hero is a real review page, not a picture of one. Generating it
       # here rather than committing it means the demo can never drift from the
-      # binary it is demonstrating.
+      # binary it is demonstrating. The script also enforces the product's own
+      # rule — an exported review loads nothing — and fails the deploy if the
+      # page ever gains an external reference.
       - name: Build the live demo
-        run: |
-          set -euo pipefail
-          go build -o /tmp/marginalia .
-          work="$(mktemp -d)"
-          cp site/demo/handover.md "$work/handover.md"
-          cp site/demo/review.yaml "$work/review.yaml"
-          cp site/demo/feedback.jsonl "$work/handover.md.feedback.jsonl"
-          /tmp/marginalia export "$work/handover.md" \
-            --config "$work/review.yaml" --diagrams=off -o site/demo.html
-          test -s site/demo.html
-
-      # The product's own rule, applied to its landing page: the exported
-      # review loads nothing. If that ever stops being true, the page should
-      # fail here rather than start making requests on someone else's machine.
-      - name: The demo must still load nothing
-        run: |
-          if grep -Eq 'https?://' site/demo.html; then
-            echo "demo.html gained an external reference:" >&2
-            grep -Eo 'https?://[^"'"'"' )]*' site/demo.html | sort -u >&2
-            exit 1
-          fi
+        env:
+          MARGINALIA_MMDC_ARGS: -p /tmp/puppeteer.json
+        run: ./scripts/demo.sh site/demo.html auto
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

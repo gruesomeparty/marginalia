@@ -1,8 +1,5 @@
 # Ingest rework — sign-off
 
-The batch cap is 500 records. Retries use no backoff. Failures go to the dead
-letter queue after three attempts.
-
 ## Flow
 
 ```mermaid
@@ -14,6 +11,11 @@ flowchart LR
   worker --> store
   worker --> dlq
 ```
+
+## Behaviour
+
+The batch cap is 500 records. Retries use no backoff. Failures go to the dead
+letter queue after three attempts.
 
 ## Rollout
 
