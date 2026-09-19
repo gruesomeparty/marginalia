@@ -55,7 +55,12 @@ jobs:
           MARGINALIA_MMDC_ARGS: -p /tmp/puppeteer.json
         run: ./scripts/demo.sh site/demo.html auto
 
+      # `enablement` turns Pages on through the API if it is off, so the
+      # first deploy does not depend on someone having clicked
+      # Settings → Pages → Source → GitHub Actions first.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
