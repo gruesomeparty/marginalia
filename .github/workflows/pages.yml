@@ -37,7 +37,7 @@ jobs:
       # that is the hero's whole argument, so the page is not published
       # without it. mermaid's own CLI is the only way to draw one; as root it
       # needs puppeteer told not to sandbox.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Install mermaid-cli
