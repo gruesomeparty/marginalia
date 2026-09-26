@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/gruesomeparty/marginalia/compare/v0.1.1...v0.1.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* **pages:** pin mermaid-cli to the version testdata was rendered with ([#86](https://github.com/gruesomeparty/marginalia/issues/86)) ([024ecc7](https://github.com/gruesomeparty/marginalia/commit/024ecc743d1d7580361f224b7268bfd338f7651e))
+
 ## [0.1.1](https://github.com/gruesomeparty/marginalia/compare/v0.1.0...v0.1.1) (2026-09-26)
 
 
