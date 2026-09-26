@@ -62,7 +62,7 @@ jobs:
       # integration" after doing the whole build. Turning Pages on is a
       # one-time click at Settings → Pages → Source → GitHub Actions.
       - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
