@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/gruesomeparty/marginalia/compare/v0.1.0...v0.1.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **release:** the cask token must be {{ .Env.NAME }} and nothing else ([#83](https://github.com/gruesomeparty/marginalia/issues/83)) ([5ab3e61](https://github.com/gruesomeparty/marginalia/commit/5ab3e617a4a742cb3183e478875b235681de3621))
+
 ## 0.1.0 (2026-09-20)
 
 
