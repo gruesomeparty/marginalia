@@ -44,7 +44,13 @@ homebrew_casks:
       branch: main
       # GITHUB_TOKEN cannot push cross-repo, so this needs a PAT with
       # contents:write on the tap — the same reason severance carries one.
-      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
+      #
+      # `{{ .Env.NAME }}` and nothing else: goreleaser validates this one field
+      # against that exact shape, so `index .Env "NAME"` — which is what the
+      # rest of this file uses to survive a missing key — is rejected outright.
+      # It is safe here only because the workflow always exports the variable,
+      # empty or not, which is what keeps the key present.
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
     directory: Casks
     commit_author:
       name: marginalia-release
