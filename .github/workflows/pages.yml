@@ -40,9 +40,30 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      # Pinned, and pinned to the one version the repo already commits to:
+      # internal/diagram/testdata holds a real mmdc render whose filename names
+      # its version, and fixture_test.go drives it through the whole pipeline
+      # so a mermaid upgrade that renames a shape fails a test instead of
+      # silently producing a picture nobody can click. Installing `@latest`
+      # here let CI draw the hero with a version no test had ever seen — and
+      # 12.0.0 duly embedded a webfont, tripping the loads-nothing check with
+      # the font's licence URL. Reading the version off the fixture means the
+      # pin cannot drift from it: adopting a new mermaid is re-rendering that
+      # one file, exactly as the test's own instructions say.
       - name: Install mermaid-cli
         run: |
-          npm i -g @mermaid-js/mermaid-cli
+          set -euo pipefail
+          shopt -s nullglob
+          fixtures=(internal/diagram/testdata/flowchart-mermaid-cli-*.svg)
+          if [ ${#fixtures[@]} -ne 1 ]; then
+            echo "expected exactly one mermaid-cli fixture, found ${#fixtures[@]}" >&2
+            printf '%s\n' "${fixtures[@]}" >&2
+            exit 1
+          fi
+          version="$(basename "${fixtures[0]}" .svg)"
+          version="${version#flowchart-mermaid-cli-}"
+          echo "pinning mermaid-cli to $version, the version testdata was rendered with"
+          npm i -g "@mermaid-js/mermaid-cli@$version"
           echo '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > /tmp/puppeteer.json
 
       # The hero is a real review page, not a picture of one. Generating it
