@@ -45,12 +45,15 @@ same three parts: **render, annotate, export events**.
 ## 3. Non-goals
 
 - Not a document editor or CMS. The source file is never mutated by review.
-- Not multi-user / concurrent review. Single reviewer, no auth (localhost or
-  private artifact).
+- Not multi-user / concurrent review. Single reviewer; no auth in the local
+  modes (localhost or private artifact). Hosted mode (§5.9) authenticates at
+  the edge, but still serves one reviewer.
 - Not a diff/PR review tool — code review has better tools; this is for
   documents.
-- No cloud service, no accounts, no persistence beyond files on disk (server
-  mode) or localStorage (static mode).
+- No accounts, no sign-up, no multi-tenant service. Local modes persist
+  nothing beyond files on disk (server mode) or localStorage (static mode);
+  hosted mode (§5.9) keeps its state in a storage backend the owner runs, and
+  is the one deployment the project describes.
 
 ## 4. Users and flows
 
@@ -185,6 +188,12 @@ appends a `review_done` event — the agent's signal to proceed.
 
 Phone/remote review is still server mode: the server binds on the Tailscale
 interface and the phone opens the same URL. No second implementation.
+
+When the agent and the reviewer share no filesystem at all — an agent in a
+Claude project or a cloud session, a reviewer on a phone — neither binding
+nor sharing a path works, and that case is **hosted mode** (§5.9): the same
+page and the same events, served by one always-on instance that agents
+publish *content* to. It is additive and opt-in; `serve` stays the default.
 
 **Static export exists for sharing, not for local work** (`marginalia export
 <doc> -o review.html`): a self-contained review page you can send to someone
@@ -321,13 +330,118 @@ Rules this has to keep:
   arrive at serve time and stay out of `<doc>.feedback.jsonl`: that log is the
   human's answers, not the agent's questions.
 
+### 5.9 Hosted mode
+
+**Why it exists.** Everything above assumes the agent and the reviewer share a
+machine, or at least a mesh: `serve` takes a path, stdio `mcp` takes paths
+under `--root`, and the feedback log lives beside the document. An agent in a
+Claude project, a cloud session or a CI job has no filesystem in common with
+the reviewer, so it cannot hand a document over at all. Hosted mode is one
+long-running instance, behind a hostname the owner controls, that such agents
+publish to and the owner reviews from. It is **additive and opt-in**:
+`marginalia host` is a separate subcommand, local `serve` and stdio `mcp` stay
+the default product, and nothing in the local loop changes.
+
+**Content in, not paths.** Agents publish document bytes plus a name (the
+extension selects the format, exactly as a path's would) and get back a
+review URL. The server stores the bytes as an immutable **snapshot**.
+Re-publishing to an existing review appends a new **revision**; earlier
+revisions stay as written. A snapshot is never edited — that is how "never
+mutate the source document" reads when the source arrived over the wire.
+Prior notes re-anchor against the newest revision through
+`feedback.Materialize`, so a note whose block changed reads stale and one
+whose block is gone reads orphaned, the same as after a `--watch` re-parse.
+A review's page always renders its newest revision.
+
+**Storage is an interface, not a filesystem** (`internal/storage`, §6). Two
+primitives, matching the two kinds of state Marginalia has:
+
+- **Immutable blobs** — put-if-absent, get, list by prefix. Snapshots and
+  review metadata are blobs; an existing key cannot be overwritten through
+  the API, so metadata that changes is written as a new versioned key, never
+  by rewriting the old one.
+- **Append-only logs** — append one event (durable before the call returns),
+  read all in order, and a cheap change token for waits. There is **no**
+  rewrite, truncate or delete of a line in the API at all. The append-only
+  invariant becomes structural instead of a convention.
+
+plus one **prefix move** for archiving, which relocates whole reviews and
+never edits what it moves. **Disk is the default backend** everywhere and
+keeps today's `<doc>.feedback.jsonl` byte for byte: the local modes do not
+change their files. **R2 is the first remote backend**: each event is its own
+object, so an object store with no append still yields an append-only log.
+"No database" still holds — blobs in, events out, nothing to migrate. Source
+documents read by `serve`, `--watch`'s polling and the diagram cache are the
+user's own files or disposable caches, not Marginalia's state, and stay on
+plain `os` calls.
+
+**Target deployment.** A single **Cloudflare Container** (Workers paid plan)
+running the released image, **R2** for state, and **Cloudflare Access** at
+the edge for both the human (login) and the claude.ai connector (as OAuth
+authorization server). Cloudflare only, no other cloud. **Single instance,
+single writer, by design**: the process loads every review from the store at
+startup, keeps that state in memory, and writes through on every change, so
+reads, waits and the inbox never poll the store. Billed store operations are
+a design input — one PUT per comment, one listing per startup, nothing
+periodic. Infrastructure-as-code and secrets live in a separate private
+deploy repo; this repo ships the binary, the image and the docs, and nothing
+account-specific.
+
+**Identity split.** Two kinds of caller, resolved per request before any
+handler runs:
+
+- **Human** — authenticated at the edge; the instance verifies the edge's
+  JWT (Cloudflare Access sends one per request) against the issuer's JWKS,
+  with issuer, audience and expiry checked. Trusting the header unverified is
+  not an option: the container port may be reachable around the edge.
+- **Agent** — a bearer token or OAuth access token on `/mcp`.
+
+The server enforces which event types each may append. **An agent may answer
+and claim, never decide**: agents append `reply` and `addressed` only, on
+every surface, exactly as the stdio tools allow today. Humans append
+everything the review config allows, including `review_done`, `confirm` and
+`reopen`. `author` is the authenticated identity, assigned by the server and
+never taken from the request body. An agent credential presented to a page
+route is refused.
+
+**Surfaces.** One listener: `/` the inbox of pending reviews (newest activity
+first, with what each one is waiting on), `/r/{id}/…` the review pages and
+their API exactly as `serve` mounts them at `/`, `/mcp` the MCP tools over
+Streamable HTTP, and `/healthz` for the platform. Review ids are random and
+unguessable, but they are not the auth boundary — the edge is.
+
+**Cost control.** Hard caps on what an agent can publish — document size,
+documents per review, revisions per review, publishes per agent per hour,
+open reviews, total stored bytes — all configurable, with conservative
+defaults, and every refusal names the limit it hit so the agent can tell the
+human instead of retrying. Finished reviews are archived after a retention
+period by moving them, whole, under an `archive/` prefix: out of the inbox,
+never deleted. A human's note is never refused by a budget.
+
+**Non-goals.** Multi-tenant SaaS, user accounts or sign-up, a second UI,
+horizontal scaling, and any storage backend beyond disk and R2 in this round.
+
 ## 6. Architecture
 
 - **Single Go binary**, cobra subcommands (`serve`, `export`, `import`,
-  `version`). Embedded HTML template via `go:embed`.
+  `mcp`, `host`, `version`). Embedded HTML template via `go:embed`.
 - Markdown parsing: goldmark with an AST walker that assigns block IDs +
   hashes at render time (the same walker feeds both modes).
 - No database. Documents in, HTML out, JSONL beside the document.
+- **Persistent state goes through `internal/storage`** (§5.9): immutable blobs
+  (put-if-absent, get, list by prefix), append-only logs (append, read all,
+  change token — no rewrite, truncate or delete), and a prefix move for
+  archiving. Two backends: **disk**, the default, which writes
+  `<doc>.feedback.jsonl` byte-identically to before the interface existed and
+  is what every local mode uses; and **R2**, one object per event under a
+  time-ordered key, written put-if-absent, so the log is append-only by
+  construction. A shared conformance suite runs against both. The source
+  document, `--watch` polling and the diagram cache are not state and stay on
+  `os`.
+- **Hosted mode** (`marginalia host`) is one process serving many reviews:
+  state loaded from the store at startup and kept in memory, written through
+  on every change, one instance, one writer. `mcp --http` serves the same MCP
+  tools over Streamable HTTP with a bearer token or OAuth access token.
 - **Reference implementation to generalize from:** Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay logic) and the
@@ -438,6 +552,15 @@ squash merges cannot orphan the next layer.
    agent picks up triaged issues, implements, opens PRs.
 5. **M5 — share mode.** Static `export` + `import` for handing a review page
    to people outside your machine/mesh; artifact-safe (strict CSP).
+6. **M6 — hosted mode** (#91, §5.9). One always-on instance agents publish
+   to over remote MCP, reviewed from an inbox, state in R2, Cloudflare Access
+   at the edge. In order, each building on the last: this spec (#92);
+   `mcp --http` with a bearer token (#93); `internal/storage` with the disk
+   backend and conformance suite (#94); `marginalia host` (#95);
+   `publish_document` with revisions (#96); human-versus-agent identity and
+   event-type gating (#97); OAuth resource server on `/mcp` for the claude.ai
+   connector (#98); the inbox (#99); caps and archiving (#100); the R2
+   backend (#101); the container image (#102); notifications (#103).
 
 ## 10. Open questions
 

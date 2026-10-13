@@ -27,10 +27,18 @@ items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
 replays a log against the document as it now reads, so a re-render marks notes
 stale, surfaces ones whose block is gone, and shows the current state per block
 (issue #1).
+**M6, hosted mode** (epic #91, PRD §5.9), is the one in progress: one always-on
+instance (`marginalia host`) that agents on other machines publish *content*
+to over remote MCP (`mcp --http`, Streamable HTTP, a claude.ai connector), the
+owner reviews from an inbox, and whose state lives behind `internal/storage` —
+immutable blobs plus append-only logs, disk the default backend, R2 the first
+remote one — on a single Cloudflare Container behind Cloudflare Access. It is
+additive: `serve` and stdio `mcp` are untouched and stay the default product.
 `PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
-this file). Every milestone in the build order below has shipped; what is open
-is in the tracker, not in the roadmap.
+this file). Every milestone in the build order below has shipped except M6,
+whose sub-issues (#92–#103) are the roadmap; anything else open is in the
+tracker.
 
 ## What Marginalia is
 
@@ -307,6 +315,30 @@ users are agents, not humans.
   applied by a small head script before first paint; every access is wrapped,
   because storage throws in a private window.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
+- **Persistent state goes through `internal/storage`** (PRD §5.9, §6): two
+  primitives — immutable blobs (put-if-absent, get, list by prefix) and
+  append-only logs (append, read all, change token) — plus a prefix move for
+  archiving. The interface has no rewrite, truncate or delete for log lines,
+  on purpose: the append-only invariant is structural, not a convention. Disk
+  is the default backend and writes `<doc>.feedback.jsonl` byte-identically to
+  before; R2 stores one object per event under a time-ordered key, written
+  put-if-absent. A shared conformance suite (`storagetest`) runs against every
+  backend. The source document `serve` reads, `--watch`'s polling and the
+  diagram cache are not state and stay on `os`.
+- **Hosted mode** (`marginalia host`, PRD §5.9) is one listener for many
+  reviews: `/` inbox, `/r/{id}/…` the per-review `server.Server` routes,
+  `/mcp` Streamable HTTP, `/healthz`. Agents publish bytes plus a name; a
+  snapshot is immutable and a republish is a new revision, re-anchored through
+  `feedback.Materialize`. Startup loads every review from the store and the
+  process then keeps state in memory and writes through — single instance,
+  single writer, nothing polls the store (every R2 call is billed). Identity is
+  resolved per request before any handler: a human is an edge JWT verified
+  against the issuer's JWKS, an agent is the `/mcp` bearer or OAuth token.
+  Agents append `reply` and `addressed` only; `review_done`, `confirm` and
+  `reopen` are human-only, enforced server-side; `author` is the resolved
+  identity, never the body's claim. Caps and archiving (a prefix move to
+  `archive/`, never a delete) keep a metered deployment bounded. Credentials
+  come from env only, and nothing account-specific lives in this repo.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay) and the 2026-07-02
@@ -318,8 +350,11 @@ users are agents, not humans.
 These are the design's failure modes — the PRD calls each one out explicitly:
 
 - **Never mutate the source document.** Review is read-only against the input file.
+  In hosted mode the source is a published snapshot: it is written once,
+  put-if-absent, and a republish is a new revision beside it, never an edit.
 - **Feedback events are append-only.** Never rewrite or delete lines in
-  `<doc>.feedback.jsonl`. Later events on the same block override earlier ones
+  `<doc>.feedback.jsonl` — and `internal/storage` has no method that could,
+  on any backend. Later events on the same block override earlier ones
   only when *materializing* a resolution view; the log itself is immutable and
   replayed chronologically per block. `feedback.Materialize` is that view —
   events + current block hashes → per-block state, `stale` (the block was edited
@@ -337,6 +372,17 @@ These are the design's failure modes — the PRD calls each one out explicitly:
 - **Server mode is the product**; static `export`/`import` exists only for sharing
   with people off your machine/mesh. Don't build a second UI for phone/remote —
   the server binds on the Tailscale interface and the phone opens the same URL.
+  Hosted mode is the same page under `/r/{id}/`, not a second UI; it exists for
+  the agent that shares no filesystem with the reviewer, and is opt-in.
+- **An agent may answer and claim, never decide**, on every surface. Over MCP
+  (stdio or HTTP) and under an agent identity in hosted mode, the only event
+  types an agent can write are `reply` and `addressed`. `review_done`,
+  `confirm` and `reopen` are the human's verdict, and the server enforces who
+  is asking; a reviewer's `author` is the authenticated identity, not a field
+  in the body.
+- **No secrets in flags, issues or PRs.** Hosted credentials (MCP token, R2
+  keys, JWT settings) come from environment variables only; flags show up in
+  process lists. Issues and PRs quote document structure, never content.
 
 ## Block anchoring & event schema (PRD §5.2–5.3)
 
@@ -408,7 +454,10 @@ M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
 **M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
 pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
-→ **M5 static share mode (`export`/`import`) — done**.
+→ **M5 static share mode (`export`/`import`) — done** → **M6 hosted mode
+(#91: `mcp --http`, `internal/storage`, `host`, `publish_document`, identity,
+OAuth, inbox, caps, R2, image, notifications) — in progress, on
+`feature/hosted`**.
 
 ## Commands
 
