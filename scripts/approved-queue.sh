@@ -3,13 +3,20 @@
 #
 # Usage:
 #   gh issue list --repo gruesomeparty/marginalia --label approved-for-agent \
-#     --state open --json number,title,body | scripts/approved-queue.sh
+#     --state open --json number,title,body,labels | scripts/approved-queue.sh
 #
 # Prints one line per queued issue, oldest first, with a readiness verdict, and
 # names the one to work next. An issue is READY only when its body says what
 # was expected and what "done" means: implementing an issue whose acceptance
 # criterion nobody wrote produces a PR nobody can judge, so the pipeline stops
 # and asks instead of guessing.
+#
+# An issue may carry one `base:<branch>` label naming the integration branch its
+# PR targets (`base:feature/hosted`); without one the base is main. Only main
+# and feature/* are valid bases — a PR into feature/* auto-merges on green CI,
+# a PR into main waits for a human, and nothing else is allowed to exist in
+# between. Two base labels, or a base outside those, is NOT READY: guessing
+# which branch work belongs on is how it gets merged into a dead one.
 #
 # Exit codes: 0 next issue named (or queue empty), 3 queue non-empty but
 # nothing ready, 2 bad input.
@@ -31,15 +38,35 @@ if [ "$(jq 'length' <<<"$input")" -eq 0 ]; then
   exit 0
 fi
 
+valid_base() {
+  [ "$1" = "main" ] && return 0
+  [[ "$1" =~ ^feature/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ ]] || return 1
+  [[ "$1" != *..* ]]
+}
+
 next=""
+next_base=""
 blocked=0
-while IFS=$'\t' read -r number title expected acceptance; do
+while IFS=$'\t' read -r number title expected acceptance bases; do
   missing=()
   [ "$expected" = "true" ] || missing+=("expected behaviour")
   [ "$acceptance" = "true" ] || missing+=("acceptance criterion")
+  base="main"
+  if [[ "$bases" == *,* ]]; then
+    missing+=("a single base label (has: $bases)")
+  elif [ -n "$bases" ]; then
+    if valid_base "$bases"; then
+      base="$bases"
+    else
+      missing+=("a valid base (main or feature/*, got: $bases)")
+    fi
+  fi
   if [ ${#missing[@]} -eq 0 ]; then
-    printf '#%-5s READY      %s\n' "$number" "$title"
-    [ -n "$next" ] || next="$number"
+    printf '#%-5s READY      %s  -> %s\n' "$number" "$title" "$base"
+    if [ -z "$next" ]; then
+      next="$number"
+      next_base="$base"
+    fi
   else
     joined="${missing[0]}"
     for m in "${missing[@]:1}"; do joined+=", $m"; done
@@ -51,11 +78,13 @@ done < <(jq -r '
   | [ .number,
       .title,
       ((.body // "") | ascii_downcase | test("expected")),
-      ((.body // "") | ascii_downcase | test("acceptance")) ]
+      ((.body // "") | ascii_downcase | test("acceptance")),
+      ([(.labels // [])[] | .name | select(startswith("base:")) | ltrimstr("base:")] | join(",")) ]
   | @tsv' <<<"$input")
 
 if [ -n "$next" ]; then
   echo "next: #$next"
+  echo "base: $next_base"
   exit 0
 fi
 echo "nothing ready: $blocked issue(s) need triage before they can be implemented" >&2

@@ -1,6 +1,6 @@
 ---
 name: implement-approved
-description: Use when draining Marginalia's `approved-for-agent` issue queue — take one triaged issue, implement it on a branch off main, prove it, and open a pull request for a human to merge. Also use to check whether the queue is ready to be worked at all.
+description: Use when draining Marginalia's `approved-for-agent` issue queue — take one triaged issue, implement it on a branch off its base (main, or the feature/* integration branch its `base:` label names), prove it, and open a pull request. Also use to check whether the queue is ready to be worked at all.
 ---
 
 # Implementing the approved queue
@@ -12,12 +12,25 @@ label), **execution** is this. Never implement an issue that does not carry the
 label, however obvious the fix looks, and never merge your own work — the human
 merge gate is the point of the split.
 
+**Nothing reaches `main` without Berkay's review.** An issue labelled
+`base:feature/<name>` is part of a larger piece of work that lands on that
+integration branch first: its PR targets the feature branch, and
+`.github/workflows/integration-automerge.yml` — not you — merges it there once
+CI is green. The feature branch then reaches `main` through one PR a human
+reviews. An issue with no `base:` label targets `main` and waits for a human,
+as always.
+
 ## Guardrails (read first)
 
 - **One issue, one PR, then stop.** If a pipeline PR is already open, this run
   does nothing but say so.
-- **Base every branch on `main`.** Never stack on another branch.
-- **Never merge, never approve.** Open the PR and hand it over.
+- **Base every branch on the issue's base** — the branch the triage gate names,
+  `main` unless the issue carries a `base:feature/*` label. Never stack on
+  another `claude/*` branch: an integration branch is a real, merged base; a
+  pipeline branch is not.
+- **Never merge, never approve.** Open the PR and hand it over. The auto-merge
+  into a feature branch is a workflow's decision, made by a tested gate
+  (`scripts/automerge-check.sh`) that refuses `main` outright.
 - **Quote structure, never content** in issues and PR bodies — no secrets, no
   private document text.
 - `PRD.md` is the authoritative spec and `CLAUDE.md` lists the invariants that
@@ -39,20 +52,22 @@ dead branch instead of `main`.
 
 ```bash
 gh issue list --repo gruesomeparty/marginalia --label approved-for-agent \
-  --state open --json number,title,body | scripts/approved-queue.sh
+  --state open --json number,title,body,labels | scripts/approved-queue.sh
 ```
 
 The gate prints a verdict per issue, oldest first, and names the one to work
-(`next: #N`). Its exit code is the instruction:
+(`next: #N`) and the branch its PR targets (`base: <branch>`). Its exit code is
+the instruction:
 
 | exit | meaning | what to do |
 |---|---|---|
 | 0 + `queue empty` | nothing approved | stop; say the queue is empty |
-| 0 + `next: #N` | #N is implementable | work #N |
+| 0 + `next: #N` | #N is implementable | work #N against the named base |
 | 3 | queued issues, none ready | comment on each, then stop |
 
 An issue is READY only when its body says what was **expected** and what
-**done** means. For a NOT READY issue, comment naming exactly what is missing
+**done** means, and when it names at most one base that is `main` or
+`feature/*`. For a NOT READY issue, comment naming exactly what is missing
 and move on — never invent an acceptance criterion. An issue whose success
 nobody defined produces a PR nobody can judge, and guessing turns the human's
 approval into a rubber stamp.
@@ -60,8 +75,14 @@ approval into a rubber stamp.
 ## 3. Implement
 
 ```bash
-git fetch origin main && git checkout -B claude/<short-slug>-<issue-number> origin/main
+BASE=<the gate's base>
+git fetch origin main
+git fetch origin "$BASE" 2>/dev/null || git push origin "origin/main:refs/heads/$BASE"   # first issue on a new feature branch
+git fetch origin "$BASE" && git checkout -B claude/<short-slug>-<issue-number> "origin/$BASE"
 ```
+
+Creating the integration branch from `main` is the only push to it you ever
+make; everything else arrives through merged PRs.
 
 Implement the **smallest change that satisfies the stated acceptance
 criterion**, and write the tests that encode it — the criterion, in code, is
@@ -100,30 +121,38 @@ bullet.
 
 ```bash
 git push -u origin claude/<short-slug>-<issue-number>
-gh pr create --repo gruesomeparty/marginalia --base main \
+gh pr create --repo gruesomeparty/marginalia --base "$BASE" \
   --title "<type>: <what changed>" --body "Closes #<issue>. …"
 ```
 
-The body states the acceptance criterion, how it was verified (tests, and the
-browser check where relevant), and any decision you had to make that the issue
-left open. Then **stop**. Do not merge, do not approve, do not open the next
-issue's PR.
+The body says `Closes #<issue>` for exactly one issue — the auto-merge gate
+refuses a PR that closes none or several — then states the acceptance
+criterion, how it was verified (tests, and the browser check where relevant),
+and any decision you had to make that the issue left open. Then **stop**. Do
+not merge, do not approve, do not open the next issue's PR.
 
-## 6. After the human merges
+## 6. After the merge
 
-Verify the outcome rather than trusting the PR's state:
+Into `main`, a human merges. Into `feature/*`, the auto-merge workflow merges
+on green CI and closes the issue itself — GitHub only auto-closes issues from
+merges into the default branch, and an issue left open would be picked up
+again. Either way, verify the outcome rather than trusting the PR's state:
 
 ```bash
-git fetch origin main
-git ls-tree --name-only origin/main <paths the change added>
+git fetch origin "$BASE"
+git ls-tree --name-only "origin/$BASE" <paths the change added>
 gh issue view <issue> --json state
 ```
 
-A PR can read "merged" and still not be on `main` — that happens when it merged
-into another branch — and an issue only auto-closes when its PR merges into the
-default branch. If either check fails, say so plainly; that is a mis-merge, not
-a formality. Then delete the head branch (which is also what retargets any PR
-based on it) and start the next issue from step 1.
+A PR can read "merged" and still not be on its base — that happens when it
+merged into some other branch. If either check fails, say so plainly; that is a
+mis-merge, not a formality. If the PR is green and still open on a feature
+base, the auto-merge run's log names the check that refused it — report that,
+do not merge by hand. Then start the next issue from step 1.
+
+When a feature branch's issues are all closed, the work is not done until a
+human merges `feature/<name>` → `main`. Opening that PR is fine (ask first if
+you were not told to); merging it never is.
 
 ---
 

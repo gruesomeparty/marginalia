@@ -1,0 +1,75 @@
+# Merges a green pipeline PR into its feature/* integration branch, so a chain
+# of approved issues can land one after another without waiting on a human at
+# every step. The human gate moves, it does not disappear: the feature branch
+# reaches main only through a PR a human reviews and merges.
+#
+# Nothing here can merge into main. scripts/automerge-check.sh refuses any base
+# that is not feature/*, and that refusal is tested (internal/pipeline). This
+# workflow runs from the default branch's copy of itself — a workflow_run
+# trigger always does — so a PR cannot loosen these rules for its own merge.
+#
+# After a merge the issue is closed by hand: GitHub only auto-closes issues
+# from merges into the default branch, and an open issue would be picked up by
+# the queue a second time. With the repository variable IMPLEMENT_CHAIN=true it
+# then dispatches the next implement-approved run; unset, the chain stops after
+# each merge and the next run is dispatched by hand.
+name: Integration auto-merge
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+concurrency:
+  group: integration-automerge
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Merge if eligible
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CI_SHA: ${{ github.event.workflow_run.head_sha }}
+          CHAIN: ${{ vars.IMPLEMENT_CHAIN }}
+        run: |
+          set -euo pipefail
+          prs="$(gh pr list --repo "$REPO" --state open --head "$HEAD_BRANCH" --json number --jq '[.[].number] | join(" ")')"
+          if [ -z "$prs" ] || [ "$(wc -w <<<"$prs")" -ne 1 ]; then
+            echo "no single open PR for $HEAD_BRANCH (found: ${prs:-none}); nothing to do"
+            exit 0
+          fi
+          pr="$(gh pr view "$prs" --repo "$REPO" --json number,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository,body)"
+          issue_no="$(jq -r '.body // "" | [scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?) #([0-9]+)") | .[0]] | first // ""' <<<"$pr")"
+          issue='{"number": 0, "state": "", "labels": []}'
+          if [ -n "$issue_no" ]; then
+            issue="$(gh issue view "$issue_no" --repo "$REPO" --json number,state,labels)"
+          fi
+
+          if ! verdict="$(jq -n --argjson pr "$pr" --argjson issue "$issue" --arg sha "$CI_SHA" \
+                '{pr: $pr, issue: $issue, ci_sha: $sha}' | scripts/automerge-check.sh)"; then
+            # Not eligible is the normal case for every PR into main.
+            echo "$verdict"
+            exit 0
+          fi
+          echo "$verdict"
+
+          base="$(jq -r .baseRefName <<<"$pr")"
+          gh pr merge "$prs" --repo "$REPO" --squash --delete-branch --match-head-commit "$CI_SHA"
+          gh issue close "$issue_no" --repo "$REPO" --reason completed \
+            --comment "Implemented in #$prs, merged into \`$base\` after green CI. It reaches \`main\` with the reviewed \`$base\` → \`main\` PR."
+
+          if [ "${CHAIN:-}" = "true" ]; then
+            gh workflow run implement-approved.yml --repo "$REPO" --ref "${{ github.event.repository.default_branch }}"
+            echo "dispatched the next implement-approved run"
+          fi
