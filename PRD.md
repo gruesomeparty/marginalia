@@ -403,11 +403,26 @@ approved queue.
 mechanical triage gate — an issue is workable only if it states an expected
 behaviour and an acceptance criterion, and the gate exits 3 when nothing in the
 queue qualifies, so a run stops and asks instead of inventing a definition of
-done. The pipeline works **one issue at a time, one PR based on `main`**, never
-stacks, never merges, and after a merge verifies the code reached `main` and the
-issue closed rather than trusting the pull request's own state. The scheduled
-trigger ships disarmed: unattended write access is a deliberate choice, not a
-default.
+done. The pipeline works **one issue at a time, one PR based on the issue's
+base**, never stacks on another pipeline branch, never merges, and after a merge
+verifies the code reached its base and the issue closed rather than trusting the
+pull request's own state. The scheduled trigger ships disarmed: unattended write
+access is a deliberate choice, not a default.
+
+**Integration branches.** The rule is *no change reaches `main` without
+Berkay's review* — not *every step waits for Berkay*. A larger piece of work
+(hosted mode, #91) is a chain of issues each labelled `base:feature/<name>`:
+their PRs target that feature branch, and `integration-automerge.yml` merges
+each one there on green CI, closes its issue, and — only with the repository
+variable `IMPLEMENT_CHAIN=true` — dispatches the next run. The merge decision
+is `scripts/automerge-check.sh`, tested in `internal/pipeline`: base must be
+`feature/*` (never `main`), head a `claude/*` branch in this repository, not a
+draft, CI green on the PR's current head, and the PR closes exactly one open
+issue that is `approved-for-agent` and labelled for that same base. The
+feature branch reaches `main` through one PR a human reviews. This replaces a
+stack, which is what it is for: every PR is based on a real, merged branch, a
+review fix is a follow-up PR rather than a rebase of everything above it, and
+squash merges cannot orphan the next layer.
 
 ## 9. Milestones
 

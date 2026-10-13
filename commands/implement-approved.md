@@ -1,5 +1,5 @@
 ---
-description: Drain one issue from Marginalia's approved-for-agent queue: implement it on a branch off main and open a PR for a human to merge.
+description: Drain one issue from Marginalia's approved-for-agent queue: implement it on a branch off its base (main, or its base:feature/* integration branch) and open a PR.
 argument-hint: [issue-number]
 ---
 
@@ -9,7 +9,9 @@ says it is ready and no pipeline PR is already open; without arguments, work the
 issue the gate names next.
 
 Follow `skills/implement-approved/SKILL.md` exactly: preflight for an open
-pipeline PR, run the triage gate, branch off `main`, implement the smallest
-change that meets the acceptance criterion, run the repo's own checks with CI's
-pinned linter version, open the PR with `Closes #<issue>`, and stop there — the
-human merges.
+pipeline PR, run the triage gate, branch off the base it names, implement the
+smallest change that meets the acceptance criterion, run the repo's own checks
+with CI's pinned linter version, open the PR against that base with
+`Closes #<issue>`, and stop there. A PR into `main` waits for a human; a PR
+into a `feature/*` branch is merged on green CI by the auto-merge workflow, and
+that branch reaches `main` only through a human-reviewed PR.

@@ -386,8 +386,15 @@ gated by `scripts/approved-queue.sh`: it reads `gh issue list --json` output and
 names the oldest issue that states both an expected behaviour and an acceptance
 criterion (exit 3 when the queue holds nothing implementable, so a run stops and
 asks rather than guessing what "done" means). Rules the pipeline exists to keep:
-**one issue → one PR based on `main` → stop** (never a second open PR, never a
-stack — that is how work gets merged into a dead branch), never merge or approve,
+**one issue → one PR based on the issue's base → stop** (never a second open PR,
+never a stack on another `claude/*` branch — that is how work gets merged into a
+dead branch), never merge or approve, **no auto-merge to `main` without Berkay's
+review** — an issue labelled `base:feature/<name>` targets that integration
+branch instead, and `integration-automerge.yml` merges it there on green CI
+through `scripts/automerge-check.sh`, which refuses `main` outright (tested in
+`internal/pipeline`); the feature branch reaches `main` through one
+human-reviewed PR, and `IMPLEMENT_CHAIN=true` (a repository variable) lets each
+merge dispatch the next run,
 match CI's pinned `golangci-lint` version (a linter built for an older Go
 toolchain exits with a version error that reads like success), and after a merge
 verify the files are on `main` and the issue actually closed rather than trusting

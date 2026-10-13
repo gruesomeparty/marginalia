@@ -116,3 +116,59 @@ func TestQueueHandlesMissingBody(t *testing.T) {
 		t.Errorf("verdict wrong:\n%s", out)
 	}
 }
+
+const ready = `"body": "Expected behaviour: x.\nAcceptance criterion: y."`
+
+// An issue names its integration branch with a base: label, and the gate hands
+// that branch to the run; no label means main.
+func TestQueueNamesTheBaseBranch(t *testing.T) {
+	out, _, code := run(t, `[
+	  {"number": 5, "title": "Hosted", `+ready+`, "labels": [{"name": "approved-for-agent"}, {"name": "base:feature/hosted"}]},
+	  {"number": 7, "title": "Plain", `+ready+`, "labels": [{"name": "approved-for-agent"}]}
+	]`)
+	if code != 0 {
+		t.Fatalf("exit=%d\n%s", code, out)
+	}
+	if !strings.Contains(out, "next: #5\nbase: feature/hosted") {
+		t.Errorf("gate should name the next issue's base:\n%s", out)
+	}
+	if !strings.Contains(out, "#7     READY      Plain  -> main") {
+		t.Errorf("an unlabelled issue targets main:\n%s", out)
+	}
+}
+
+func TestQueueDefaultsToMainWithoutLabels(t *testing.T) {
+	out, _, code := run(t, `[{"number": 9, "title": "Old shape", `+ready+`}]`)
+	if code != 0 || !strings.Contains(out, "next: #9\nbase: main") {
+		t.Fatalf("exit=%d\n%s", code, out)
+	}
+}
+
+// Only main and feature/* are bases: a PR into feature/* auto-merges, one into
+// main waits for a human, and an issue that is ambiguous about which it is
+// must not be guessed at.
+func TestQueueRefusesAmbiguousOrForeignBases(t *testing.T) {
+	for name, tc := range map[string]struct{ labels, want string }{
+		"two bases":      {`[{"name": "base:feature/a"}, {"name": "base:feature/b"}]`, "a single base label (has: feature/a,feature/b)"},
+		"not a feature":  {`[{"name": "base:release"}]`, "a valid base (main or feature/*, got: release)"},
+		"path traversal": {`[{"name": "base:feature/../main"}]`, "a valid base"},
+		"bare prefix":    {`[{"name": "base:feature/"}]`, "a valid base"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, _, code := run(t, `[{"number": 4, "title": "T", `+ready+`, "labels": `+tc.labels+`}]`)
+			if code != 3 {
+				t.Fatalf("exit=%d, want 3\n%s", code, out)
+			}
+			if !strings.Contains(out, "#4     NOT READY") || !strings.Contains(out, tc.want) {
+				t.Errorf("want NOT READY naming %q:\n%s", tc.want, out)
+			}
+		})
+	}
+}
+
+func TestQueueAcceptsExplicitMain(t *testing.T) {
+	out, _, code := run(t, `[{"number": 3, "title": "T", `+ready+`, "labels": [{"name": "base:main"}]}]`)
+	if code != 0 || !strings.Contains(out, "base: main") {
+		t.Fatalf("exit=%d\n%s", code, out)
+	}
+}

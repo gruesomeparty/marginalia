@@ -1,6 +1,8 @@
-# Drains the approved-for-agent queue: one issue, one branch off main, one PR
-# for a human to merge. The human merge gate is the point — this workflow never
-# merges anything.
+# Drains the approved-for-agent queue: one issue, one branch off its base, one
+# PR. The base is main unless the issue carries a base:feature/* label; a PR into
+# main waits for a human, a PR into a feature branch is merged on green CI by
+# integration-automerge.yml. This workflow never merges anything, and nothing
+# reaches main without a human.
 #
 # NOT ARMED. It runs only when someone dispatches it by hand. To let it run
 # unattended, add an ANTHROPIC_API_KEY repository secret and uncomment the
@@ -56,12 +58,15 @@ jobs:
             Follow skills/implement-approved/SKILL.md in this checkout, exactly.
 
             In short: stop if a pipeline PR is already open; run the triage gate
-            (scripts/approved-queue.sh) over the approved-for-agent queue; take
-            the issue named above if given and ready, else the one the gate
-            names next; implement the smallest change that satisfies its stated
-            acceptance criterion on a branch off main; run go build, go test
-            -race, the coverage gate and golangci-lint; then open one PR
-            against main with "Closes #<issue>" and stop.
+            (scripts/approved-queue.sh, fed with --json number,title,body,labels)
+            over the approved-for-agent queue; take the issue named above if
+            given and ready, else the one the gate names next; implement the
+            smallest change that satisfies its stated acceptance criterion on a
+            branch off the base the gate names (main, or the feature/* branch
+            from the issue's base: label — create it from main if it does not
+            exist yet); run go build, go test -race, the coverage gate and
+            golangci-lint; then open one PR against that base with
+            "Closes #<issue>" and stop.
 
             Never merge or approve. Never implement an issue that lacks the
             approved-for-agent label or an acceptance criterion — comment on it
