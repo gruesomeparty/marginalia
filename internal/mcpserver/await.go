@@ -2,13 +2,16 @@ package mcpserver
 
 import (
 	"context"
-	"os"
 	"time"
+
+	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
-// pollInterval is how often await_review_done looks at a log. Same reasoning
-// as the document watcher: size+mtime polling cannot miss an atomic rename,
-// needs no dependency, and behaves the same on macOS and Linux.
+// pollInterval is how often await_review_done looks at a log's change token.
+// Same reasoning as the document watcher: polling cannot miss an atomic
+// rename, needs no dependency, and behaves the same on macOS and Linux — and
+// on the disk backend the token is that same size+mtime stamp.
 const pollInterval = 500 * time.Millisecond
 
 // DefaultTimeout bounds a wait that nobody bounded. Long enough for a human to
@@ -32,7 +35,7 @@ func waitForDone(ctx context.Context, docs []string, cursor map[string]int, time
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
-	seen := make(map[string]int64, len(docs))
+	seen := make(map[string]storage.Token, len(docs))
 	for {
 		// Read first, then wait: a review already finished must return at
 		// once rather than after a tick.
@@ -53,7 +56,7 @@ func waitForDone(ctx context.Context, docs []string, cursor map[string]int, time
 			// and the caller gets everything new so it can say so.
 			return false, "timeout", out, nil
 		case <-ticker.C:
-			// Only re-read logs whose file moved.
+			// Only re-read logs whose token moved.
 			if !moved(docs, seen) {
 				continue
 			}
@@ -79,25 +82,19 @@ func readAll(docs []string, cursor map[string]int) ([]DocEvents, bool, error) {
 	return out, all, nil
 }
 
-// moved reports whether any log's size or mtime changed since the last look,
-// and records the new stamps.
-func moved(docs []string, seen map[string]int64) bool {
+// moved reports whether any log's change token differs from the last look,
+// and records the new ones.
+func moved(docs []string, seen map[string]storage.Token) bool {
 	changed := false
 	for _, d := range docs {
-		path := d + ".feedback.jsonl"
-		info, err := os.Stat(path)
+		// A log that does not exist yet has the zero token, which is the
+		// normal case before the first comment; the next tick will find it.
+		token, err := feedback.NewStore(d).Changed()
 		if err != nil {
-			// A log that does not exist yet is the normal case before the
-			// first comment; the next tick will find it.
-			if seen[path] != 0 {
-				seen[path] = 0
-				changed = true
-			}
 			continue
 		}
-		stamp := info.Size()<<32 ^ info.ModTime().UnixNano()
-		if seen[path] != stamp {
-			seen[path] = stamp
+		if seen[d] != token {
+			seen[d] = token
 			changed = true
 		}
 	}

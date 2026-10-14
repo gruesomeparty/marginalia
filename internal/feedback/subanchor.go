@@ -49,10 +49,10 @@ func SubHash(quote string) string {
 // on this or a quote written by one would never be found by the other.
 func NormalizeSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// context is how much text on either side of a quote is kept. Long enough to
+// contextWidth is how much text on either side of a quote is kept. Long enough to
 // separate two similar sentences, short enough that editing a neighbouring
 // sentence does not move the anchor.
-const context = 32
+const contextWidth = 32
 
 // Located is where a sub-anchor resolved in the block as it now reads.
 type Located struct {
@@ -159,8 +159,8 @@ func MakeSub(text, quote string) *Sub {
 	}
 	return &Sub{
 		Quote:  needle,
-		Prefix: tail(hay[:pos], context),
-		Suffix: head(hay[pos+len(needle):], context),
+		Prefix: tail(hay[:pos], contextWidth),
+		Suffix: head(hay[pos+len(needle):], contextWidth),
 		Start:  utf8.RuneCountInString(hay[:pos]),
 		Hash:   SubHash(needle),
 	}
