@@ -18,7 +18,9 @@ type replyIn struct {
 	Author string `json:"author,omitempty" jsonschema:"who is answering; defaults to the agent"`
 }
 
-type replyOut struct {
+// ReplyOut is what both writing tools return: enough to find the event again
+// and to tell the agent's own reply apart from the reviewer's next note.
+type ReplyOut struct {
 	Doc string `json:"doc"`
 	// ID is the reply's own id, so an answer can itself be answered — and so a
 	// caller can tell its own reply apart from the reviewer's next note.
@@ -43,14 +45,14 @@ type addressedIn struct {
 // and an agent should be able to answer a question whether or not a page is
 // still open. The server re-reads the log on each request, so a reply written
 // this way is there the next time the page renders.
-func (s *Server) replyToNote(_ context.Context, _ *mcp.CallToolRequest, in replyIn) (*mcp.CallToolResult, replyOut, error) {
+func (s *Server) replyToNote(_ context.Context, _ *mcp.CallToolRequest, in replyIn) (*mcp.CallToolResult, ReplyOut, error) {
 	return s.about(in.Doc, in.NoteID, in.Text, in.Author, review.TypeReply)
 }
 
 // markAddressed records that the agent changed the document in answer to a
 // note. Edit the document first: this records the claim, it does not make it,
 // and Marginalia never writes the source document.
-func (s *Server) markAddressed(_ context.Context, _ *mcp.CallToolRequest, in addressedIn) (*mcp.CallToolResult, replyOut, error) {
+func (s *Server) markAddressed(_ context.Context, _ *mcp.CallToolRequest, in addressedIn) (*mcp.CallToolResult, ReplyOut, error) {
 	return s.about(in.Doc, in.NoteID, in.Text, in.Author, review.TypeAddressed)
 }
 
@@ -62,27 +64,34 @@ func (s *Server) markAddressed(_ context.Context, _ *mcp.CallToolRequest, in add
 // It deliberately does not implement `confirm` or `reopen`: those are the
 // reviewer's verdict on the agent's work, and a tool that let the agent
 // settle its own note would make the whole loop decorative.
-func (s *Server) about(doc, noteID, text, author, typ string) (*mcp.CallToolResult, replyOut, error) {
-	in := replyIn{Doc: doc, NoteID: noteID, Text: text, Author: author}
-	if err := review.ValidateProtocol(typ, in.Text, in.NoteID); err != nil {
-		return nil, replyOut{}, err
-	}
-	docs, err := s.docsOf("", []string{in.Doc})
+func (s *Server) about(doc, noteID, text, author, typ string) (*mcp.CallToolResult, ReplyOut, error) {
+	docs, err := s.docsOf("", []string{doc})
 	if err != nil {
-		return nil, replyOut{}, err
+		return nil, ReplyOut{}, err
 	}
 	if len(docs) != 1 {
-		return nil, replyOut{}, fmt.Errorf("this answers one note in one document; %q named %d", in.Doc, len(docs))
+		return nil, ReplyOut{}, fmt.Errorf("this answers one note in one document; %q named %d", doc, len(docs))
 	}
-	path := docs[0]
-	store := feedback.NewStore(path)
-	events, err := store.Load()
+	out, err := Answer(TargetOf(docs[0]), noteID, text, author, typ)
+	return nil, out, err
+}
+
+// Answer appends one event of type typ about an existing note in t's log,
+// and returns where it landed. Exported so the hosted tools write on exactly
+// the same terms: the id has to resolve in that document's own log, the
+// type is the caller's and never the request's, and the hash recorded is the
+// note's own.
+func Answer(t Target, noteID, text, author, typ string) (ReplyOut, error) {
+	if err := review.ValidateProtocol(typ, text, noteID); err != nil {
+		return ReplyOut{}, err
+	}
+	events, err := t.Store.Load()
 	if err != nil {
-		return nil, replyOut{}, err
+		return ReplyOut{}, err
 	}
 	var target *feedback.Event
 	for i := range events {
-		if feedback.NoteID(events[i]) == in.NoteID {
+		if feedback.NoteID(events[i]) == noteID {
 			target = &events[i]
 			break
 		}
@@ -90,7 +99,7 @@ func (s *Server) about(doc, noteID, text, author, typ string) (*mcp.CallToolResu
 	if target == nil {
 		// The same rule the HTTP API enforces: an answer to a note nobody
 		// holds is an answer nobody reads.
-		return nil, replyOut{}, fmt.Errorf("no note %q in %s — read review_status for the ids", in.NoteID, store.Path())
+		return ReplyOut{}, fmt.Errorf("no note %q in %s — read review_status for the ids", noteID, t.Store.Path())
 	}
 	if author == "" {
 		author = "agent"
@@ -99,15 +108,15 @@ func (s *Server) about(doc, noteID, text, author, typ string) (*mcp.CallToolResu
 		// The note's own hash is the hash the block had when the note was
 		// written, which is what makes an `addressed` checkable: if the block
 		// still hashes to it at render time, nothing changed.
-		Doc: path, Block: target.Block, Quote: target.Quote, Hash: target.Hash,
-		Type: typ, Text: in.Text, Author: author,
-		Ts: time.Now().UTC().Format(time.RFC3339), ReplyTo: in.NoteID,
+		Doc: t.Name, Block: target.Block, Quote: target.Quote, Hash: target.Hash,
+		Type: typ, Text: text, Author: author,
+		Ts: time.Now().UTC().Format(time.RFC3339), ReplyTo: noteID,
 	}
-	if err := store.Append(e); err != nil {
-		return nil, replyOut{}, err
+	if err := t.Store.Append(e); err != nil {
+		return ReplyOut{}, err
 	}
-	return nil, replyOut{
-		Doc: path, ID: feedback.NoteID(e), ReplyTo: in.NoteID,
+	return ReplyOut{
+		Doc: t.Name, ID: feedback.NoteID(e), ReplyTo: noteID,
 		Block: target.Block, Answered: target.Type, Ts: e.Ts,
 	}, nil
 }
