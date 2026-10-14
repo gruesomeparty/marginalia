@@ -328,7 +328,7 @@ func TestCursorSurvivesAShortenedLog(t *testing.T) {
 	}
 	// A cursor past the end can only mean the append-only rule was broken.
 	// Starting over is the honest answer; skipping silently is not.
-	ev, err := eventsSince(doc, 99)
+	ev, err := EventsSince(TargetOf(doc), 99)
 	if err != nil {
 		t.Fatal(err)
 	}

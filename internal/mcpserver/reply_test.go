@@ -48,7 +48,7 @@ func TestReplyToNoteAnswersInPlace(t *testing.T) {
 	id := ask(t, doc, "Why 500?")
 	cs, _ := serveMCP(t, root)
 
-	var out replyOut
+	var out ReplyOut
 	if err := call(t, cs, "reply_to_note", map[string]any{
 		"doc": "spec.md", "note_id": id, "text": "The upstream API caps it.",
 	}, &out); err != nil {
@@ -179,7 +179,7 @@ func TestMarkAddressedClosesTheRevisionLoop(t *testing.T) {
 	// The agent edits the document — Marginalia never does this itself.
 	writeDoc(t, root, "spec.md", "# Spec\n\nCapped at 2000 now.\n\n## Retry\n\nThree attempts, no backoff.\n")
 
-	var out replyOut
+	var out ReplyOut
 	if err := call(t, cs, "mark_addressed", map[string]any{
 		"doc": "spec.md", "note_id": id, "text": "Raised the cap to 2000.",
 	}, &out); err != nil {

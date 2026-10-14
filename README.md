@@ -198,6 +198,22 @@ exactly one. URLs handed to agents are built from `--public-url`, never the
 bind address. `MARGINALIA_MCP_TOKEN` gates `/mcp` and is required off
 loopback, as for `mcp --http`.
 
+Over `/mcp` the tools are the ones above with one substitution — a
+`review_id` and a document `name` where a path was — and `publish_document`
+in place of `review_document`, because a path means nothing to an agent on
+another machine:
+
+| Tool | What it does |
+|---|---|
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor — stale where a block changed, orphaned where it is gone. A revision replaces the whole document set. |
+| `feedback_since`, `review_status`, `await_review_done`, `close_review` | As above, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
+| `reply_to_note`, `mark_addressed` | As above, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
+
+A name is one plain file name — `../x.md`, `.env` and `a/b.md` are refused,
+not cleaned up — and a publish refuses before writing anything: an
+unsupported format (naming `request-feature`), empty content, an invalid
+config. Each document is capped at 1 MiB until the configurable limits land.
+
 | Tool | What it does |
 |---|---|
 | `review_document` | Serve a document (or a set); returns the URL to hand over and the vocabulary you will read back. |

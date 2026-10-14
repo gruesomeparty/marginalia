@@ -58,6 +58,32 @@ type Host struct {
 	reviews map[string]*Review
 	mux     *http.ServeMux
 	mcp     *mcp.Server
+	// closing is closed once when the host is going down, so an in-flight
+	// await returns "cancelled" instead of being waited out by the drain.
+	closing   chan struct{}
+	closeOnce sync.Once
+	// pub serialises publishes. A revision number is read from the review
+	// being revised and written as a new key, and two agents revising the
+	// same review at once must get consecutive numbers, not the same one —
+	// put-if-absent would refuse the second, but only after its first
+	// document had been written.
+	pub sync.Mutex
+}
+
+func (h *Host) interrupt() { h.closeOnce.Do(func() { close(h.closing) }) }
+
+// untilClosed bounds a call's context by the host's lifetime as well as the
+// caller's.
+func (h *Host) untilClosed(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-h.closing:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
 }
 
 // Review is one review as the host serves it: its metadata, its documents as
@@ -77,11 +103,12 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	h := &Host{opts: opts, store: storage.NewWriteThrough(opts.Store), reviews: map[string]*Review{}}
+	h := &Host{opts: opts, store: storage.NewWriteThrough(opts.Store), reviews: map[string]*Review{}, closing: make(chan struct{})}
 	if err := h.load(ctx); err != nil {
 		return nil, err
 	}
 	h.mcp = mcp.NewServer(&mcp.Implementation{Name: "marginalia", Title: "Marginalia document review (hosted)", Version: session.Version}, nil)
+	h.tools()
 	h.routes()
 	return h, nil
 }
@@ -224,12 +251,61 @@ const maxDocumentBytes = 1 << 20
 // metadata — and serves it. Nothing is written until every document has
 // parsed and the framing has validated: a refusal leaves no trace.
 func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
+	h.pub.Lock()
+	defer h.pub.Unlock()
+	id := NewID()
+	now := h.opts.Now().UTC().Format(time.RFC3339)
+	meta := Meta{
+		ID: id, Title: p.Title, Agent: p.Agent, Revision: 1,
+		Review: p.Review, Config: p.Config, Theme: p.Theme,
+		Created: now, Updated: now,
+	}
+	return h.publish(ctx, meta, p)
+}
+
+// Republish stores revision n+1 of an existing review and serves it. Earlier
+// revisions stay as written — put-if-absent makes overwriting impossible —
+// and the logs keep their keys, so every note the reviewer wrote re-anchors
+// against the new text through feedback.Materialize: stale where its block
+// changed, orphaned where it is gone. Framing left empty is inherited from
+// the revision before.
+func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, error) {
+	h.pub.Lock()
+	defer h.pub.Unlock()
+	prev := h.Review(id)
+	if prev == nil {
+		return nil, fmt.Errorf("no review %q here — the id comes from publish_document", id)
+	}
+	meta := prev.Meta
+	meta.Revision++
+	meta.Updated = h.opts.Now().UTC().Format(time.RFC3339)
+	if p.Title != "" {
+		meta.Title = p.Title
+	}
+	if p.Agent != "" {
+		meta.Agent = p.Agent
+	}
+	if p.Review != "" || p.Config != "" {
+		meta.Review, meta.Config = p.Review, p.Config
+	}
+	if p.Theme != "" {
+		meta.Theme = p.Theme
+	}
+	meta.Docs = nil
+	return h.publish(ctx, meta, p)
+}
+
+// publish validates everything, then writes the revision's blobs and the new
+// metadata version, then swaps the served review. The order is the point: a
+// refusal happens before the first write, and the page only changes once
+// every byte of the revision is in the store.
+func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, error) {
 	if len(p.Docs) == 0 {
 		return nil, errors.New("nothing to publish — send at least one document")
 	}
+	id, n := meta.ID, meta.Revision
 	seen := map[string]bool{}
 	entries := make([]server.Entry, 0, len(p.Docs))
-	id := NewID()
 	for _, d := range p.Docs {
 		if err := CheckName(d.Name); err != nil {
 			return nil, err
@@ -252,14 +328,6 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
 		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name})
-	}
-	now := h.opts.Now().UTC().Format(time.RFC3339)
-	meta := Meta{
-		ID: id, Title: p.Title, Agent: p.Agent, Revision: 1,
-		Review: p.Review, Config: p.Config, Theme: p.Theme,
-		Created: now, Updated: now,
-	}
-	for _, d := range p.Docs {
 		meta.Docs = append(meta.Docs, d.Name)
 	}
 	// Validate the framing before the first write, for the same reason.
@@ -268,7 +336,7 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 		return nil, err
 	}
 	for _, d := range p.Docs {
-		if err := h.store.PutBlob(ctx, revKey(id, 1, d.Name), d.Content); err != nil {
+		if err := h.store.PutBlob(ctx, revKey(id, n, d.Name), d.Content); err != nil {
 			return nil, fmt.Errorf("hosted: storing %s: %w", d.Name, err)
 		}
 	}
@@ -276,13 +344,13 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.PutBlob(ctx, metaKey(id, 1), raw); err != nil {
+	if err := h.store.PutBlob(ctx, metaKey(id, n), raw); err != nil {
 		return nil, fmt.Errorf("hosted: storing metadata: %w", err)
 	}
 	h.mu.Lock()
 	h.reviews[id] = r
 	h.mu.Unlock()
-	h.logf("marginalia: review %s published (%d document(s)) → %s\n", id, len(p.Docs), h.URL(id))
+	h.logf("marginalia: review %s revision %d published (%d document(s)) → %s\n", id, n, len(p.Docs), h.URL(id))
 	return r, nil
 }
 
@@ -316,9 +384,7 @@ func (h *Host) URL(id string) string {
 	return strings.TrimSuffix(h.opts.PublicURL, "/") + "/r/" + id + "/"
 }
 
-// MCP is the server behind /mcp. It has no tools yet: the path-based tools
-// of `marginalia mcp` mean nothing here, and the hosted ones — publish by
-// content, read by review id — arrive with publish_document (#96).
+// MCP is the server behind /mcp, carrying the hosted tools (tools.go).
 func (h *Host) MCP() *mcp.Server { return h.mcp }
 
 // routes mounts the one listener: the inbox's place at /, a review's own
@@ -385,6 +451,7 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 		case <-stopped:
 			return
 		}
+		h.interrupt()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		drained <- httpSrv.Shutdown(shutCtx)

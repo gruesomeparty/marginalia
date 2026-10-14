@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
@@ -25,7 +24,10 @@ const MaxTimeout = 30 * time.Minute
 // Why the wait watches the logs rather than GET /api/revision: revision counts
 // document *re-parses* under --watch, which is a different fact entirely — it
 // moves when the author edits and stays put when the reviewer comments.
-func waitForDone(ctx context.Context, docs []string, cursor map[string]int, timeout time.Duration) (done bool, reason string, out []DocEvents, err error) {
+//
+// WaitForDone is exported for the hosted tools, which wait on the same terms
+// over targets of their own.
+func WaitForDone(ctx context.Context, docs []Target, cursor map[string]int, timeout time.Duration) (done bool, reason string, out []DocEvents, err error) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
@@ -66,11 +68,11 @@ func waitForDone(ctx context.Context, docs []string, cursor map[string]int, time
 
 // readAll reads every document's log from its cursor, and reports whether all
 // of them are finished.
-func readAll(docs []string, cursor map[string]int) ([]DocEvents, bool, error) {
+func readAll(docs []Target, cursor map[string]int) ([]DocEvents, bool, error) {
 	out := make([]DocEvents, 0, len(docs))
 	all := true
 	for _, d := range docs {
-		ev, err := eventsSince(d, cursor[d])
+		ev, err := EventsSince(d, cursor[d.Name])
 		if err != nil {
 			return nil, false, err
 		}
@@ -84,17 +86,17 @@ func readAll(docs []string, cursor map[string]int) ([]DocEvents, bool, error) {
 
 // moved reports whether any log's change token differs from the last look,
 // and records the new ones.
-func moved(docs []string, seen map[string]storage.Token) bool {
+func moved(docs []Target, seen map[string]storage.Token) bool {
 	changed := false
 	for _, d := range docs {
 		// A log that does not exist yet has the zero token, which is the
 		// normal case before the first comment; the next tick will find it.
-		token, err := feedback.NewStore(d).Changed()
+		token, err := d.Store.Changed()
 		if err != nil {
 			continue
 		}
-		if seen[d] != token {
-			seen[d] = token
+		if seen[d.Name] != token {
+			seen[d.Name] = token
 			changed = true
 		}
 	}
