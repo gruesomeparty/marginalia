@@ -365,7 +365,15 @@ users are agents, not humans.
   rate-limited; asymmetric algorithms only), plus `iss`, `aud`, `exp`, `nbf`;
   an agent is the `/mcp` bearer (`mcpserver.StaticTokenVerifier` behind
   go-sdk's `RequireBearerToken`, whose `TokenInfo` reaches tool handlers as
-  `req.Extra.TokenInfo`) or, later, an OAuth token. Page routes run under
+  `req.Extra.TokenInfo`) or an OAuth access token (`hosted/oauth.go`:
+  Marginalia is an RFC 9728 *resource server* only — never issues tokens;
+  `/.well-known/oauth-protected-resource[/mcp]` names `--public-url`'s
+  `/mcp` as the resource and `--mcp-oauth-issuer` as its server, an
+  unauthenticated `/mcp` gets `WWW-Authenticate: Bearer resource_metadata=…`,
+  and a JWT bearer is verified by the same `identity.Verifier` with `aud` =
+  the `/mcp` URL; its subject becomes `agent:<sub>`, still an agent's seat;
+  the static token keeps working beside it; `docs/hosting.md` is the
+  operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
   no tool that writes anything but `reply` and `addressed`; `review_done`,
   `confirm` and `reopen` are human-only by construction. `author` is the
