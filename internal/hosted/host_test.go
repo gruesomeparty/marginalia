@@ -12,6 +12,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/storage"
+	"github.com/gruesomeparty/marginalia/internal/storage/s3test"
 	"github.com/gruesomeparty/marginalia/internal/storage/storagetest"
 )
 
@@ -31,7 +32,25 @@ func backends(t *testing.T) map[string]storage.Store {
 	return map[string]storage.Store{
 		"memory": storage.NewMemory(),
 		"file":   storage.NewDisk(t.TempDir()),
+		"r2":     fakeR2(t),
 	}
+}
+
+// fakeR2 is the R2 backend over an in-process S3 fake.
+func fakeR2(t *testing.T) *storage.R2 {
+	t.Helper()
+	r, _ := fakeR2WithCounts(t)
+	return r
+}
+
+func fakeR2WithCounts(t *testing.T) (*storage.R2, *s3test.Fake) {
+	t.Helper()
+	f := s3test.New(t, "marginalia")
+	r, err := storage.NewR2(storage.R2Config{AccessKeyID: "k", SecretAccessKey: "s", Bucket: f.Bucket(), Prefix: "inst", Endpoint: f.Endpoint(), Insecure: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, f
 }
 
 func open(t *testing.T, store storage.Store) (*Host, *httptest.Server) {
@@ -258,7 +277,6 @@ func TestOpenStoreURIs(t *testing.T) {
 		{"file://rel", true},
 		{"file://", false},
 		{"/tmp/x", false},
-		{"r2://bucket/prefix", false},
 		{"s3://bucket", false},
 	} {
 		_, where, err := OpenStore(tc.uri)
@@ -269,9 +287,27 @@ func TestOpenStoreURIs(t *testing.T) {
 			t.Errorf("OpenStore(%q) accepted", tc.uri)
 		}
 	}
-	_, _, err := OpenStore("r2://bucket/prefix")
+	_, _, err := OpenStore("s3://bucket/prefix")
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Errorf("an unsupported backend is a feature request: %v", err)
+	}
+	// r2:// without credentials in the environment says which variables it
+	// wants, and never suggests a flag.
+	t.Setenv(R2AccountEnv, "acct")
+	t.Setenv(R2KeyEnv, "")
+	t.Setenv(R2SecretEnv, "")
+	_, _, err = OpenStore("r2://bucket/prefix")
+	if err == nil || !strings.Contains(err.Error(), R2KeyEnv) {
+		t.Errorf("r2 without credentials: %v", err)
+	}
+	t.Setenv(R2KeyEnv, "k")
+	t.Setenv(R2SecretEnv, "SECRET-1a2b3c")
+	_, where, err := OpenStore("r2://bucket/prefix/")
+	if err != nil || where != "r2://bucket/prefix" {
+		t.Errorf("r2 with credentials: %q, %v", where, err)
+	}
+	if _, _, err := OpenStore("r2://"); err == nil {
+		t.Error("r2 with no bucket was accepted")
 	}
 }
 
@@ -308,4 +344,62 @@ func TestMCPAndHealthAreMounted(t *testing.T) {
 	if code, _ := get(t, ts.URL+"/nothing"); code != http.StatusNotFound {
 		t.Errorf("/nothing = %d, want 404", code)
 	}
+}
+
+// On R2 every call is billed, so the cost of each path is pinned: after
+// startup, serving the inbox and a review costs nothing; a comment is exactly
+// one PUT; waiting in await_review_done makes no call at all; a publish is
+// one PUT per document plus one for the metadata (and the one-key listing
+// that keeps a blob off a log's key).
+func TestR2CostsOnePutPerCommentAndNothingToServe(t *testing.T) {
+	r, f := fakeR2WithCounts(t)
+	h, ts := open(t, r)
+	a := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	if got := f.Count("PUT"); got != 2 {
+		t.Errorf("a one-document publish cost %d PUTs, want 2 (document + metadata)", got)
+	}
+	// A fresh process: the startup listing and reads happen here, once.
+	ts.Close()
+	h2, ts2 := open(t, r)
+	f.Reset()
+	for i := 0; i < 3; i++ {
+		if code, _ := get(t, ts2.URL+"/"); code != 200 {
+			t.Fatal(code)
+		}
+		if code, _ := get(t, ts2.URL+"/r/"+a.Meta.ID+"/"); code != 200 {
+			t.Fatal(code)
+		}
+		if code, _ := get(t, ts2.URL+"/api/reviews"); code != 200 {
+			t.Fatal(code)
+		}
+	}
+	if got := f.Total(); got != 0 {
+		t.Errorf("serving the inbox and a review cost %d R2 calls after startup, want 0", got)
+	}
+	if code := post(t, ts2.URL+"/r/"+a.Meta.ID+"/api/feedback", feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "why?", Author: "b"}); code != http.StatusCreated {
+		t.Fatal(code)
+	}
+	if got, total := f.Count("PUT"), f.Total(); got != 1 || total != 1 {
+		t.Errorf("a comment cost %d PUTs and %d calls in all, want exactly 1 and 1", got, total)
+	}
+	f.Reset()
+	cs := connect(t, ts2)
+	var waited awaitOut
+	if err := call(t, cs, "await_review_done", map[string]any{"review_id": a.Meta.ID, "timeout_seconds": 2}, &waited); err != nil {
+		t.Fatal(err)
+	}
+	if waited.Done || waited.Reason != "timeout" {
+		t.Fatalf("await: %+v", waited)
+	}
+	if got := f.Total(); got != 0 {
+		t.Errorf("waiting cost %d R2 calls, want 0: the wait polls memory, never the store", got)
+	}
+	// And the comment survived a restart, read back from the one object it
+	// was written as.
+	ts2.Close()
+	h3, ts3 := open(t, r)
+	if _, body := get(t, ts3.URL+"/r/"+a.Meta.ID+"/api/feedback"); !strings.Contains(body, "why?") {
+		t.Error("the comment did not come back from R2 after a restart")
+	}
+	_, _ = h2, h3
 }
