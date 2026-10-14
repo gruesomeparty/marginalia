@@ -216,3 +216,62 @@ func TestHostNeedsAHumanIdentity(t *testing.T) {
 		}
 	}
 }
+
+// The public URL is every link the host hands out with a path appended, so
+// a value that is not an origin is refused at startup rather than surfacing
+// as a broken link in a notification.
+func TestPublicOrigin(t *testing.T) {
+	for raw, want := range map[string]string{
+		"":                        "",
+		"https://review.example":  "https://review.example",
+		"https://review.example/": "https://review.example",
+		"http://localhost:8080":   "http://localhost:8080",
+	} {
+		got, err := publicOrigin(raw)
+		if err != nil || got != want {
+			t.Errorf("publicOrigin(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+	for _, raw := range []string{
+		"review.example",
+		"ftp://review.example",
+		"https://",
+		"https://review.example/marginalia",
+		"https://review.example/?a=b",
+		"https://review.example/#top",
+		"https://user@review.example",
+	} {
+		if got, err := publicOrigin(raw); err == nil {
+			t.Errorf("publicOrigin(%q) = %q, want a refusal", raw, got)
+		}
+	}
+}
+
+// A container is configured without a command line, so the public URL has
+// an environment variable like every other setting; it is checked the same
+// way the flag is, and it is what the OAuth resource is named after.
+func TestHostReadsThePublicURLFromTheEnvironment(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "tok")
+	run := func() error {
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"host", "--addr", "127.0.0.1:0", "--store", "file://" + t.TempDir()})
+		return executeRoot(root)
+	}
+
+	t.Setenv(PublicURLEnv, "review.example")
+	if err := run(); err == nil || !strings.Contains(err.Error(), "review.example") {
+		t.Fatalf("got %v, want a refusal naming the malformed value", err)
+	}
+
+	// With the URL from the environment, an OAuth issuer is satisfied and
+	// startup gets as far as asking for a human identity.
+	t.Setenv(PublicURLEnv, "https://review.example")
+	t.Setenv(OAuthIssuerEnv, "https://auth.example")
+	t.Setenv(OAuthJWKSEnv, "https://auth.example/jwks")
+	err := run()
+	if err == nil || strings.Contains(err.Error(), "public-url") || !strings.Contains(err.Error(), "human identity") {
+		t.Fatalf("got %v, want the public URL accepted and the missing human identity named", err)
+	}
+}
