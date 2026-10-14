@@ -412,7 +412,14 @@ users are agents, not humans.
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
   Diagrams default off in hosted mode. Credentials come from env only, and
-  nothing account-specific lives in this repo.
+  nothing account-specific lives in this repo. The **image**
+  (`Dockerfile`, goreleaser `dockers` + `docker_manifests`) is the released
+  linux binary on `distroless/static:nonroot`, pushed to
+  `ghcr.io/gruesomeparty/marginalia:<version>` (+ `latest`) for amd64 and
+  arm64 on every release — one build path, nothing baked in; CI's `image`
+  job builds it with a goreleaser snapshot and `scripts/image-smoke.sh`
+  starts the amd64 one non-root with a `file:///tmp` store, checks
+  `/healthz`, publishes over `/mcp`, and greps the history for secrets.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay) and the 2026-07-02

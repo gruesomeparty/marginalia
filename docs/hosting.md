@@ -51,6 +51,76 @@ conservative; the README lists them. Finished reviews are archived under
 `--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
 review is restored by moving its prefix back under `reviews/`.
 
+## Run it
+
+Every release publishes `ghcr.io/gruesomeparty/marginalia:<version>` (and
+`:latest`) for `linux/amd64` and `linux/arm64`: the released binary on a
+distroless base, running as a non-root user, `ENTRYPOINT ["marginalia"]`,
+`CMD ["host", "--addr", ":8080"]`, port 8080, nothing baked in. Store and
+secrets come from the environment; diagrams are off; `GET /healthz` is the
+health check (there is no `HEALTHCHECK` instruction — a distroless image has
+no shell to run one with — so the platform probes the port).
+
+### Locally, with a file store
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v marginalia-data:/data \
+  -e MARGINALIA_STORE=file:///data \
+  -e MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)" \
+  -e MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com \
+  -e MARGINALIA_HUMAN_JWT_AUDIENCE=<aud> \
+  ghcr.io/gruesomeparty/marginalia:<version>
+```
+
+The volume is what makes a `file://` store outlive the container. Binding
+`:8080` inside a container is off loopback, so `--insecure-dev-identity` is
+refused there; to try it with no edge, run the binary itself on your laptop
+instead (`marginalia host --insecure-dev-identity you@example.com`).
+
+### On Cloudflare, with R2
+
+In the deploy repo, a Worker fronts a **Cloudflare Container** running the
+image. The points that are not optional:
+
+- **Pin one instance.** The container's `max_instances` is `1`. The process
+  loads the store at startup and is its single writer; a second instance on
+  the same store would corrupt the budget and the inbox and race the logs.
+- **Pin the image** by tag — `ghcr.io/gruesomeparty/marginalia:<version>` —
+  or better by digest, and upgrade deliberately. Nothing in this repo
+  decides when a deploy moves.
+- **Forward the Access header.** The Worker must pass
+  `Cf-Access-Jwt-Assertion` through to the container unchanged; the instance
+  verifies it itself (see *Humans* below).
+- **No volume.** With `MARGINALIA_STORE=r2://<bucket>/<prefix>` the image
+  needs no writable disk; the container's own is disposable.
+- **Secrets as secrets.** `MARGINALIA_MCP_TOKEN`, `MARGINALIA_R2_*` and the
+  JWT settings go in as container secrets or environment variables, never in
+  the image.
+- **Public URL.** `--public-url https://review.<your-domain>` (or pass it in
+  the `CMD`), since every URL handed to an agent is built from it.
+
+A sketch of the container's environment:
+
+```
+MARGINALIA_STORE=r2://<bucket>/<prefix>
+MARGINALIA_R2_ACCOUNT_ID=<account id>
+MARGINALIA_R2_ACCESS_KEY_ID=<token id>
+MARGINALIA_R2_SECRET_ACCESS_KEY=<token secret>
+MARGINALIA_MCP_TOKEN=<random>
+MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
+MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
+MARGINALIA_MCP_OAUTH_ISSUER=https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>
+```
+
+and the command `host --addr :8080 --public-url https://review.<your-domain>`.
+
+CI builds the image on every change (`goreleaser release --snapshot`, both
+architectures) and smoke-tests the amd64 one the way a platform starts it:
+no volume, a `file:///tmp` store, secrets from the environment, non-root —
+it has to answer `/healthz` and take a `publish_document`
+(`scripts/image-smoke.sh`).
+
 ## State in R2
 
 `--store r2://<bucket>/<prefix>` keeps every byte of review state in an R2
