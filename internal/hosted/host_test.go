@@ -36,7 +36,7 @@ func backends(t *testing.T) map[string]storage.Store {
 
 func open(t *testing.T, store storage.Store) (*Host, *httptest.Server) {
 	t.Helper()
-	h, err := Open(context.Background(), Options{Store: store, PublicURL: "https://review.example", Token: "tok", Log: testWriter{t}})
+	h, err := Open(context.Background(), Options{Store: store, PublicURL: "https://review.example", Token: "tok", DevIdentity: "dev@example.com", Log: testWriter{t}})
 	if err != nil {
 		t.Fatal(err)
 	}

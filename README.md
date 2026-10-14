@@ -181,6 +181,8 @@ reviews from (PRD §5.9). It is additive: `serve` and `mcp` are untouched.
 
 ```bash
 export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"
+export MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
+export MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
 marginalia host --addr :8080 --store file:///data --public-url https://review.example
 ```
 
@@ -213,6 +215,23 @@ A name is one plain file name — `../x.md`, `.env` and `a/b.md` are refused,
 not cleaned up — and a publish refuses before writing anything: an
 unsupported format (naming `request-feature`), empty content, an invalid
 config. Each document is capped at 1 MiB until the configurable limits land.
+
+**Who is asking is decided on every request, before any handler runs.** A
+*human* reaches the pages through the edge, which puts a JWT on the request
+(Cloudflare Access: the `Cf-Access-Jwt-Assertion` header, or its
+`CF_Authorization` cookie); the host verifies the signature against the
+issuer's published keys (`--human-jwt-issuer`, `--human-jwt-audience`,
+`--human-jwks-url` — the last defaults to the Access certs URL, or to OpenID
+discovery for any other issuer), plus issuer, audience and validity, and the
+token's email becomes the **author of every event they write**, whatever the
+page sent. An *agent* holds `MARGINALIA_MCP_TOKEN` on `/mcp` and writes as
+`--agent-name` (default `agent`). The two never cross: a page route refuses
+an agent credential, and `/mcp` has no tool that writes a `comment`, a
+verdict, a `confirm`, a `reopen` or a `review_done`. Trusting the header
+without verifying it is not an option — the container's port may be
+reachable around the edge. For a laptop with no edge in front of it,
+`--insecure-dev-identity you@example.com` makes every page request that
+human; it refuses to start on anything but a loopback address.
 
 | Tool | What it does |
 |---|---|
@@ -676,6 +695,9 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--addr <addr>` | `host` | Where to listen; default `127.0.0.1:8080` |
 | `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) |
 | `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at; every URL handed out is built from it |
+| `--human-jwt-issuer`, `--human-jwt-audience`, `--human-jwks-url` | `host` | How to verify the edge's JWT on page requests |
+| `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
+| `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -685,6 +707,8 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
 | `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
 | `MARGINALIA_STORE` | Default `--store` for `host` |
+| `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
+| `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 

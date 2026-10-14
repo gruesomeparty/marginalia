@@ -53,10 +53,16 @@ type Options struct {
 	Diagrams *diagram.Renderer
 
 	Author string
-	Host   string
-	Port   int
-	Open   bool
-	Watch  bool // re-parse a document when its file changes
+	// AuthorOf, when set, names the author of every event a request appends
+	// — assigned from who the request is, never taken from the body. A
+	// hosted instance sets it to the identity its edge verified; `serve`
+	// leaves it nil and records what the page sends, which on loopback is
+	// the reviewer's own name.
+	AuthorOf func(*http.Request) string
+	Host     string
+	Port     int
+	Open     bool
+	Watch    bool // re-parse a document when its file changes
 	// BasePath is the path this server is mounted under when it is not at
 	// the root — "/r/<id>" under a hosted instance. The page builds every
 	// URL from it. Empty for `serve`.
