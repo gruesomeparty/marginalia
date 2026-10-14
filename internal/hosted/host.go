@@ -19,6 +19,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/identity"
 	"github.com/gruesomeparty/marginalia/internal/mcpserver"
 	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/server"
@@ -37,9 +38,19 @@ type Options struct {
 	// it, never from the bind address. Empty means Serve derives one from
 	// the listener, which is only right on a laptop.
 	PublicURL string
-	// Token gates /mcp (mcpserver.BearerAuth). Empty leaves it open, which
-	// the command allows on loopback only.
+	// Token gates /mcp (mcpserver.StaticTokenVerifier). Empty leaves it
+	// open, which the command allows on loopback only.
 	Token string
+	// AgentName is the identity an agent holding Token writes under; empty
+	// means mcpserver.DefaultAgentName.
+	AgentName string
+	// HumanAuth verifies the edge's JWT on page routes. Required unless
+	// DevIdentity is set: a page route with no way to tell who is asking
+	// would let anyone who reaches the port write the reviewer's verdicts.
+	HumanAuth *identity.Verifier
+	// DevIdentity treats every page request as this human, for a laptop
+	// with no edge in front of it. The command allows it on loopback only.
+	DevIdentity string
 	// Log is where notices go; nil means stderr.
 	Log io.Writer
 	// Now is the clock, injectable for tests. Nil means time.Now.
@@ -99,6 +110,9 @@ type Review struct {
 func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Store == nil {
 		return nil, errors.New("hosted: a store is required")
+	}
+	if opts.HumanAuth == nil && opts.DevIdentity == "" {
+		return nil, errors.New("hosted: no human identity: configure the edge's JWT (--human-jwt-issuer, --human-jwt-audience) or, on loopback only, --insecure-dev-identity <email>")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -200,6 +214,7 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		Review:   cfg,
 		Theme:    theme,
 		Author:   "reviewer",
+		AuthorOf: authorOf,
 		Log:      h.out(),
 		BasePath: "/r/" + meta.ID,
 	})
@@ -391,16 +406,28 @@ func (h *Host) MCP() *mcp.Server { return h.mcp }
 // server under /r/<id>/, the MCP transport at /mcp, and /healthz.
 func (h *Host) routes() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", h.handleRoot)
+	// Page routes are the human's: every one of them resolves the reviewer
+	// first. /mcp is the agent's, and a credential for one is refused by
+	// the other.
+	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
-	mux.Handle("/mcp", mcpserver.Transport(h.mcp, h.opts.Token))
-	mux.HandleFunc("/r/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/mcp", h.transport())
+	mux.Handle("/r/{id}", h.requireHuman(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The page's URLs are relative to its mount, so it has to be
 		// opened with the trailing slash.
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
-	})
-	mux.HandleFunc("/r/{id}/", h.handleReview)
+	})))
+	mux.Handle("/r/{id}/", h.requireHuman(http.HandlerFunc(h.handleReview)))
 	h.mux = mux
+}
+
+// transport is /mcp: the Streamable HTTP transport behind whatever verifies
+// agents — the static token when one is configured, nothing on loopback.
+func (h *Host) transport() http.Handler {
+	if h.opts.Token == "" {
+		return mcpserver.TransportWith(h.mcp, nil, nil)
+	}
+	return mcpserver.TransportWith(h.mcp, mcpserver.StaticTokenVerifier(h.opts.Token, h.agentName()), nil)
 }
 
 // handleRoot is a placeholder until the inbox (#99): it says what is here.

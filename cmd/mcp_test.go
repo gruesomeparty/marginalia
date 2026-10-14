@@ -105,9 +105,16 @@ func TestMCPKeepsStdoutForTheProtocol(t *testing.T) {
 	}
 	_ = stdin.Close()
 
-	// And the notices went somewhere — just not down the protocol.
-	if notices := stderr.String(); !strings.Contains(notices, "marginalia: serving") {
-		t.Errorf("the startup notice went nowhere; stderr was:\n%s", notices)
+	// And the notices went somewhere — just not down the protocol. The
+	// review server prints them from its own goroutine, and exec copies
+	// the child's stderr on another, so give them a moment to land.
+	deadline = time.After(10 * time.Second)
+	for !strings.Contains(stderr.String(), "marginalia: serving") {
+		select {
+		case <-deadline:
+			t.Fatalf("the startup notice went nowhere; stderr was:\n%s", stderr.String())
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }
 
@@ -174,5 +181,38 @@ func TestHostRefusesAnUnknownStoreScheme(t *testing.T) {
 	err := executeRoot(root)
 	if err == nil || !strings.Contains(err.Error(), "request-feature") {
 		t.Fatalf("got %v, want a refusal advertising request-feature", err)
+	}
+}
+
+// A fixed human identity on every page request is a laptop convenience, and
+// on any other interface it is everyone being the reviewer.
+func TestHostDevIdentityIsLoopbackOnly(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "tok")
+	root := newRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"host", "--addr", "0.0.0.0:0", "--store", "file://" + t.TempDir(), "--insecure-dev-identity", "me@example.com"})
+	err := executeRoot(root)
+	if err == nil || !strings.Contains(err.Error(), "insecure-dev-identity") {
+		t.Fatalf("got %v, want a refusal naming the flag", err)
+	}
+}
+
+// Without a dev identity, page routes need the edge's JWT configured — both
+// halves of it.
+func TestHostNeedsAHumanIdentity(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "tok")
+	for _, args := range [][]string{
+		{},
+		{"--human-jwt-issuer", "https://team.cloudflareaccess.com"},
+		{"--human-jwt-audience", "abc"},
+	} {
+		root := newRootCmd()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(append([]string{"host", "--addr", "127.0.0.1:0", "--store", "file://" + t.TempDir()}, args...))
+		if err := executeRoot(root); err == nil {
+			t.Errorf("host %v started with no complete human identity", args)
+		}
 	}
 }

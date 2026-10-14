@@ -135,10 +135,6 @@ func (h *Host) tools() {
 	}, h.closeReview)
 }
 
-// agentOf is the identity written on an agent's events. Until identity is
-// resolved per request (#97) it is the fixed agent name.
-func (h *Host) agentOf(_ *mcp.CallToolRequest) string { return "agent" }
-
 func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in publishIn) (*mcp.CallToolResult, publishOut, error) {
 	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme}
 	for _, d := range in.Documents {
