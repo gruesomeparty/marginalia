@@ -56,6 +56,11 @@ type Page struct {
 	// live in the reviewer's browser and leave by an explicit export. It is
 	// the one place in Marginalia where a human has to copy something.
 	Static bool
+	// Base is the path the review is mounted under, "" for `serve` and
+	// "/r/<id>" under a hosted instance. Every URL the page builds — its
+	// API calls and the navigation tree — starts with it, so the page never
+	// assumes it lives at "/".
+	Base string
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -101,6 +106,10 @@ type payload struct {
 	Watch      bool                `json:"watch"`
 	Revision   uint64              `json:"revision"`
 	Review     Review              `json:"review"`
+	// Base is where the page's API lives, so a fetch is base+"/api/…" and
+	// never an absolute path: under a hosted instance the review is mounted
+	// at /r/<id>.
+	Base string `json:"base"`
 }
 
 // Review is the review configuration as the page and an API consumer see it:
@@ -234,6 +243,7 @@ func Render(w io.Writer, p Page) error {
 		Static: p.Static,
 		Doc:    project(doc, cfg, names), Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
+		Base: p.Base,
 	})
 	if err != nil {
 		return err
@@ -260,7 +270,7 @@ func Render(w io.Writer, p Page) error {
 		OrphanTitle: orphanTitle(len(lost)),
 		Title:       title,
 		DataJSON:    template.JS(raw),
-		Nav:         buildNav(p.Docs, p.Nested),
+		Nav:         buildNav(p.Docs, p.Nested, p.Base),
 		ShowNav:     len(p.Docs) > 1,
 		Total:       len(p.Docs),
 		DoneN:       done,
@@ -308,14 +318,14 @@ func orphanTitle(n int) string {
 // buildNav turns the review set into the sidebar's tree. A discovered set
 // mirrors the folders it was found in; a curated one is exactly the list the
 // index gave, in its order and under its labels — the index is the tree.
-func buildNav(docs []NavDoc, nested bool) []*navNode {
+func buildNav(docs []NavDoc, nested bool, base string) []*navNode {
 	if len(docs) < 2 {
 		return nil
 	}
 	if !nested {
 		nodes := make([]*navNode, 0, len(docs))
 		for _, d := range docs {
-			nodes = append(nodes, leaf(d, d.Label))
+			nodes = append(nodes, leaf(d, d.Label, base))
 		}
 		return nodes
 	}
@@ -326,7 +336,7 @@ func buildNav(docs []NavDoc, nested bool) []*navNode {
 		for _, dir := range parts[:len(parts)-1] {
 			parent = child(parent, dir)
 		}
-		parent.Children = append(parent.Children, leaf(d, parts[len(parts)-1]))
+		parent.Children = append(parent.Children, leaf(d, parts[len(parts)-1], base))
 	}
 	return root.Children
 }
@@ -343,10 +353,10 @@ func child(parent *navNode, dir string) *navNode {
 	return n
 }
 
-func leaf(d NavDoc, label string) *navNode {
+func leaf(d NavDoc, label, base string) *navNode {
 	return &navNode{
 		Label:   label,
-		URL:     "/d/" + d.Rel,
+		URL:     base + "/d/" + d.Rel,
 		Count:   d.Count,
 		Done:    d.Done,
 		Current: d.Current,

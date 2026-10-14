@@ -52,19 +52,30 @@ const TokenEnv = "MARGINALIA_MCP_TOKEN"
 // and every same-host reverse proxy forward to 127.0.0.1 with the public
 // hostname as Host, and would get 403 for it.
 func (s *Server) Handler(token string) http.Handler {
-	ms := s.MCP()
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", Transport(s.MCP(), token))
+	mux.HandleFunc("GET /healthz", Healthz)
+	return mux
+}
+
+// Transport is the Streamable HTTP transport for one MCP server, gated by
+// BearerAuth — the piece `mcp --http` and `host` share, each mounting it at
+// its own /mcp. See Handler for why it is stateless and when the Host check
+// is on.
+func Transport(ms *mcp.Server, token string) http.Handler {
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
 		Stateless:                    true,
 		PropagateRequestCancellation: true,
 		DisableLocalhostProtection:   token != "",
 	})
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", BearerAuth(token, streamable))
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = io.WriteString(w, "ok\n")
-	})
-	return mux
+	return BearerAuth(token, streamable)
+}
+
+// Healthz answers a platform's health check with 200 and "ok", with no
+// credential, so a container can be probed without holding a secret.
+func Healthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = io.WriteString(w, "ok\n")
 }
 
 // BearerAuth requires `Authorization: Bearer <token>` on every request before

@@ -470,6 +470,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
 (function(){
   "use strict";
   var data = window.__MARGINALIA__;
+  // Where the API is: "" when served at the root, "/r/<id>" under a hosted
+  // instance. Every request starts from it; the page never assumes "/".
+  var base = data.base || "";
   var author = data.author || "reviewer";
   // The vocabulary comes from the server, not from here: an agent can add its
   // own actions at serve time, and the page must offer exactly what the
@@ -761,7 +764,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       toast(type==="confirm" ? "Settled" : "Reopened");
     }
     if(data.static){ landed(keep(ev)); refreshShare(); return; }
-    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
       .then(landed)
       .catch(function(err){ toast("Failed: "+err.message); });
@@ -829,7 +832,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       toast("Reply saved");
     }
     if(data.static){ landed(keep(ev)); refreshShare(); return; }
-    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
       .then(landed)
       .catch(function(err){ toast("Reply failed: "+err.message); });
@@ -863,7 +866,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       toast((labelOf[action.type]||"Note")+" saved");
     }
     if(data.static){ landed(keep(ev)); refreshShare(); return; }
-    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
       .then(landed)
       .catch(function(err){ toast("Save failed: "+err.message); });
@@ -1661,7 +1664,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       toast("Marked done — now send it back with Export.");
       return;
     }
-    fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
+    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){
           // The page renders the rule; the server enforces it. If they ever
           // disagree the server is right, so show its refusal and the list.
@@ -1686,7 +1689,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var reloader = document.getElementById("reloader");
     document.getElementById("reload").onclick = function(){ location.reload(); };
     setInterval(function(){
-      fetch("/api/revision", {cache: "no-store"})
+      fetch(base+"/api/revision", {cache: "no-store"})
         .then(function(res){ return res.ok ? res.json() : null; })
         .then(function(state){
           if(!state || state.rev === startRev) return;
@@ -1699,7 +1702,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
 
   var finish = document.getElementById("finish");
   if(finish) finish.onclick=function(){
-    fetch("/api/session_done",{method:"POST"})
+    fetch(base+"/api/session_done",{method:"POST"})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
       .then(function(){
         Array.prototype.forEach.call(document.querySelectorAll(".nav .tick"), function(t){ t.hidden = false; });

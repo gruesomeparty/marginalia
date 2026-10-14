@@ -333,13 +333,24 @@ users are agents, not humans.
   token (`feedback.Store.Changed`) is what `await_review_done` polls, not the
   file. The source document `serve` reads, `--watch`'s polling and the
   diagram cache are not state and stay on `os`.
-- **Hosted mode** (`marginalia host`, PRD §5.9) is one listener for many
-  reviews: `/` inbox, `/r/{id}/…` the per-review `server.Server` routes,
-  `/mcp` Streamable HTTP, `/healthz`. Agents publish bytes plus a name; a
-  snapshot is immutable and a republish is a new revision, re-anchored through
-  `feedback.Materialize`. Startup loads every review from the store and the
-  process then keeps state in memory and writes through — single instance,
-  single writer, nothing polls the store (every R2 call is billed). Identity is
+- **Hosted mode** (`marginalia host`, `internal/hosted`, PRD §5.9) is one
+  listener for many reviews: `/` inbox, `/r/{id}/…` the per-review
+  `server.Server` routes mounted with `http.StripPrefix` and told their mount
+  through `server.Options.BasePath` → `web.Page.Base` → the payload's `base`,
+  which every fetch and nav link in the page starts from (the page never
+  assumes `/`), `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
+  `mcp --http`), `/healthz`. Keys are the same on every backend:
+  `reviews/<id>/meta/<n>.json` (versioned, highest wins),
+  `reviews/<id>/rev/<n>/<name>` (immutable snapshots), `reviews/<id>/log/<name>`
+  (the feedback log, `feedback.OpenStore`). Ids are 128 random bits, URL-safe;
+  `hosted.CheckName` refuses a document name that is not one plain segment.
+  Agents publish bytes plus a name; a snapshot is immutable and a republish is
+  a new revision, re-anchored through `feedback.Materialize`. `hosted.Open`
+  lists the store once and rebuilds every review; the process then runs on
+  `storage.WriteThrough` — logs in memory, appends to the backend first —
+  so single instance, single writer, and nothing polls the store (every R2
+  call is billed; `TestHostReadsTheStoreOnceAtStartup` pins zero reads per
+  page and one write per comment). Identity is
   resolved per request before any handler: a human is an edge JWT verified
   against the issuer's JWKS, an agent is the `/mcp` bearer or OAuth token.
   Agents append `reply` and `addressed` only; `review_done`, `confirm` and

@@ -1,0 +1,430 @@
+package hosted
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/gruesomeparty/marginalia/internal/document"
+	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/mcpserver"
+	"github.com/gruesomeparty/marginalia/internal/review"
+	"github.com/gruesomeparty/marginalia/internal/server"
+	"github.com/gruesomeparty/marginalia/internal/session"
+	"github.com/gruesomeparty/marginalia/internal/storage"
+	"github.com/gruesomeparty/marginalia/internal/web"
+)
+
+// Options configures a Host. Every field is an operator's decision made at
+// launch, never a tool input.
+type Options struct {
+	// Store holds every byte of review state. Required.
+	Store storage.Store
+	// PublicURL is the origin reviewers and agents reach the host at —
+	// "https://review.example". Every URL handed to an agent is built from
+	// it, never from the bind address. Empty means Serve derives one from
+	// the listener, which is only right on a laptop.
+	PublicURL string
+	// Token gates /mcp (mcpserver.BearerAuth). Empty leaves it open, which
+	// the command allows on loopback only.
+	Token string
+	// Log is where notices go; nil means stderr.
+	Log io.Writer
+	// Now is the clock, injectable for tests. Nil means time.Now.
+	Now func() time.Time
+}
+
+// Host is one running instance: the reviews it serves, in memory, and the
+// store they are written through to.
+type Host struct {
+	opts  Options
+	store *storage.WriteThrough
+	mu    sync.RWMutex
+	// reviews is every review the store holds, by id. It is the inbox's
+	// source and the router's table, and it is complete: startup loaded it
+	// all, and this process is the only writer.
+	reviews map[string]*Review
+	mux     *http.ServeMux
+	mcp     *mcp.Server
+}
+
+// Review is one review as the host serves it: its metadata, its documents as
+// parsed from the current revision, and the per-review server that renders
+// them under /r/<id>/.
+type Review struct {
+	Meta   Meta
+	Server *server.Server
+}
+
+// Open loads every review in opts.Store and returns a host serving them. A
+// restart loses nothing: this is the only full listing the store ever gets.
+func Open(ctx context.Context, opts Options) (*Host, error) {
+	if opts.Store == nil {
+		return nil, errors.New("hosted: a store is required")
+	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
+	h := &Host{opts: opts, store: storage.NewWriteThrough(opts.Store), reviews: map[string]*Review{}}
+	if err := h.load(ctx); err != nil {
+		return nil, err
+	}
+	h.mcp = mcp.NewServer(&mcp.Implementation{Name: "marginalia", Title: "Marginalia document review (hosted)", Version: session.Version}, nil)
+	h.routes()
+	return h, nil
+}
+
+// load rebuilds every review from the store: one listing, then the latest
+// metadata and current revision of each, and each log read through once so
+// every later read is served from memory.
+func (h *Host) load(ctx context.Context) error {
+	keys, err := h.store.List(ctx, prefixReviews)
+	if err != nil {
+		return fmt.Errorf("hosted: listing reviews: %w", err)
+	}
+	latest := map[string]int{}
+	for _, key := range keys {
+		id, ok := reviewOf(key)
+		if !ok {
+			continue
+		}
+		if n := metaVersion(id, key); n > latest[id] {
+			latest[id] = n
+		}
+	}
+	for id, n := range latest {
+		r, err := h.open(ctx, id, n)
+		if err != nil {
+			// One broken review must not take the rest down; say which.
+			h.logf("marginalia: review %s could not be loaded and is not served: %v\n", id, err)
+			continue
+		}
+		h.reviews[id] = r
+	}
+	return nil
+}
+
+// open builds a Review from metadata version n and the revision it names.
+func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
+	raw, err := h.store.GetBlob(ctx, metaKey(id, n))
+	if err != nil {
+		return nil, err
+	}
+	var meta Meta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return nil, fmt.Errorf("meta/%d.json: %w", n, err)
+	}
+	if meta.ID != id {
+		return nil, fmt.Errorf("meta/%d.json names review %q", n, meta.ID)
+	}
+	docs := make([]server.Entry, 0, len(meta.Docs))
+	for _, name := range meta.Docs {
+		src, err := h.store.GetBlob(ctx, revKey(id, meta.Revision, name))
+		if err != nil {
+			return nil, err
+		}
+		doc, err := document.ParseBytes(name, src)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		docs = append(docs, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, name)), Label: name, Rel: name})
+	}
+	r, err := h.build(meta, docs)
+	if err != nil {
+		return nil, err
+	}
+	// Warm the logs: a read through now is the last time the backend sees a
+	// read for them.
+	for _, e := range docs {
+		if _, err := e.Store.Load(); err != nil {
+			return nil, fmt.Errorf("%s: %w", e.Store.Path(), err)
+		}
+	}
+	return r, nil
+}
+
+// build wires parsed documents and metadata into the per-review server that
+// renders them. Diagrams are off: a hosted instance has no mermaid-cli and
+// should not shell out for an agent's input in any case.
+func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
+	cfg, err := reviewConfig(meta.Review, meta.Config)
+	if err != nil {
+		return nil, err
+	}
+	theme, err := web.ThemeFor(meta.Theme)
+	if err != nil {
+		return nil, session.Advertise(err)
+	}
+	srv := server.New(server.Options{
+		Docs:     docs,
+		Title:    meta.Title,
+		Review:   cfg,
+		Theme:    theme,
+		Author:   "reviewer",
+		Log:      h.out(),
+		BasePath: "/r/" + meta.ID,
+	})
+	return &Review{Meta: meta, Server: srv}, nil
+}
+
+// reviewConfig is a preset, an inline YAML, or the file's worth of both —
+// the hosted form of session.ReviewConfig, where the config travels in the
+// request rather than on disk.
+func reviewConfig(preset, inline string) (*review.Config, error) {
+	cfg := review.Default()
+	if preset != "" {
+		var err error
+		if cfg, err = review.Preset(preset); err != nil {
+			return nil, session.Advertise(err)
+		}
+	}
+	if strings.TrimSpace(inline) != "" {
+		if err := cfg.OverlayYAML(inline); err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+// Document is one document an agent publishes: a name whose extension picks
+// the format, and the bytes.
+type Document struct {
+	Name    string
+	Content []byte
+}
+
+// Publish is one publish request: the documents and how the review is
+// framed.
+type Publish struct {
+	Title  string
+	Agent  string
+	Docs   []Document
+	Review string // shipped preset
+	Config string // inline review YAML
+	Theme  string
+}
+
+// maxDocumentBytes is the fixed per-document guard until the configurable
+// caps of #100.
+const maxDocumentBytes = 1 << 20
+
+// Publish stores a new review — revision 1 of every document, then its
+// metadata — and serves it. Nothing is written until every document has
+// parsed and the framing has validated: a refusal leaves no trace.
+func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
+	if len(p.Docs) == 0 {
+		return nil, errors.New("nothing to publish — send at least one document")
+	}
+	seen := map[string]bool{}
+	entries := make([]server.Entry, 0, len(p.Docs))
+	id := NewID()
+	for _, d := range p.Docs {
+		if err := CheckName(d.Name); err != nil {
+			return nil, err
+		}
+		if seen[d.Name] {
+			return nil, fmt.Errorf("document %q is listed twice", d.Name)
+		}
+		seen[d.Name] = true
+		if len(d.Content) == 0 {
+			return nil, fmt.Errorf("document %q is empty", d.Name)
+		}
+		if len(d.Content) > maxDocumentBytes {
+			return nil, fmt.Errorf("document %q is %d bytes; the limit is %d", d.Name, len(d.Content), maxDocumentBytes)
+		}
+		if document.FormatFor(d.Name) == "" {
+			return nil, session.UnsupportedInput(filepath.Ext(d.Name))
+		}
+		doc, err := document.ParseBytes(d.Name, d.Content)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", d.Name, err)
+		}
+		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name})
+	}
+	now := h.opts.Now().UTC().Format(time.RFC3339)
+	meta := Meta{
+		ID: id, Title: p.Title, Agent: p.Agent, Revision: 1,
+		Review: p.Review, Config: p.Config, Theme: p.Theme,
+		Created: now, Updated: now,
+	}
+	for _, d := range p.Docs {
+		meta.Docs = append(meta.Docs, d.Name)
+	}
+	// Validate the framing before the first write, for the same reason.
+	r, err := h.build(meta, entries)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range p.Docs {
+		if err := h.store.PutBlob(ctx, revKey(id, 1, d.Name), d.Content); err != nil {
+			return nil, fmt.Errorf("hosted: storing %s: %w", d.Name, err)
+		}
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.store.PutBlob(ctx, metaKey(id, 1), raw); err != nil {
+		return nil, fmt.Errorf("hosted: storing metadata: %w", err)
+	}
+	h.mu.Lock()
+	h.reviews[id] = r
+	h.mu.Unlock()
+	h.logf("marginalia: review %s published (%d document(s)) → %s\n", id, len(p.Docs), h.URL(id))
+	return r, nil
+}
+
+// Review returns one review by id, or nil.
+func (h *Host) Review(id string) *Review {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.reviews[id]
+}
+
+// Reviews returns every review, newest first by its latest publish.
+func (h *Host) Reviews() []*Review {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*Review, 0, len(h.reviews))
+	for _, r := range h.reviews {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Meta.Updated != out[j].Meta.Updated {
+			return out[i].Meta.Updated > out[j].Meta.Updated
+		}
+		return out[i].Meta.ID < out[j].Meta.ID
+	})
+	return out
+}
+
+// URL is where a review is, for a human or an agent: the public origin, never
+// the bind address.
+func (h *Host) URL(id string) string {
+	return strings.TrimSuffix(h.opts.PublicURL, "/") + "/r/" + id + "/"
+}
+
+// MCP is the server behind /mcp. It has no tools yet: the path-based tools
+// of `marginalia mcp` mean nothing here, and the hosted ones — publish by
+// content, read by review id — arrive with publish_document (#96).
+func (h *Host) MCP() *mcp.Server { return h.mcp }
+
+// routes mounts the one listener: the inbox's place at /, a review's own
+// server under /r/<id>/, the MCP transport at /mcp, and /healthz.
+func (h *Host) routes() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", h.handleRoot)
+	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
+	mux.Handle("/mcp", mcpserver.Transport(h.mcp, h.opts.Token))
+	mux.HandleFunc("/r/{id}", func(w http.ResponseWriter, r *http.Request) {
+		// The page's URLs are relative to its mount, so it has to be
+		// opened with the trailing slash.
+		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/r/{id}/", h.handleReview)
+	h.mux = mux
+}
+
+// handleRoot is a placeholder until the inbox (#99): it says what is here.
+func (h *Host) handleRoot(w http.ResponseWriter, _ *http.Request) {
+	h.mu.RLock()
+	n := len(h.reviews)
+	h.mu.RUnlock()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = fmt.Fprintf(w, "marginalia host: %d review(s). Open a review at its own URL (/r/<id>/).\n", n)
+}
+
+// handleReview hands a request under /r/<id>/ to that review's server, with
+// the prefix stripped so the server sees the routes it registered. An id
+// nobody published is a 404 like any other: the id is not the auth boundary,
+// so there is nothing to hide by answering differently.
+func (h *Host) handleReview(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !ValidID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	rv := h.Review(id)
+	if rv == nil {
+		http.NotFound(w, r)
+		return
+	}
+	http.StripPrefix("/r/"+id, rv.Server.Handler()).ServeHTTP(w, r)
+}
+
+// Handler is the whole listener's mux.
+func (h *Host) Handler() http.Handler { return h.mux }
+
+// Serve runs the host on ln until ctx is cancelled, then drains, as `serve`
+// does, so a comment saved as the process is told to stop still reaches the
+// store.
+func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
+	if h.opts.PublicURL == "" {
+		h.opts.PublicURL = derivedURL(ln)
+		h.logf("marginalia: no --public-url; using %s — set it to the address reviewers and agents reach this host at\n", h.opts.PublicURL)
+	}
+	httpSrv := &http.Server{Handler: h.mux, ReadHeaderTimeout: 5 * time.Second}
+	stopped := make(chan struct{})
+	defer close(stopped)
+	drained := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-stopped:
+			return
+		}
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		drained <- httpSrv.Shutdown(shutCtx)
+	}()
+	h.mu.RLock()
+	n := len(h.reviews)
+	h.mu.RUnlock()
+	auth := "bearer token required"
+	if h.opts.Token == "" {
+		auth = "no token: loopback only"
+	}
+	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), auth)
+	err := httpSrv.Serve(ln)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return <-drained
+}
+
+// derivedURL is the best guess at a public URL when none was given: the
+// listener's own address, with an unspecified host read as localhost.
+func derivedURL(ln net.Listener) string {
+	addr := ln.Addr().String()
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr
+	}
+	if ip := net.ParseIP(host); ip == nil || ip.IsUnspecified() {
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, port)
+}
+
+func (h *Host) out() io.Writer {
+	if h.opts.Log != nil {
+		return h.opts.Log
+	}
+	return os.Stderr
+}
+
+func (h *Host) logf(format string, args ...any) {
+	_, _ = fmt.Fprintf(h.out(), format, args...)
+}

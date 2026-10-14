@@ -145,3 +145,34 @@ func TestMCPHTTPOffLoopbackNeedsAToken(t *testing.T) {
 		t.Errorf("the refusal does not name MARGINALIA_MCP_TOKEN: %v", err)
 	}
 }
+
+// `host` binds a page server and an MCP endpoint on one address, so the same
+// rule holds: off loopback, no token means no start.
+func TestHostOffLoopbackNeedsAToken(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "")
+	root := newRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"host", "--addr", "0.0.0.0:0", "--store", "file://" + t.TempDir()})
+	err := executeRoot(root)
+	if err == nil {
+		t.Fatal("host --addr 0.0.0.0:0 started with no token set")
+	}
+	if !strings.Contains(err.Error(), "MARGINALIA_MCP_TOKEN") {
+		t.Errorf("the refusal does not name MARGINALIA_MCP_TOKEN: %v", err)
+	}
+}
+
+// A store backend that does not exist yet is a feature request, not a typo,
+// and the command says so before touching anything.
+func TestHostRefusesAnUnknownStoreScheme(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "tok")
+	root := newRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"host", "--addr", "127.0.0.1:0", "--store", "s3://bucket"})
+	err := executeRoot(root)
+	if err == nil || !strings.Contains(err.Error(), "request-feature") {
+		t.Fatalf("got %v, want a refusal advertising request-feature", err)
+	}
+}
