@@ -28,6 +28,21 @@ the CLI is correct and everything below works — but it is the slower path, and
 telling the human "no MCP server, using the CLI" without saying *why* leaves
 them unable to fix it. Say which of the two it was.
 
+The server can also be somewhere else: `marginalia mcp --http <addr>` serves
+the same tools over Streamable HTTP, for a session on one machine reviewing
+documents that live on another (over Tailscale, say). The client config is
+then a URL and a bearer token rather than a command:
+
+```jsonc
+{ "mcpServers": { "marginalia": {
+    "type": "http",
+    "url": "http://100.64.0.9:8080/mcp",
+    "headers": { "Authorization": "Bearer ${MARGINALIA_MCP_TOKEN}" } } } }
+```
+
+The token is `MARGINALIA_MCP_TOKEN` on the server, which refuses to listen on
+anything but loopback without one. Everything below is the same either way.
+
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
 2. Give the human that URL and say what you want looked at.

@@ -31,6 +31,11 @@ type Server struct {
 	root     string
 	mu       sync.Mutex
 	sessions map[string]*live
+	// closing is closed once, by interrupt, when the process is going down.
+	// Every wait selects on it, so a graceful shutdown returns in-flight
+	// awaits as "cancelled" instead of waiting them out.
+	closing   chan struct{}
+	closeOnce sync.Once
 }
 
 // New resolves the confinement root and returns a server with no reviews yet.
@@ -42,7 +47,27 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{opts: opts, root: root, sessions: map[string]*live{}}, nil
+	return &Server{opts: opts, root: root, sessions: map[string]*live{}, closing: make(chan struct{})}, nil
+}
+
+// interrupt tells every in-flight wait that the process is going down. Safe
+// to call more than once; Close calls it too.
+func (s *Server) interrupt() {
+	s.closeOnce.Do(func() { close(s.closing) })
+}
+
+// untilClosed bounds a call's context by the server's lifetime as well as the
+// caller's: whichever ends first ends the call.
+func (s *Server) untilClosed(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-s.closing:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
 }
 
 // Root is the directory paths are confined to.
@@ -223,6 +248,8 @@ func (s *Server) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
+	ctx, cancel := s.untilClosed(ctx)
+	defer cancel()
 	done, reason, events, err := waitForDone(ctx, docs, s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
 	if err != nil {
 		return nil, awaitOut{}, err
