@@ -186,6 +186,10 @@ export MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
 marginalia host --addr :8080 --store file:///data --public-url https://review.example
 ```
 
+`--store` is `file://<dir>` or `r2://<bucket>/<prefix>` — Cloudflare R2
+through its S3 API, credentials from `MARGINALIA_R2_*` only, one object per
+event so the log is append-only by construction, and exactly one PUT per
+comment ([docs/hosting.md](docs/hosting.md) has the cost per operation).
 One listener, four surfaces: `/` the inbox, `/r/<id>/` one review's pages
 and API exactly as `serve` mounts them at `/`, `/mcp` the tools over
 Streamable HTTP, `/healthz` for the platform. The **inbox** is every review,
@@ -734,7 +738,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--root <dir>` | `mcp` | Confine every path a tool call may reach |
 | `--http <addr>` | `mcp` | Serve the tools over Streamable HTTP at `/mcp` instead of stdio; off loopback, `MARGINALIA_MCP_TOKEN` must be set |
 | `--addr <addr>` | `host` | Where to listen; default `127.0.0.1:8080` |
-| `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) |
+| `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) or `r2://<bucket>/<prefix>` |
 | `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at; every URL handed out is built from it |
 | `--human-jwt-issuer`, `--human-jwt-audience`, `--human-jwks-url` | `host` | How to verify the edge's JWT on page requests |
 | `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
@@ -750,6 +754,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
 | `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
 | `MARGINALIA_STORE` | Default `--store` for `host` |
+| `MARGINALIA_R2_ACCOUNT_ID`, `MARGINALIA_R2_ACCESS_KEY_ID`, `MARGINALIA_R2_SECRET_ACCESS_KEY` | Credentials for an `r2://` store; `MARGINALIA_R2_ENDPOINT` overrides the endpoint |
 | `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
 | `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
 | `MARGINALIA_MCP_OAUTH_ISSUER`, `MARGINALIA_MCP_OAUTH_AUDIENCE`, `MARGINALIA_MCP_OAUTH_JWKS_URL` | Defaults for the `--mcp-oauth-*` flags of `host` |

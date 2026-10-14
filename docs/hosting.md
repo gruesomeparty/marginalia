@@ -27,7 +27,9 @@ separate, private deploy repository.
 
 | Variable | What it is |
 |---|---|
-| `MARGINALIA_STORE` | `file://<dir>` (R2 arrives with the next storage backend) |
+| `MARGINALIA_STORE` | `file://<dir>`, or `r2://<bucket>/<prefix>` |
+| `MARGINALIA_R2_ACCOUNT_ID`, `MARGINALIA_R2_ACCESS_KEY_ID`, `MARGINALIA_R2_SECRET_ACCESS_KEY` | The R2 bucket's account and an API token scoped to it (object read and write); credentials are read from here and nowhere else |
+| `MARGINALIA_R2_ENDPOINT` | Optional: an S3 endpoint other than `<account>.r2.cloudflarestorage.com` |
 | `MARGINALIA_MCP_TOKEN` | Static bearer token for `/mcp`; mandatory off loopback unless OAuth is configured |
 | `MARGINALIA_HUMAN_JWT_ISSUER` | Issuer of the edge's JWT, e.g. `https://<team>.cloudflareaccess.com` |
 | `MARGINALIA_HUMAN_JWT_AUDIENCE` | Audience the edge's JWT must carry, e.g. the Access application's AUD tag |
@@ -48,6 +50,43 @@ conservative; the README lists them. Finished reviews are archived under
 `archive/` in the store after `--retain-done`, open ones after
 `--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
 review is restored by moving its prefix back under `reviews/`.
+
+## State in R2
+
+`--store r2://<bucket>/<prefix>` keeps every byte of review state in an R2
+bucket through its S3 API, so the container's disk is disposable. The layout
+is the one every backend uses — `reviews/<id>/meta/<n>.json`,
+`reviews/<id>/rev/<n>/<name>`, `reviews/<id>/log/<name>` — with one
+difference an object store forces: a **log is one object per event**,
+`reviews/<id>/log/<name>/<20-digit unix-nanoseconds>-<random>.json`, written
+put-if-absent, so a listing returns them in the order they were written and
+nothing ever replaces a line. The log is append-only by construction.
+
+Put-if-absent is a conditional PUT (`If-None-Match: *`). R2 honours it; the
+integration test (`TestR2Integration`, gated on the `MARGINALIA_R2_*`
+variables) checks that it does and fails if it ever stops. A store that
+answers 501 instead gets a HEAD-then-PUT fallback, which is not atomic — only
+the single-writer rule keeps it safe — and the startup line says so.
+
+**What it costs**, in R2 operations (Class A: PUT, LIST, COPY; Class B: GET,
+HEAD):
+
+| action | operations |
+|---|---|
+| publish, `n` documents | `n + 1` PUT (documents and metadata), plus `n + 1` one-key LIST (the guard that keeps a blob off a log's key) |
+| one comment, reply, claim or `review_done` | exactly **1 PUT** |
+| serving the inbox or a review page | **0** — state is in memory after startup |
+| `await_review_done`, `feedback_since`, `review_status` | **0** — the change token is in memory |
+| startup | 1 LIST per 1000 keys, then per review: 1 GET for the metadata, 1 GET per document of the current revision, and 1 LIST plus 1 GET per event for each log |
+| archiving a review | 1 COPY + 1 DELETE per object |
+
+So a quiet instance costs nothing per request, and an active review costs
+one PUT per note. Startup is the only full listing; it is proportional to
+what is stored, which is what the retention sweep keeps bounded.
+
+Create the bucket and an **API token scoped to it** (Object Read & Write on
+that one bucket) in the Cloudflare dashboard; the account id is on the R2
+overview page. Those three values go into the container's secrets.
 
 ## Humans: Cloudflare Access in front of the pages
 
