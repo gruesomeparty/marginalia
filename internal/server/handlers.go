@@ -85,6 +85,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Review:   s.opts.Review,
 		Rel:      current.Rel,
 		Theme:    s.opts.Theme,
+		Base:     s.opts.BasePath,
 	}
 	setDone := true
 	for i := range s.docs {

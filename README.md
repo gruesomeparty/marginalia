@@ -172,6 +172,32 @@ option. The client sends the token as a bearer:
 Stdout stays clean in this mode too — notices go to stderr — and SIGINT or
 SIGTERM drains in-flight calls before the process exits, as `serve` does.
 
+### Hosted mode
+
+When the agent and the reviewer share no filesystem at all — an agent in a
+Claude project or a cloud session, a reviewer on a phone — `marginalia host`
+is one always-on instance that agents publish *content* to and the owner
+reviews from (PRD §5.9). It is additive: `serve` and `mcp` are untouched.
+
+```bash
+export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"
+marginalia host --addr :8080 --store file:///data --public-url https://review.example
+```
+
+One listener, four surfaces: `/` the inbox, `/r/<id>/` one review's pages
+and API exactly as `serve` mounts them at `/`, `/mcp` the tools over
+Streamable HTTP, `/healthz` for the platform. Every byte of review state goes
+through `--store` (`MARGINALIA_STORE`), laid out the same on every backend —
+`reviews/<id>/meta/<n>.json` (versioned metadata, highest wins),
+`reviews/<id>/rev/<n>/<name>` (immutable document snapshots),
+`reviews/<id>/log/<name>` (the append-only feedback log) — so the local disk
+of a container is disposable. Startup loads every review from the store; from
+then on the process keeps them in memory and writes through, which makes it
+**single-instance by design**: one writer per store, and a deploy must pin
+exactly one. URLs handed to agents are built from `--public-url`, never the
+bind address. `MARGINALIA_MCP_TOKEN` gates `/mcp` and is required off
+loopback, as for `mcp --http`.
+
 | Tool | What it does |
 |---|---|
 | `review_document` | Serve a document (or a set); returns the URL to hand over and the vocabulary you will read back. |
@@ -611,6 +637,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `suggestions <doc\|dir>...` | The `suggest_edit`s that are safe to apply verbatim |
 | `review list` / `review show <name>` | Inspect the shipped framings |
 | `mcp` | Speak MCP over stdio, or over Streamable HTTP with `--http` |
+| `host` | Run one always-on instance serving every review in a store (hosted mode) |
 | `version` | Print version information |
 
 ### Key flags
@@ -630,6 +657,9 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--doc <path>` | `import` | Which log to append to, when the file does not say |
 | `--root <dir>` | `mcp` | Confine every path a tool call may reach |
 | `--http <addr>` | `mcp` | Serve the tools over Streamable HTTP at `/mcp` instead of stdio; off loopback, `MARGINALIA_MCP_TOKEN` must be set |
+| `--addr <addr>` | `host` | Where to listen; default `127.0.0.1:8080` |
+| `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) |
+| `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at; every URL handed out is built from it |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -637,7 +667,8 @@ disk travels with the exported page, so a second round shows the thread so far.
 | | |
 |---|---|
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
-| `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` requires on `/mcp`; mandatory off loopback |
+| `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
+| `MARGINALIA_STORE` | Default `--store` for `host` |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 
