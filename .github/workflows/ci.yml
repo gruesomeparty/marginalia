@@ -55,3 +55,26 @@ jobs:
         with:
           go-version: '1.26'
       - run: go build ./...
+  # The hosted image, as a release would build it (goreleaser snapshot, both
+  # architectures), then the amd64 one started the way a platform starts it:
+  # no volume, a file:///tmp store, secrets from the environment, as a
+  # non-root user. It has to answer the health check and take a publish.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --snapshot --clean --skip=homebrew
+        env:
+          HOMEBREW_TAP_TOKEN: ''
+      - name: Smoke-test the amd64 image
+        run: ./scripts/image-smoke.sh
