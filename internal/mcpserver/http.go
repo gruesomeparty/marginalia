@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -28,7 +29,7 @@ const TokenEnv = "MARGINALIA_MCP_TOKEN"
 // health check at /healthz that needs no credential, so a container platform
 // can ask after the process without holding a secret.
 //
-// A non-empty token gates /mcp with BearerAuth. An empty one leaves /mcp open,
+// A non-empty token gates /mcp (StaticTokenVerifier). An empty one leaves /mcp open,
 // which is only acceptable on a loopback address — CheckBind is the gate for
 // that, and the command runs it before listening.
 //
@@ -59,16 +60,100 @@ func (s *Server) Handler(token string) http.Handler {
 }
 
 // Transport is the Streamable HTTP transport for one MCP server, gated by
-// BearerAuth — the piece `mcp --http` and `host` share, each mounting it at
+// the bearer verifier — the piece `mcp --http` and `host` share, each mounting it at
 // its own /mcp. See Handler for why it is stateless and when the Host check
 // is on.
 func Transport(ms *mcp.Server, token string) http.Handler {
+	var verifier auth.TokenVerifier
+	if token != "" {
+		verifier = StaticTokenVerifier(token, DefaultAgentName)
+	}
+	return TransportWith(ms, verifier, nil)
+}
+
+// DefaultAgentName is the identity an agent holding the static token writes
+// under, when the operator named none.
+const DefaultAgentName = "agent"
+
+// TransportWith is Transport with any verifier: the static token, an OAuth
+// access token, or both. A nil verifier leaves /mcp open, which is only
+// acceptable on loopback (CheckBind). The verifier's TokenInfo reaches every
+// tool handler as req.Extra.TokenInfo, which is how a tool learns which
+// agent is asking without re-reading the header.
+func TransportWith(ms *mcp.Server, verifier auth.TokenVerifier, opts *auth.RequireBearerTokenOptions) http.Handler {
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return ms }, &mcp.StreamableHTTPOptions{
 		Stateless:                    true,
 		PropagateRequestCancellation: true,
-		DisableLocalhostProtection:   token != "",
+		DisableLocalhostProtection:   verifier != nil,
 	})
-	return BearerAuth(token, streamable)
+	if verifier == nil {
+		return streamable
+	}
+	if opts == nil {
+		opts = &auth.RequireBearerTokenOptions{}
+	}
+	// The static token carries no expiry of its own; its lifetime is the
+	// operator's to end.
+	opts.AllowMissingExpiration = true
+	return challenge(auth.RequireBearerToken(verifier, opts)(streamable))
+}
+
+// StaticTokenVerifier accepts exactly one token, compared as fixed-length
+// digests in constant time so a wrong token takes as long to refuse as a
+// nearly right one, and names its bearer agentName.
+func StaticTokenVerifier(token, agentName string) auth.TokenVerifier {
+	want := sha256.Sum256([]byte(token))
+	if agentName == "" {
+		agentName = DefaultAgentName
+	}
+	return func(_ context.Context, got string, _ *http.Request) (*auth.TokenInfo, error) {
+		sum := sha256.Sum256([]byte(strings.TrimSpace(got)))
+		if subtle.ConstantTimeCompare(sum[:], want[:]) != 1 {
+			return nil, fmt.Errorf("%w: /mcp needs `Authorization: Bearer <token>` — the value of %s on the server", auth.ErrInvalidToken, TokenEnv)
+		}
+		return &auth.TokenInfo{UserID: agentName}, nil
+	}
+}
+
+// challenge makes sure a 401 carries a `WWW-Authenticate: Bearer` header,
+// which is what tells an MCP client that it is a credential, not the URL,
+// that is wrong. The SDK's middleware adds one only when it has parameters
+// to put in it (a resource metadata URL, scopes); a plain challenge is still
+// a challenge.
+func challenge(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&challenger{ResponseWriter: w}, r)
+	})
+}
+
+type challenger struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (c *challenger) WriteHeader(code int) {
+	if !c.wrote {
+		c.wrote = true
+		if code == http.StatusUnauthorized && c.Header().Get("WWW-Authenticate") == "" {
+			c.Header().Set("WWW-Authenticate", `Bearer realm="marginalia"`)
+		}
+	}
+	c.ResponseWriter.WriteHeader(code)
+}
+
+func (c *challenger) Write(p []byte) (int, error) {
+	if !c.wrote {
+		c.WriteHeader(http.StatusOK)
+	}
+	return c.ResponseWriter.Write(p)
+}
+
+// Flush keeps streaming working through the wrapper: the SDK's SSE responses
+// flush after every event.
+func (c *challenger) Flush() {
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // Healthz answers a platform's health check with 200 and "ok", with no
@@ -76,42 +161,6 @@ func Transport(ms *mcp.Server, token string) http.Handler {
 func Healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = io.WriteString(w, "ok\n")
-}
-
-// BearerAuth requires `Authorization: Bearer <token>` on every request before
-// next sees it, comparing digests in constant time so a wrong token takes as
-// long to refuse as a nearly right one. A missing or wrong token gets 401 with
-// a `WWW-Authenticate: Bearer` challenge, which is what tells an MCP client
-// that it is a credential, not the URL, that is wrong.
-//
-// An empty token disables the check — the caller has to have decided that is
-// safe (see CheckBind); this function does not know what the listener is
-// bound to.
-func BearerAuth(token string, next http.Handler) http.Handler {
-	if token == "" {
-		return next
-	}
-	want := sha256.Sum256([]byte(token))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !bearerMatches(r.Header.Get("Authorization"), want) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="marginalia"`)
-			http.Error(w, "unauthorized: /mcp needs `Authorization: Bearer <token>` — the value of "+TokenEnv+" on the server", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// bearerMatches checks one Authorization header value against the digest of
-// the configured token. Hashing both sides first means the comparison runs
-// over fixed-length inputs, so not even the token's length is observable.
-func bearerMatches(header string, want [sha256.Size]byte) bool {
-	const scheme = "bearer "
-	if len(header) < len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
-		return false
-	}
-	got := sha256.Sum256([]byte(strings.TrimSpace(header[len(scheme):])))
-	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
 }
 
 // CheckBind refuses to put an unauthenticated MCP endpoint on an interface

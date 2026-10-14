@@ -264,7 +264,7 @@ func (s *Server) handlePostFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	if err := s.append(target, &e); err != nil {
+	if err := s.append(r, target, &e); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -431,7 +431,7 @@ func (s *Server) checkVerdicts(target *Entry) (int, error) {
 
 // handleSessionDone marks the whole set reviewed: one review_done per
 // document, so an agent watching any single log sees the handover finish.
-func (s *Server) handleSessionDone(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleSessionDone(w http.ResponseWriter, r *http.Request) {
 	written := make([]feedback.Event, 0, len(s.docs))
 	for i := range s.docs {
 		e := &s.docs[i]
@@ -443,7 +443,7 @@ func (s *Server) handleSessionDone(w http.ResponseWriter, _ *http.Request) {
 	for i := range s.docs {
 		e := &s.docs[i]
 		event := feedback.Event{Type: feedback.TypeReviewDone, Text: "session"}
-		if err := s.append(e, &event); err != nil {
+		if err := s.append(r, e, &event); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -453,10 +453,13 @@ func (s *Server) handleSessionDone(w http.ResponseWriter, _ *http.Request) {
 }
 
 // append fills in what the page left out and writes the event to that
-// document's log.
-func (s *Server) append(target *Entry, e *feedback.Event) error {
+// document's log. With AuthorOf set, the author is who the request is,
+// whatever the body claimed.
+func (s *Server) append(r *http.Request, target *Entry, e *feedback.Event) error {
 	e.Doc = s.docOf(target).Path
-	if e.Author == "" {
+	if s.opts.AuthorOf != nil {
+		e.Author = s.opts.AuthorOf(r)
+	} else if e.Author == "" {
 		e.Author = s.opts.Author
 	}
 	if e.Ts == "" {

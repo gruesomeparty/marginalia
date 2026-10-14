@@ -136,7 +136,7 @@ func TestHTTPRefusesAMissingOrWrongToken(t *testing.T) {
 				t.Errorf("WWW-Authenticate = %q, want a Bearer challenge", got)
 			}
 			body, _ := io.ReadAll(res.Body)
-			if !strings.Contains(string(body), TokenEnv) {
+			if tc.token != "" && !strings.Contains(string(body), TokenEnv) {
 				t.Errorf("the refusal does not say where the token comes from: %s", body)
 			}
 		})

@@ -358,11 +358,20 @@ users are agents, not humans.
   so single instance, single writer, and nothing polls the store (every R2
   call is billed; `TestHostReadsTheStoreOnceAtStartup` pins zero reads per
   page and one write per comment). Identity is
-  resolved per request before any handler: a human is an edge JWT verified
-  against the issuer's JWKS, an agent is the `/mcp` bearer or OAuth token.
-  Agents append `reply` and `addressed` only; `review_done`, `confirm` and
-  `reopen` are human-only, enforced server-side; `author` is the resolved
-  identity, never the body's claim. Caps and archiving (a prefix move to
+  resolved per request before any handler (`internal/identity`,
+  `hosted/identity.go`): a human is an edge JWT — `Cf-Access-Jwt-Assertion`
+  or the `CF_Authorization` cookie — verified by `identity.Verifier` against
+  the issuer's JWKS with go-jose (cached, refreshed on an unknown `kid`,
+  rate-limited; asymmetric algorithms only), plus `iss`, `aud`, `exp`, `nbf`;
+  an agent is the `/mcp` bearer (`mcpserver.StaticTokenVerifier` behind
+  go-sdk's `RequireBearerToken`, whose `TokenInfo` reaches tool handlers as
+  `req.Extra.TokenInfo`) or, later, an OAuth token. Page routes run under
+  `requireHuman` and refuse an agent credential outright (403); `/mcp` has
+  no tool that writes anything but `reply` and `addressed`; `review_done`,
+  `confirm` and `reopen` are human-only by construction. `author` is the
+  resolved identity, never the body's claim (`server.Options.AuthorOf`).
+  `--insecure-dev-identity` is the laptop escape hatch and is loopback-only.
+  Caps and archiving (a prefix move to
   `archive/`, never a delete) keep a metered deployment bounded. Credentials
   come from env only, and nothing account-specific lives in this repo.
 - Reference implementation to generalize from: Black Mirror's
