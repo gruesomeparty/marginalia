@@ -226,7 +226,7 @@ func TestPublishRefusesBeforeWritingAnything(t *testing.T) {
 		"bad config":      {Docs: []Document{{Name: "a.md", Content: []byte("x")}}, Config: "nonsense: 1\n"},
 		"unknown preset":  {Docs: []Document{{Name: "a.md", Content: []byte("x")}}, Review: "nope"},
 		"unknown theme":   {Docs: []Document{{Name: "a.md", Content: []byte("x")}}, Theme: "nope"},
-		"too large":       {Docs: []Document{{Name: "a.md", Content: bytes.Repeat([]byte("x"), maxDocumentBytes+1)}}},
+		"too large":       {Docs: []Document{{Name: "a.md", Content: bytes.Repeat([]byte("x"), int(DefaultLimits().DocumentBytes)+1)}}},
 		"malformed input": {Docs: []Document{{Name: "a.json", Content: []byte("{")}}},
 	}
 	for name, p := range cases {

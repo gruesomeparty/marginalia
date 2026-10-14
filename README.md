@@ -220,7 +220,29 @@ another machine:
 A name is one plain file name — `../x.md`, `.env` and `a/b.md` are refused,
 not cleaned up — and a publish refuses before writing anything: an
 unsupported format (naming `request-feature`), empty content, an invalid
-config. Each document is capped at 1 MiB until the configurable limits land.
+config, or a **limit**. The host is metered, so what agents can publish is
+capped — and every refusal names the limit and its value, so an agent tells
+the human instead of retrying blindly:
+
+| limit | default | flag / env |
+|---|---|---|
+| bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
+| documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
+| revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
+| publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
+| open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
+| stored bytes, all reviews | 1 GiB | `--limit-stored-bytes` / `MARGINALIA_LIMIT_STORED_BYTES` |
+
+The stored total is tracked in memory (documents on the metadata as a running
+total, logs as they are read once and appended), never by listing the store;
+past it new publishes are refused and a human's note never is. Finished
+reviews are **archived** `--retain-done` (30 days) after their last
+activity, and reviews never marked done after `--retain-open` (90 days): the
+whole review is moved under `archive/` with the store's prefix move — out of
+the inbox, nothing edited, nothing deleted, restorable by moving it back. The
+sweep runs at startup and hourly. Diagrams are `--diagrams=off` in hosted mode
+unless you say otherwise: an agent's input is not worth a headless browser
+per publish.
 
 The operator's side — the edge, the authorization server, the connector —
 is in [docs/hosting.md](docs/hosting.md).
@@ -718,6 +740,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
 | `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
 | `--mcp-oauth-issuer`, `--mcp-oauth-audience`, `--mcp-oauth-jwks-url` | `host` | Accept access tokens from an OAuth authorization server on `/mcp` (the claude.ai connector) |
+| `--limit-*`, `--retain-done`, `--retain-open` | `host` | The caps and retention above |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -730,6 +753,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
 | `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
 | `MARGINALIA_MCP_OAUTH_ISSUER`, `MARGINALIA_MCP_OAUTH_AUDIENCE`, `MARGINALIA_MCP_OAUTH_JWKS_URL` | Defaults for the `--mcp-oauth-*` flags of `host` |
+| `MARGINALIA_LIMIT_*`, `MARGINALIA_RETAIN_DONE`, `MARGINALIA_RETAIN_OPEN` | Defaults for the `--limit-*` and `--retain-*` flags of `host` |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 
