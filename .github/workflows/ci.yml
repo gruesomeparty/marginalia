@@ -78,3 +78,24 @@ jobs:
           HOMEBREW_TAP_TOKEN: ''
       - name: Smoke-test the amd64 image
         run: ./scripts/image-smoke.sh
+  # deploy/cloudflare checked as far as a deploy goes without an account: the
+  # Worker typechecks against the runtime its compatibility date names, and
+  # wrangler bundles it and validates the config. The image build is left out
+  # (--containers-rollout=none): a release PR moves the Dockerfile's tag to a
+  # version whose image is only published once that PR is merged, and the
+  # tag itself is pinned to the release by deploy_template_test.go.
+  cloudflare-template:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/cloudflare
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: deploy/cloudflare/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npx wrangler deploy --dry-run --outdir dist --containers-rollout=none

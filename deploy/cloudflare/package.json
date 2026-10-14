@@ -1,0 +1,18 @@
+{
+  "name": "marginalia-cloudflare",
+  "private": true,
+  "description": "Deploys marginalia host as a Cloudflare Container behind a Worker",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wrangler": "^4.151.0"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  }
+}
