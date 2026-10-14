@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"{{with .Theme.Palette}} data-palette="{{.}}"{{end}}{{with .Theme.Mode}} data-mode="{{.}}"{{end}}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marginalia — inbox</title>
+<script>
+// Before first paint: the reviewer's display choice, as on the review page.
+// Nothing else on this page needs a script.
+(function(){
+  try{
+    var mode = localStorage.getItem("marginalia.mode");
+    if(mode === "light" || mode === "dark") document.documentElement.dataset.mode = mode;
+    else if(mode === "system") delete document.documentElement.dataset.mode;
+  }catch(e){}
+})();
+</script>
+<style>
+{{template "tokens.css"}}*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:var(--lh-ui);font-size:var(--fs-base)}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:var(--sp-4) var(--sp-5);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5)}
+header strong{font-size:var(--fs-lg)}
+header .count{color:var(--muted)}
+main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
+.tabs{display:flex;gap:var(--sp-2);margin:0 0 var(--sp-5);padding:0;list-style:none;flex-wrap:wrap}
+.tabs a{display:inline-block;padding:var(--sp-2) var(--sp-4);border:1px solid var(--rule);border-radius:var(--r-pill);color:var(--fg);text-decoration:none}
+.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.tabs a:focus-visible{outline:none;box-shadow:var(--ring)}
+.tabs .n{color:inherit;opacity:.75;margin-left:var(--sp-2)}
+.list{display:flex;flex-direction:column;gap:var(--sp-3);margin:0;padding:0;list-style:none}
+.review{display:block;padding:var(--sp-4) var(--sp-5);background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:var(--r-tab-lg);box-shadow:var(--shadow);color:inherit;text-decoration:none}
+.review:hover{border-color:var(--accent)}
+.review:focus-visible{outline:none;box-shadow:var(--ring)}
+.review .top{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4)}
+.review .title{font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
+.review .status{margin-left:auto;font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
+.review.s-awaiting{border-left-color:var(--marker)}
+.review.s-awaiting .status{background:var(--marker);color:var(--on-marker)}
+.review.s-in_progress{border-left-color:var(--accent)}
+.review.s-replied{border-left-color:var(--accent)}
+.review.s-replied .status{background:var(--accent);color:var(--on-accent)}
+.review.s-done{border-left-color:var(--ok)}
+.review.s-done .status{background:color-mix(in srgb,var(--ok) var(--tint-strong),transparent)}
+.review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);color:var(--muted);font-size:var(--fs-sm)}
+.review .counts{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);font-size:var(--fs-sm)}
+.review .counts .warn{color:var(--bad)}
+.empty{color:var(--muted);padding:var(--sp-6) 0;text-align:center}
+@media (max-width:40rem){
+  main{margin:var(--sp-5) auto;padding:0 var(--sp-4)}
+  .review .status{margin-left:0}
+}
+@media (prefers-reduced-motion:no-preference){.review{transition:border-color .12s}}
+</style>
+</head>
+<body>
+<header>
+  <strong>Marginalia</strong>
+  <span class="count">{{.All}} review{{if ne .All 1}}s{{end}}</span>
+</header>
+<main>
+  <nav aria-label="Which reviews to show">
+    <ul class="tabs">
+      <li><a href="/?tab=needs-me"{{if eq .Tab "needs-me"}} aria-current="page"{{end}}>Needs me<span class="n">{{.NeedsMe}}</span></a></li>
+      <li><a href="/?tab=done"{{if eq .Tab "done"}} aria-current="page"{{end}}>Done<span class="n">{{.Done}}</span></a></li>
+      <li><a href="/?tab=all"{{if eq .Tab "all"}} aria-current="page"{{end}}>All<span class="n">{{.All}}</span></a></li>
+    </ul>
+  </nav>
+  {{if .Rows}}<ul class="list">{{range .Rows}}
+    <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
+      <span class="top"><span class="title">{{.Title}}</span><span class="status">{{.StatusLabel}}</span></span>
+      <span class="meta">
+        {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
+        <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
+        <span>last activity <time datetime="{{.WhenISO}}">{{.When}}</time></span>
+        <span>revision {{.Revision}}</span>
+        <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
+      </span>
+      {{if .HasCounts}}<span class="counts">
+        <span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>
+        {{if .Outstanding}}<span>{{.Outstanding}} outstanding</span>{{end}}
+        {{if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
+        {{if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
+      </span>{{end}}
+    </a></li>{{end}}
+  </ul>{{else}}<p class="empty">{{.Empty}}</p>{{end}}
+</main>
+</body>
+</html>

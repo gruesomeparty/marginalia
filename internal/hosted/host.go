@@ -375,6 +375,13 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	if err := h.store.PutBlob(ctx, metaKey(id, n), raw); err != nil {
 		return nil, fmt.Errorf("hosted: storing metadata: %w", err)
 	}
+	// Warm the logs now, as startup does, so the first render of the inbox
+	// or the page is served from memory like every one after it.
+	for _, e := range entries {
+		if _, err := e.Store.Load(); err != nil {
+			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+		}
+	}
 	h.mu.Lock()
 	h.reviews[id] = r
 	h.mu.Unlock()
@@ -423,6 +430,7 @@ func (h *Host) routes() {
 	// first. /mcp is the agent's, and a credential for one is refused by
 	// the other.
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
+	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {
@@ -437,15 +445,6 @@ func (h *Host) routes() {
 	})))
 	mux.Handle("/r/{id}/", h.requireHuman(http.HandlerFunc(h.handleReview)))
 	h.mux = mux
-}
-
-// handleRoot is a placeholder until the inbox (#99): it says what is here.
-func (h *Host) handleRoot(w http.ResponseWriter, _ *http.Request) {
-	h.mu.RLock()
-	n := len(h.reviews)
-	h.mu.RUnlock()
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "marginalia host: %d review(s). Open a review at its own URL (/r/<id>/).\n", n)
 }
 
 // handleReview hands a request under /r/<id>/ to that review's server, with
