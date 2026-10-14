@@ -76,7 +76,10 @@ func (s *Server) stop(id string) error {
 }
 
 // Close stops every review this server started and waits for all of them.
+// Waits in flight are interrupted first, so nothing blocks on a human who is
+// no longer being served.
 func (s *Server) Close() {
+	s.interrupt()
 	s.mu.Lock()
 	ids := make([]string, 0, len(s.sessions))
 	for id := range s.sessions {
