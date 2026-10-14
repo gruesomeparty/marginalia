@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 // be configured without a command line and a secret never rides on one.
 const (
 	StoreEnv        = "MARGINALIA_STORE"
+	PublicURLEnv    = "MARGINALIA_PUBLIC_URL"
 	HumanIssuerEnv  = "MARGINALIA_HUMAN_JWT_ISSUER"
 	HumanAudEnv     = "MARGINALIA_HUMAN_JWT_AUDIENCE"
 	HumanJWKSEnv    = "MARGINALIA_HUMAN_JWKS_URL"
@@ -78,6 +80,10 @@ whose email becomes the author of what they write; and an agent, holding
 ` + mcpserver.TokenEnv + ` is required on anything but a loopback address.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			var err error
+			if publicURL, err = publicOrigin(firstOf(publicURL, os.Getenv(PublicURLEnv))); err != nil {
+				return err
+			}
 			token := os.Getenv(mcpserver.TokenEnv)
 			oauthIssuer = firstOf(oauthIssuer, os.Getenv(OAuthIssuerEnv))
 			// An authorization server is a credential for /mcp too: with
@@ -107,7 +113,7 @@ whose email becomes the author of what they write; and an agent, holding
 			var oauth *ident.Verifier
 			if oauthIssuer != "" {
 				if publicURL == "" && oauthAud == "" {
-					return errors.New("--mcp-oauth-issuer needs --public-url (the protected resource is <public-url>/mcp) or an explicit --mcp-oauth-audience")
+					return errors.New("--mcp-oauth-issuer needs --public-url ($" + PublicURLEnv + "; the protected resource is <public-url>/mcp) or an explicit --mcp-oauth-audience")
 				}
 				jwks := firstOf(oauthJWKS, os.Getenv(OAuthJWKSEnv))
 				if jwks == "" {
@@ -155,7 +161,7 @@ whose email becomes the author of what they write; and an agent, holding
 	}
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:8080", "address to listen on (e.g. :8080 in a container)")
 	cmd.Flags().StringVar(&storeURI, "store", "", "where review state lives: file://<dir> (default: $"+StoreEnv+", else "+hosted.DefaultStoreURI+")")
-	cmd.Flags().StringVar(&publicURL, "public-url", "", "origin reviewers and agents reach this host at, e.g. https://review.example (default: derived from --addr, which is only right on a laptop)")
+	cmd.Flags().StringVar(&publicURL, "public-url", "", "origin reviewers and agents reach this host at, e.g. https://review.example (default: $"+PublicURLEnv+", else derived from --addr, which is only right on a laptop)")
 	cmd.Flags().StringVar(&issuer, "human-jwt-issuer", "", "issuer of the edge's JWT on page requests, e.g. https://<team>.cloudflareaccess.com ($"+HumanIssuerEnv+")")
 	cmd.Flags().StringVar(&audience, "human-jwt-audience", "", "audience the edge's JWT must carry, e.g. the Access application's AUD tag ($"+HumanAudEnv+")")
 	cmd.Flags().StringVar(&jwksURL, "human-jwks-url", "", "where the issuer publishes its keys (default: the Access certs URL, or OpenID discovery) ($"+HumanJWKSEnv+")")
@@ -282,6 +288,25 @@ func humanVerifier(ctx context.Context, issuer, audience, jwksURL string) (*iden
 		}
 	}
 	return &ident.Verifier{Issuer: issuer, Audience: audience, JWKSURL: jwksURL}, nil
+}
+
+// publicOrigin checks the public URL is an origin — scheme and host, nothing
+// after — because every link the host hands out is that string plus a path
+// it mounts at the root. Unchecked, a missing scheme or a path prefix starts
+// fine and breaks every notification, inbox link and OAuth metadata document
+// instead. Empty means "derive it", which Serve does.
+func publicOrigin(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", fmt.Errorf("public URL %q (--public-url, $%s) is not an http(s) origin, e.g. https://review.example", raw, PublicURLEnv)
+	}
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return "", fmt.Errorf("public URL %q (--public-url, $%s) has more than an origin: the host serves at its root, so give only scheme and host", raw, PublicURLEnv)
+	}
+	return u.Scheme + "://" + u.Host, nil
 }
 
 func firstOf(values ...string) string {
