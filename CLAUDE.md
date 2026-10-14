@@ -344,8 +344,15 @@ users are agents, not humans.
   `reviews/<id>/rev/<n>/<name>` (immutable snapshots), `reviews/<id>/log/<name>`
   (the feedback log, `feedback.OpenStore`). Ids are 128 random bits, URL-safe;
   `hosted.CheckName` refuses a document name that is not one plain segment.
-  Agents publish bytes plus a name; a snapshot is immutable and a republish is
-  a new revision, re-anchored through `feedback.Materialize`. `hosted.Open`
+  Agents publish bytes plus a name (`publish_document`, `hosted/tools.go`;
+  `review_document` is deliberately not registered there); a snapshot is
+  immutable and a republish (`review_id` given → `Host.Republish`, revision
+  n+1, framing inherited unless resent, the log keys unchanged) re-anchors
+  every note through `feedback.Materialize`. The hosted tools are the stdio
+  tools over `mcpserver.Target` — `EventsSince`, `StatusOf`, `WaitForDone`,
+  `Answer` are exported for exactly that — so the two modes cannot drift in
+  what they report, and they wait on the write-through token, never a file.
+  `hosted.Open`
   lists the store once and rebuilds every review; the process then runs on
   `storage.WriteThrough` — logs in memory, appends to the backend first —
   so single instance, single writer, and nothing polls the store (every R2

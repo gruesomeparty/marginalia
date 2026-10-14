@@ -43,6 +43,16 @@ then a URL and a bearer token rather than a command:
 The token is `MARGINALIA_MCP_TOKEN` on the server, which refuses to listen on
 anything but loopback without one. Everything below is the same either way.
 
+Against a **hosted** instance (`marginalia host`, one always-on server you
+reach the same way) there is no shared filesystem, so the first step changes:
+call `publish_document {documents: [{name, content}], title, review}` with the
+document's text instead of `review_document {paths}`, and pass the
+`review_id` it returns (plus the document `name` for a reply) wherever the
+tools below take a `session_id` or a path. To revise, call `publish_document`
+again with the `review_id`: the reviewer's notes re-anchor against the new
+text, stale where a block changed and orphaned where it is gone, exactly as
+`review_status` reports after a local edit.
+
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
 2. Give the human that URL and say what you want looked at.

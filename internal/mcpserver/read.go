@@ -60,6 +60,31 @@ type ReadySuggestion struct {
 	Current string `json:"current"`
 }
 
+// Target is one document a read or a write is about: what the result calls
+// it, how to parse it as it reads now, and the log it keeps. The stdio tools
+// make one from a path on disk; a hosted instance makes one from a review's
+// current revision and the log under its key. Everything below works on a
+// Target so the two modes share one implementation of every read.
+type Target struct {
+	Name  string
+	Parse func() (*document.Document, error)
+	Store *feedback.Store
+}
+
+// TargetOf is the disk-backed Target: the document at path and the log
+// beside it.
+func TargetOf(path string) Target {
+	return Target{Name: path, Parse: func() (*document.Document, error) { return document.Parse(path) }, Store: feedback.NewStore(path)}
+}
+
+func targetsOf(paths []string) []Target {
+	out := make([]Target, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, TargetOf(p))
+	}
+	return out
+}
+
 // docsOf resolves what a tool call named into document paths, confined to the
 // server's root. A session id is a convenience; the paths are the identity, so
 // every read works whether or not a server is running.
@@ -112,13 +137,13 @@ func (s *Server) normalizeCursor(cursor map[string]int) map[string]int {
 	return out
 }
 
-// eventsSince reads one document's log from the cursor on.
-func eventsSince(path string, cursor int) (DocEvents, error) {
-	events, err := feedback.NewStore(path).Load()
+// EventsSince reads one document's log from the cursor on.
+func EventsSince(t Target, cursor int) (DocEvents, error) {
+	events, err := t.Store.Load()
 	if err != nil {
 		return DocEvents{}, err
 	}
-	out := DocEvents{Doc: path, Cursor: len(events), Events: []Noted{}}
+	out := DocEvents{Doc: t.Name, Cursor: len(events), Events: []Noted{}}
 	for _, e := range events {
 		if e.Type == feedback.TypeReviewDone {
 			out.Done = true
@@ -135,15 +160,15 @@ func eventsSince(path string, cursor int) (DocEvents, error) {
 	return out, nil
 }
 
-// statusOf materializes one document's log against the document as it now
+// StatusOf materializes one document's log against the document as it now
 // reads. This is the pipeline `cmd/suggestions.go` runs with no server, which
 // is exactly why the MCP reads need none either.
-func statusOf(path string) (DocStatus, error) {
-	doc, err := document.Parse(path)
+func StatusOf(t Target) (DocStatus, error) {
+	doc, err := t.Parse()
 	if err != nil {
 		return DocStatus{}, err
 	}
-	events, err := feedback.NewStore(path).Load()
+	events, err := t.Store.Load()
 	if err != nil {
 		return DocStatus{}, err
 	}
@@ -156,7 +181,7 @@ func statusOf(path string) (DocStatus, error) {
 	res := feedback.Materialize(events, blocks)
 	ready, needs := res.Suggestions()
 	out := DocStatus{
-		Doc: path, Blocks: len(doc.Blocks),
+		Doc: t.Name, Blocks: len(doc.Blocks),
 		Comments: res.Comments, Replies: res.Replies,
 		Outstanding: res.Outstanding, Addressed: res.Addressed,
 		Confirmed: res.Confirmed, Reopened: res.Reopened,

@@ -227,7 +227,7 @@ func (s *Server) feedbackSince(_ context.Context, _ *mcp.CallToolRequest, in rea
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
-	out, _, err := readAll(docs, s.normalizeCursor(in.Cursor))
+	out, _, err := readAll(targetsOf(docs), s.normalizeCursor(in.Cursor))
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
@@ -250,7 +250,7 @@ func (s *Server) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 	ctx, cancel := s.untilClosed(ctx)
 	defer cancel()
-	done, reason, events, err := waitForDone(ctx, docs, s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
+	done, reason, events, err := WaitForDone(ctx, targetsOf(docs), s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
@@ -273,7 +273,7 @@ func (s *Server) closeReview(_ context.Context, _ *mcp.CallToolRequest, in close
 func statuses(docs []string) ([]DocStatus, error) {
 	out := make([]DocStatus, 0, len(docs))
 	for _, d := range docs {
-		st, err := statusOf(d)
+		st, err := StatusOf(TargetOf(d))
 		if err != nil {
 			return nil, err
 		}
