@@ -145,6 +145,33 @@ For any other MCP client:
 Add `"--root", "<dir>"` to confine it somewhere other than the working
 directory; `MARGINALIA_MCP_ROOT` does the same without a flag.
 
+**From another machine** — a Claude Code session on your laptop driving a
+review server on the box where the documents live, say, over Tailscale — the
+same tools speak Streamable HTTP:
+
+```bash
+export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"   # required off loopback
+marginalia mcp --http 100.64.0.9:8080 --host 100.64.0.9 --root ~/docs
+```
+
+`--http` is where the MCP endpoint listens (`/mcp`, with `/healthz` beside
+it for health checks); `--host` is still where the review pages bind, so the
+URL a tool hands back is one your phone can open. Without
+`MARGINALIA_MCP_TOKEN` the command refuses to bind anything but a loopback
+address: an unauthenticated MCP endpoint on a reachable interface is not an
+option. The client sends the token as a bearer:
+
+```jsonc
+// .mcp.json, or any client that takes an HTTP server
+{ "mcpServers": { "marginalia": {
+    "type": "http",
+    "url": "http://100.64.0.9:8080/mcp",
+    "headers": { "Authorization": "Bearer ${MARGINALIA_MCP_TOKEN}" } } } }
+```
+
+Stdout stays clean in this mode too — notices go to stderr — and SIGINT or
+SIGTERM drains in-flight calls before the process exits, as `serve` does.
+
 | Tool | What it does |
 |---|---|
 | `review_document` | Serve a document (or a set); returns the URL to hand over and the vocabulary you will read back. |
@@ -583,7 +610,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `addressed <doc>` | Record that you acted on a note, so the reviewer can check it |
 | `suggestions <doc\|dir>...` | The `suggest_edit`s that are safe to apply verbatim |
 | `review list` / `review show <name>` | Inspect the shipped framings |
-| `mcp` | Speak MCP over stdio |
+| `mcp` | Speak MCP over stdio, or over Streamable HTTP with `--http` |
 | `version` | Print version information |
 
 ### Key flags
@@ -602,6 +629,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `-o, --out` | `export` | Output file; default `<doc>.review.html` |
 | `--doc <path>` | `import` | Which log to append to, when the file does not say |
 | `--root <dir>` | `mcp` | Confine every path a tool call may reach |
+| `--http <addr>` | `mcp` | Serve the tools over Streamable HTTP at `/mcp` instead of stdio; off loopback, `MARGINALIA_MCP_TOKEN` must be set |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -609,6 +637,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | | |
 |---|---|
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
+| `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` requires on `/mcp`; mandatory off loopback |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 

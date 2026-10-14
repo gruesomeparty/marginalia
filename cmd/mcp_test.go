@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,4 +126,22 @@ func (w *lockedBuffer) String() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.b.String()
+}
+
+// An MCP endpoint reachable from other machines with no credential is not a
+// configuration anyone meant. The command refuses before it binds anything,
+// and names the variable that would make it acceptable.
+func TestMCPHTTPOffLoopbackNeedsAToken(t *testing.T) {
+	t.Setenv("MARGINALIA_MCP_TOKEN", "")
+	root := newRootCmd()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"mcp", "--http", "0.0.0.0:0", "--root", t.TempDir()})
+	err := executeRoot(root)
+	if err == nil {
+		t.Fatal("mcp --http 0.0.0.0:0 started with no token set")
+	}
+	if !strings.Contains(err.Error(), "MARGINALIA_MCP_TOKEN") {
+		t.Errorf("the refusal does not name MARGINALIA_MCP_TOKEN: %v", err)
+	}
 }
