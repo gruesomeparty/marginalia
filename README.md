@@ -188,7 +188,13 @@ marginalia host --addr :8080 --store file:///data --public-url https://review.ex
 
 One listener, four surfaces: `/` the inbox, `/r/<id>/` one review's pages
 and API exactly as `serve` mounts them at `/`, `/mcp` the tools over
-Streamable HTTP, `/healthz` for the platform. Every byte of review state goes
+Streamable HTTP, `/healthz` for the platform. The **inbox** is every review,
+newest activity first, with what each one is waiting on — *awaiting you*, *in
+progress*, *done*, or *agent replied since you finished* (the revision loop
+coming back) — and its counts (notes, outstanding, stale, unclaimed) from the
+same materialization the review page shows. Tabs *Needs me* / *Done* / *All*
+live in the query string; `GET /api/reviews` is the same list as JSON. It is
+server-rendered from memory, needs no script to read, and works on a phone. Every byte of review state goes
 through `--store` (`MARGINALIA_STORE`), laid out the same on every backend —
 `reviews/<id>/meta/<n>.json` (versioned metadata, highest wins),
 `reviews/<id>/rev/<n>/<name>` (immutable document snapshots),

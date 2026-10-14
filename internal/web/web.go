@@ -13,12 +13,15 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
-//go:embed review.html.tmpl
+//go:embed review.html.tmpl inbox.html.tmpl tokens.css
 var files embed.FS
 
+// One template set: the review page, the inbox, and the design tokens both
+// include — the two layers of the stylesheet live in tokens.css so a page
+// cannot drift from the other by growing a palette of its own.
 var tmpl = template.Must(template.New("review.html.tmpl").
 	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}).
-	ParseFS(files, "review.html.tmpl"))
+	ParseFS(files, "review.html.tmpl", "inbox.html.tmpl", "tokens.css"))
 
 // NavDoc is one document of the review set as the navigation tree sees it.
 type NavDoc struct {

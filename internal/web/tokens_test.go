@@ -11,31 +11,63 @@ import (
 // new rule that hardcodes a colour or invents a nineteenth font size fails
 // this test with the line that did it.
 
-// styleBlock is the page's one stylesheet, and `rules` is it without the
-// token and palette declarations — the part that must speak only in tokens.
-func styleBlock(t *testing.T) (all, rules string) {
+// pages are the templates that carry a stylesheet. Each includes tokens.css
+// — the token and palette declarations, the one place literal values may
+// live — and then its own rules, which must speak only in tokens.
+var pages = []string{"review.html.tmpl", "inbox.html.tmpl"}
+
+// tokens is the declarations file, shared by every page.
+func tokens(t *testing.T) string {
 	t.Helper()
-	raw, err := files.ReadFile("review.html.tmpl")
+	raw, err := files.ReadFile("tokens.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(raw)
-	open, close := strings.Index(s, "<style>"), strings.Index(s, "</style>")
-	if open < 0 || close < 0 {
-		t.Fatal("the template has no stylesheet")
+	return string(raw)
+}
+
+// sheet is one page's stylesheet: `all` is tokens plus rules, which is what
+// the browser sees; `rules` is the page's own part.
+type sheet struct {
+	name       string
+	all, rules string
+}
+
+func sheets(t *testing.T) []sheet {
+	t.Helper()
+	tok := tokens(t)
+	out := make([]sheet, 0, len(pages))
+	for _, name := range pages {
+		raw, err := files.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(raw)
+		open, close := strings.Index(s, "<style>"), strings.Index(s, "</style>")
+		if open < 0 || close < 0 {
+			t.Fatalf("%s has no stylesheet", name)
+		}
+		style := s[open:close]
+		if !strings.Contains(style, `{{template "tokens.css"}}`) {
+			t.Fatalf("%s does not include tokens.css — a page with tokens of its own drifts from the others", name)
+		}
+		start := strings.Index(style, "*{box-sizing:border-box}")
+		if start < 0 {
+			t.Fatalf("%s: cannot find where the rules begin", name)
+		}
+		out = append(out, sheet{name: name, all: tok + style[start:], rules: style[start:]})
 	}
-	all = s[open:close]
-	// Everything from the first real rule on. The declarations above it are
-	// where literal values are allowed to live.
-	start := strings.Index(all, "*{box-sizing:border-box}")
-	if start < 0 {
-		t.Fatal("cannot find where the declarations end and the rules begin")
-	}
-	return all, all[start:]
+	return out
 }
 
 func TestRulesUseTokensNotLiterals(t *testing.T) {
-	_, rules := styleBlock(t)
+	for _, s := range sheets(t) {
+		t.Run(s.name, func(t *testing.T) { rulesUseTokens(t, s.rules) })
+	}
+}
+
+func rulesUseTokens(t *testing.T, rules string) {
+	t.Helper()
 
 	if hexes := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`).FindAllString(rules, -1); len(hexes) > 0 {
 		t.Errorf("%d raw colour(s) outside the palette declarations: %v — add a token instead", len(hexes), hexes)
@@ -86,7 +118,13 @@ func TestRulesUseTokensNotLiterals(t *testing.T) {
 // Every variable a rule reads must be defined, or a theme silently falls back
 // to nothing. This catches a typo'd token, which is otherwise invisible.
 func TestEveryTokenReadIsDefined(t *testing.T) {
-	all, rules := styleBlock(t)
+	for _, s := range sheets(t) {
+		t.Run(s.name, func(t *testing.T) { everyTokenDefined(t, s.all, s.rules) })
+	}
+}
+
+func everyTokenDefined(t *testing.T, all, rules string) {
+	t.Helper()
 	defined := map[string]bool{}
 	for _, m := range regexp.MustCompile(`(--[a-z0-9-]+)\s*:`).FindAllStringSubmatch(all, -1) {
 		defined[m[1]] = true
@@ -110,7 +148,7 @@ func TestEveryTokenReadIsDefined(t *testing.T) {
 // in the light root and never redefined for dark, so every dark badge wore the
 // light palette's yellow until this test existed.
 func TestEveryPaletteDefinesEveryColour(t *testing.T) {
-	all, _ := styleBlock(t)
+	all := tokens(t)
 	// Each declaration block that sets --bg is a palette: it is claiming to
 	// paint the page, so it owes the whole set.
 	required := []string{"--bg", "--fg", "--muted", "--rule", "--accent", "--marker", "--card", "--on-accent", "--on-marker", "--ok", "--bad", "--tok-kw", "--tok-str", "--tok-num", "--tok-com"}
@@ -130,7 +168,7 @@ func TestEveryPaletteDefinesEveryColour(t *testing.T) {
 // The tokens themselves live in one place, so a palette cannot quietly
 // redefine a radius or a font size and make two themes lay out differently.
 func TestPalettesDefineColoursOnly(t *testing.T) {
-	all, _ := styleBlock(t)
+	all := tokens(t)
 	reads := regexp.MustCompile(`var\([^)]*\)`)
 	for _, block := range regexp.MustCompile(`\{[^{}]*--bg:[^{}]*\}`).FindAllString(all, -1) {
 		// A palette may *read* a shape token — --shadow is palette-defined

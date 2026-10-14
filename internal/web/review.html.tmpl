@@ -19,50 +19,7 @@
 })();
 </script>
 <style>
-/* The design language. Two layers, and the split is the rule: everything here
-   is palette-invariant — type scale, spacing, radii, elevation, focus ring,
-   accent tints — and a palette below may define colour tokens only. A palette
-   that has to redefine a radius is a bug in the component, not in the palette.
-
-   This exists because the stylesheet grew a rule at a time: eighteen distinct
-   font sizes, ten radii, the same sans stack written out twelve times, and
-   thirteen raw hexes outside the palette blocks. Adding a surface meant
-   guessing which existing rule to imitate. */
-:root{
-  /* Type. --fs-base is the UI size everything else steps from. */
-  --fs-2xs:.68rem;--fs-xs:.72rem;--fs-sm:.78rem;--fs-base:.85rem;--fs-md:.9rem;--fs-lg:1rem;
-  --lh-tight:1.25;--lh-ui:1.5;--lh-body:1.6;
-  --serif:Georgia,'Times New Roman',serif;
-  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  /* Space. Six steps, which is what the thirty-two hand-picked paddings
-     actually wanted to be. */
-  --sp-1:.2rem;--sp-2:.35rem;--sp-3:.5rem;--sp-4:.75rem;--sp-5:1rem;--sp-6:1.5rem;
-  /* Shape. --r-tab is the left-ruled card: square where the rule is. */
-  --r-sm:4px;--r-md:6px;--r-lg:8px;--r-pill:999px;--r-round:50%;
-  --r-tab:0 var(--r-md) var(--r-md) 0;--r-tab-lg:0 var(--r-lg) var(--r-lg) 0;
-  /* Depth and focus. */
-  --e-1:0 1px 3px rgba(0,0,0,.12);--e-2:0 2px 10px rgba(0,0,0,.18);
-  --ring:0 0 0 2px var(--accent);
-  /* Accent tints, named rather than spelled as percentages at each use. */
-  --tint-weak:6%;--tint:7%;--tint-strong:12%;
-}
-/* A palette is a set of variables and light/dark is a mode, so the theme the
-   agent served and the one the reviewer picked are the same mechanism. Order
-   matters here: the palette blocks come after the default ones.
-
-   Colour only. --on-accent and --on-marker are the text that goes *on* those
-   fills, which is why they are palette-defined rather than assumed white. */
-:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:var(--e-1);--on-accent:#fff;--on-marker:#000;--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#8a8a84}
-:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}
-@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}}
-/* Catppuccin Latte / Mocha, as a named option beside the default. */
-:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#6c6f85;--rule:#ccd0da;--accent:#1e66f5;--marker:#df8e1d;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--on-accent:#eff1f5;--on-marker:#4c4f69;--ok:#40a02b;--bad:#d20f39;--tok-kw:#8839ef;--tok-str:#40a02b;--tok-num:#fe640b;--tok-com:#9ca0b0}
-:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
-@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
-/* Mono stack: prefer a programming font the reviewer may already have — no
-   webfont may be fetched — and ligate =>, != and -> where one is present. */
-:root{--mono:"JetBrains Mono","Fira Code","Cascadia Code","Iosevka","Victor Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-*{box-sizing:border-box}
+{{template "tokens.css"}}*{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--serif);line-height:1.6}
 header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:var(--sans);font-size:var(--fs-base)}
