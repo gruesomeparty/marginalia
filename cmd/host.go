@@ -7,8 +7,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -47,7 +49,11 @@ func newHostCmd() *cobra.Command {
 		oauthIssuer string
 		oauthAud    string
 		oauthJWKS   string
+		limits      hosted.Limits
+		diagramMode string
+		mmdc        string
 	)
+	defaults := hosted.DefaultLimits()
 	cmd := &cobra.Command{
 		Use:   "host",
 		Short: "Run one always-on instance that agents publish reviews to over remote MCP",
@@ -112,11 +118,19 @@ whose email becomes the author of what they write; and an agent, holding
 				}
 				oauth = &ident.Verifier{Issuer: oauthIssuer, Audience: aud, JWKSURL: jwks}
 			}
+			if err := limitsFromEnv(&limits); err != nil {
+				return err
+			}
+			drawer, err := diagrams(diagramMode, mmdc)
+			if err != nil {
+				return err
+			}
 			h, err := hosted.Open(ctx, hosted.Options{
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
 				HumanAuth: humanAuth, DevIdentity: devIdentity,
 				OAuth: oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
+				Limits: limits, Diagrams: drawer,
 			})
 			if err != nil {
 				return err
@@ -143,7 +157,75 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&oauthIssuer, "mcp-oauth-issuer", "", "OAuth authorization server whose access tokens /mcp accepts, e.g. for the claude.ai connector ($"+OAuthIssuerEnv+")")
 	cmd.Flags().StringVar(&oauthAud, "mcp-oauth-audience", "", "audience those tokens must carry (default: <public-url>/mcp) ($"+OAuthAudEnv+")")
 	cmd.Flags().StringVar(&oauthJWKS, "mcp-oauth-jwks-url", "", "where that server publishes its keys (default: OpenID discovery) ($"+OAuthJWKSEnv+")")
+	cmd.Flags().Int64Var(&limits.DocumentBytes, "limit-document-bytes", 0, fmt.Sprintf("largest document an agent may publish (default %d; $MARGINALIA_LIMIT_DOCUMENT_BYTES)", defaults.DocumentBytes))
+	cmd.Flags().IntVar(&limits.DocumentsPerPublish, "limit-documents-per-publish", 0, fmt.Sprintf("most documents in one publish (default %d; $MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH)", defaults.DocumentsPerPublish))
+	cmd.Flags().IntVar(&limits.RevisionsPerReview, "limit-revisions", 0, fmt.Sprintf("most revisions of one review (default %d; $MARGINALIA_LIMIT_REVISIONS)", defaults.RevisionsPerReview))
+	cmd.Flags().IntVar(&limits.PublishesPerHour, "limit-publishes-per-hour", 0, fmt.Sprintf("most publishes per agent identity per hour (default %d; $MARGINALIA_LIMIT_PUBLISHES_PER_HOUR)", defaults.PublishesPerHour))
+	cmd.Flags().IntVar(&limits.OpenReviews, "limit-open-reviews", 0, fmt.Sprintf("most reviews not yet marked done (default %d; $MARGINALIA_LIMIT_OPEN_REVIEWS)", defaults.OpenReviews))
+	cmd.Flags().Int64Var(&limits.StoredBytes, "limit-stored-bytes", 0, fmt.Sprintf("most bytes held across every review, past which new publishes are refused — never a human's note (default %d; $MARGINALIA_LIMIT_STORED_BYTES)", defaults.StoredBytes))
+	cmd.Flags().DurationVar(&limits.RetainDone, "retain-done", 0, fmt.Sprintf("how long a finished review stays after its last activity before it is archived (default %s; $MARGINALIA_RETAIN_DONE)", defaults.RetainDone))
+	cmd.Flags().DurationVar(&limits.RetainOpen, "retain-open", 0, fmt.Sprintf("the same for a review never marked done (default %s; $MARGINALIA_RETAIN_OPEN)", defaults.RetainOpen))
+	cmd.Flags().StringVar(&diagramMode, "diagrams", "off", "draw mermaid diagrams: off (the default here — an agent's input is not worth a browser per publish), auto (when mermaid-cli is installed)")
+	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
+}
+
+// limitsFromEnv fills unset limits from the MARGINALIA_LIMIT_* and
+// MARGINALIA_RETAIN_* variables, so a container can be capped without a
+// command line. A flag that was set wins.
+func limitsFromEnv(l *hosted.Limits) error {
+	i64 := func(dst *int64, name string) error {
+		if *dst != 0 {
+			return nil
+		}
+		if v := os.Getenv(name); v != "" {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return fmt.Errorf("%s=%q: %w", name, v, err)
+			}
+			*dst = n
+		}
+		return nil
+	}
+	i := func(dst *int, name string) error {
+		var n int64
+		if *dst != 0 {
+			return nil
+		}
+		if err := i64(&n, name); err != nil {
+			return err
+		}
+		*dst = int(n)
+		return nil
+	}
+	d := func(dst *time.Duration, name string) error {
+		if *dst != 0 {
+			return nil
+		}
+		if v := os.Getenv(name); v != "" {
+			dur, err := time.ParseDuration(v)
+			if err != nil {
+				return fmt.Errorf("%s=%q: %w", name, v, err)
+			}
+			*dst = dur
+		}
+		return nil
+	}
+	for _, err := range []error{
+		i64(&l.DocumentBytes, "MARGINALIA_LIMIT_DOCUMENT_BYTES"),
+		i(&l.DocumentsPerPublish, "MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH"),
+		i(&l.RevisionsPerReview, "MARGINALIA_LIMIT_REVISIONS"),
+		i(&l.PublishesPerHour, "MARGINALIA_LIMIT_PUBLISHES_PER_HOUR"),
+		i(&l.OpenReviews, "MARGINALIA_LIMIT_OPEN_REVIEWS"),
+		i64(&l.StoredBytes, "MARGINALIA_LIMIT_STORED_BYTES"),
+		d(&l.RetainDone, "MARGINALIA_RETAIN_DONE"),
+		d(&l.RetainOpen, "MARGINALIA_RETAIN_OPEN"),
+	} {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // humanVerifier builds the edge-JWT verifier from what was configured, or

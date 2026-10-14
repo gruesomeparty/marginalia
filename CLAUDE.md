@@ -389,9 +389,20 @@ users are agents, not humans.
   `confirm` and `reopen` are human-only by construction. `author` is the
   resolved identity, never the body's claim (`server.Options.AuthorOf`).
   `--insecure-dev-identity` is the laptop escape hatch and is loopback-only.
-  Caps and archiving (a prefix move to
-  `archive/`, never a delete) keep a metered deployment bounded. Credentials
-  come from env only, and nothing account-specific lives in this repo.
+  Caps and archiving (`hosted/limits.go`) keep a metered deployment bounded:
+  `Limits` — bytes per document, documents per publish, revisions per review,
+  publishes per agent per hour (sliding, injected clock), open reviews, stored
+  bytes, and the two retentions — are enforced in `checkPublish` **before**
+  anything is parsed or written, and a `LimitError` names the limit and its
+  value. The stored total is in memory, never a listing: document bytes ride
+  on `Meta.Bytes` as a running total, log bytes are measured by the
+  `metered` layer between the write-through cache and the backend (once on
+  the warm read, then per append, released on `Move`). It refuses publishes
+  and never a human's note. `Sweep` (startup, then hourly) moves a review
+  whole to `archive/` once its last activity is older than `RetainDone`
+  (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
+  Diagrams default off in hosted mode. Credentials come from env only, and
+  nothing account-specific lives in this repo.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay) and the 2026-07-02
