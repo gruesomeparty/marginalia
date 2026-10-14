@@ -107,6 +107,18 @@ func (c *Config) Overlay(path string) error {
 	return nil
 }
 
+// OverlayYAML is Overlay for a config held in memory — what a hosted publish
+// carries inline, since an agent on another machine has no file to name.
+func (c *Config) OverlayYAML(src string) error {
+	if err := decodeInto(strings.NewReader(src), c); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	if err := c.validate(); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	return nil
+}
+
 // decodeInto is the one place the decoder is configured: unknown keys are an
 // error wherever a config comes from, because a misspelled option that
 // silently does nothing leaves the agent thinking it framed a review it did

@@ -57,6 +57,10 @@ type Options struct {
 	Port   int
 	Open   bool
 	Watch  bool // re-parse a document when its file changes
+	// BasePath is the path this server is mounted under when it is not at
+	// the root — "/r/<id>" under a hosted instance. The page builds every
+	// URL from it. Empty for `serve`.
+	BasePath string
 
 	// Log is where the startup notices go. It defaults to stdout, which is
 	// what a person running `serve` expects — but under the MCP server stdout
@@ -119,8 +123,12 @@ func New(opts Options) *Server {
 		e := &s.docs[i]
 		s.byRel[e.Rel] = e
 		s.byPath[e.Doc.Path] = e
-		if st, ok := stampOf(e.Doc.Path); ok {
-			s.stamps[e.Doc.Path] = st
+		// Only a watched document has a file to stamp: a hosted document's
+		// Path is its name, which is nothing on this disk.
+		if opts.Watch {
+			if st, ok := stampOf(e.Doc.Path); ok {
+				s.stamps[e.Doc.Path] = st
+			}
 		}
 	}
 	// Draw the diagrams once up front, so the first page load is not the
