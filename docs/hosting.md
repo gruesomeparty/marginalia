@@ -38,6 +38,7 @@ separate, private deploy repository.
 | `MARGINALIA_MCP_OAUTH_AUDIENCE` | Audience its access tokens must carry; defaults to `<public-url>/mcp` |
 | `MARGINALIA_MCP_OAUTH_JWKS_URL` | Where it publishes its keys; defaults to OpenID discovery |
 | `MARGINALIA_AGENT_NAME` | What agents holding the static token write as; default `agent` |
+| `MARGINALIA_NOTIFY_URL` | Where to POST when an agent publishes or replies after you finished — an ntfy topic (`https://ntfy.sh/<topic>`) or a webhook; comma-separated for several. Titles, identities, counts and the URL only, never content |
 
 And the flags that are not secrets: `--addr` (`:8080` in a container),
 `--public-url https://review.<your-domain>` (every URL handed out is built

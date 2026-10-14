@@ -67,6 +67,9 @@ type Options struct {
 	// Limits are the caps and retention (limits.go). Zero fields take the
 	// defaults.
 	Limits Limits
+	// Notify tells the human when an agent publishes or replies; nil is
+	// off. See notify.go.
+	Notify *Notifier
 	// Diagrams draws mermaid when set; nil shows the anchored source. Off
 	// by default in hosted mode: mermaid-cli is the expensive path, and an
 	// agent's input is not something to shell out for unless the operator
@@ -413,6 +416,11 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	h.mu.Unlock()
 	h.recordPublish(meta.Agent, docBytes)
 	h.logf("marginalia: review %s revision %d published (%d document(s)) → %s\n", id, n, len(p.Docs), h.URL(id))
+	if n == 1 {
+		h.notify(NotifyPublished, r)
+	} else {
+		h.notify(NotifyRepublished, r)
+	}
 	return r, nil
 }
 
@@ -534,6 +542,10 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), strings.Join(how, " or "))
 	h.logf("marginalia: limits: %s\n", h.describeLimits())
 	go h.sweeper(ctx)
+	if h.opts.Notify != nil {
+		go h.opts.Notify.run(ctx)
+		defer h.opts.Notify.Close()
+	}
 	err := httpSrv.Serve(ln)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
