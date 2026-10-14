@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
@@ -51,6 +52,13 @@ type Options struct {
 	// DevIdentity treats every page request as this human, for a laptop
 	// with no edge in front of it. The command allows it on loopback only.
 	DevIdentity string
+	// OAuth verifies access tokens on /mcp issued by OAuthIssuer, the
+	// authorization server named in the protected-resource metadata; the
+	// token's aud must be OAuthAudience, which defaults to the public /mcp
+	// URL. Nil leaves only the static token. See oauth.go.
+	OAuth         *identity.Verifier
+	OAuthIssuer   string
+	OAuthAudience string
 	// Log is where notices go; nil means stderr.
 	Log io.Writer
 	// Now is the clock, injectable for tests. Nil means time.Now.
@@ -113,6 +121,11 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	}
 	if opts.HumanAuth == nil && opts.DevIdentity == "" {
 		return nil, errors.New("hosted: no human identity: configure the edge's JWT (--human-jwt-issuer, --human-jwt-audience) or, on loopback only, --insecure-dev-identity <email>")
+	}
+	if opts.OAuth != nil && opts.OAuthIssuer != "" && opts.PublicURL == "" {
+		// The metadata names this resource by its public URL; a derived one
+		// would send every client to the wrong place.
+		return nil, errors.New("hosted: an OAuth authorization server needs --public-url, which names the protected resource")
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -412,6 +425,11 @@ func (h *Host) routes() {
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
+	if h.oauthEnabled() {
+		meta := auth.ProtectedResourceMetadataHandler(h.metadata())
+		mux.Handle(metadataPath, meta)
+		mux.Handle(metadataPath+mcpPath, meta)
+	}
 	mux.Handle("/r/{id}", h.requireHuman(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The page's URLs are relative to its mount, so it has to be
 		// opened with the trailing slash.
@@ -419,15 +437,6 @@ func (h *Host) routes() {
 	})))
 	mux.Handle("/r/{id}/", h.requireHuman(http.HandlerFunc(h.handleReview)))
 	h.mux = mux
-}
-
-// transport is /mcp: the Streamable HTTP transport behind whatever verifies
-// agents — the static token when one is configured, nothing on loopback.
-func (h *Host) transport() http.Handler {
-	if h.opts.Token == "" {
-		return mcpserver.TransportWith(h.mcp, nil, nil)
-	}
-	return mcpserver.TransportWith(h.mcp, mcpserver.StaticTokenVerifier(h.opts.Token, h.agentName()), nil)
 }
 
 // handleRoot is a placeholder until the inbox (#99): it says what is here.
@@ -486,11 +495,17 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 	h.mu.RLock()
 	n := len(h.reviews)
 	h.mu.RUnlock()
-	auth := "bearer token required"
-	if h.opts.Token == "" {
-		auth = "no token: loopback only"
+	var how []string
+	if h.opts.Token != "" {
+		how = append(how, "static token")
 	}
-	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), auth)
+	if h.oauthEnabled() {
+		how = append(how, "OAuth via "+h.opts.OAuthIssuer)
+	}
+	if len(how) == 0 {
+		how = append(how, "no credential: loopback only")
+	}
+	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), strings.Join(how, " or "))
 	err := httpSrv.Serve(ln)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err

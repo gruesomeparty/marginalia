@@ -216,6 +216,9 @@ not cleaned up — and a publish refuses before writing anything: an
 unsupported format (naming `request-feature`), empty content, an invalid
 config. Each document is capped at 1 MiB until the configurable limits land.
 
+The operator's side — the edge, the authorization server, the connector —
+is in [docs/hosting.md](docs/hosting.md).
+
 **Who is asking is decided on every request, before any handler runs.** A
 *human* reaches the pages through the edge, which puts a JWT on the request
 (Cloudflare Access: the `Cf-Access-Jwt-Assertion` header, or its
@@ -232,6 +235,16 @@ without verifying it is not an option — the container's port may be
 reachable around the edge. For a laptop with no edge in front of it,
 `--insecure-dev-identity you@example.com` makes every page request that
 human; it refuses to start on anything but a loopback address.
+
+For the claude.ai connector, `/mcp` is also an **OAuth resource server**
+(RFC 9728): with `--mcp-oauth-issuer` set, an unauthenticated request is
+challenged with the protected-resource metadata, the metadata names the
+authorization server, and the access token that comes back is verified
+against that server's keys with `aud` = the public `/mcp` URL. The token's
+subject becomes `agent:<sub>`, and it is still an agent's seat — no verdicts.
+Marginalia never issues tokens; the deploy picks the server (Cloudflare
+Access as an OIDC provider, or any other). The static token keeps working
+beside it. Steps in [docs/hosting.md](docs/hosting.md).
 
 | Tool | What it does |
 |---|---|
@@ -698,6 +711,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--human-jwt-issuer`, `--human-jwt-audience`, `--human-jwks-url` | `host` | How to verify the edge's JWT on page requests |
 | `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
 | `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
+| `--mcp-oauth-issuer`, `--mcp-oauth-audience`, `--mcp-oauth-jwks-url` | `host` | Accept access tokens from an OAuth authorization server on `/mcp` (the claude.ai connector) |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -709,6 +723,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_STORE` | Default `--store` for `host` |
 | `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
 | `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
+| `MARGINALIA_MCP_OAUTH_ISSUER`, `MARGINALIA_MCP_OAUTH_AUDIENCE`, `MARGINALIA_MCP_OAUTH_JWKS_URL` | Defaults for the `--mcp-oauth-*` flags of `host` |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 

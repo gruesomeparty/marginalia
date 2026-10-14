@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -24,6 +25,9 @@ const (
 	HumanAudEnv     = "MARGINALIA_HUMAN_JWT_AUDIENCE"
 	HumanJWKSEnv    = "MARGINALIA_HUMAN_JWKS_URL"
 	AgentNameEnv    = "MARGINALIA_AGENT_NAME"
+	OAuthIssuerEnv  = "MARGINALIA_MCP_OAUTH_ISSUER"
+	OAuthAudEnv     = "MARGINALIA_MCP_OAUTH_AUDIENCE"
+	OAuthJWKSEnv    = "MARGINALIA_MCP_OAUTH_JWKS_URL"
 	devIdentityFlag = "insecure-dev-identity"
 )
 
@@ -40,6 +44,9 @@ func newHostCmd() *cobra.Command {
 		jwksURL     string
 		devIdentity string
 		agentName   string
+		oauthIssuer string
+		oauthAud    string
+		oauthJWKS   string
 	)
 	cmd := &cobra.Command{
 		Use:   "host",
@@ -63,7 +70,14 @@ whose email becomes the author of what they write; and an agent, holding
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			token := os.Getenv(mcpserver.TokenEnv)
-			if err := mcpserver.CheckBind(addr, token); err != nil {
+			oauthIssuer = firstOf(oauthIssuer, os.Getenv(OAuthIssuerEnv))
+			// An authorization server is a credential for /mcp too: with
+			// one configured, the static token is optional off loopback.
+			credential := token
+			if credential == "" && oauthIssuer != "" {
+				credential = oauthIssuer
+			}
+			if err := mcpserver.CheckBind(addr, credential); err != nil {
 				return err
 			}
 			if devIdentity != "" && !mcpserver.Loopback(addr) {
@@ -80,10 +94,29 @@ whose email becomes the author of what they write; and an agent, holding
 			if err != nil {
 				return err
 			}
+			oauthAud = firstOf(oauthAud, os.Getenv(OAuthAudEnv))
+			var oauth *ident.Verifier
+			if oauthIssuer != "" {
+				if publicURL == "" && oauthAud == "" {
+					return errors.New("--mcp-oauth-issuer needs --public-url (the protected resource is <public-url>/mcp) or an explicit --mcp-oauth-audience")
+				}
+				jwks := firstOf(oauthJWKS, os.Getenv(OAuthJWKSEnv))
+				if jwks == "" {
+					if jwks, err = ident.JWKSURLFor(ctx, nil, oauthIssuer); err != nil {
+						return err
+					}
+				}
+				aud := oauthAud
+				if aud == "" {
+					aud = strings.TrimSuffix(publicURL, "/") + "/mcp"
+				}
+				oauth = &ident.Verifier{Issuer: oauthIssuer, Audience: aud, JWKSURL: jwks}
+			}
 			h, err := hosted.Open(ctx, hosted.Options{
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
 				HumanAuth: humanAuth, DevIdentity: devIdentity,
+				OAuth: oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
 			})
 			if err != nil {
 				return err
@@ -107,6 +140,9 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&jwksURL, "human-jwks-url", "", "where the issuer publishes its keys (default: the Access certs URL, or OpenID discovery) ($"+HumanJWKSEnv+")")
 	cmd.Flags().StringVar(&devIdentity, devIdentityFlag, "", "treat every page request as this human; loopback only, for trying it out with no edge")
 	cmd.Flags().StringVar(&agentName, "agent-name", "", "identity agents holding the static token write under (default: "+mcpserver.DefaultAgentName+") ($"+AgentNameEnv+")")
+	cmd.Flags().StringVar(&oauthIssuer, "mcp-oauth-issuer", "", "OAuth authorization server whose access tokens /mcp accepts, e.g. for the claude.ai connector ($"+OAuthIssuerEnv+")")
+	cmd.Flags().StringVar(&oauthAud, "mcp-oauth-audience", "", "audience those tokens must carry (default: <public-url>/mcp) ($"+OAuthAudEnv+")")
+	cmd.Flags().StringVar(&oauthJWKS, "mcp-oauth-jwks-url", "", "where that server publishes its keys (default: OpenID discovery) ($"+OAuthJWKSEnv+")")
 	return cmd
 }
 
