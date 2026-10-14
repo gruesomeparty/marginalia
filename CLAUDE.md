@@ -337,8 +337,18 @@ users are agents, not humans.
   to before (pinned by `TestLogBytesArePinned` and
   `TestServeWritesTheSameLogBytes`) — and `feedback.OpenStore(backend, key)`
   is the same log on any backend, which is what hosted mode uses.
-  `storage.Memory` is the reference backend tests of `host` run on. R2 stores
-  one object per event under a time-ordered key, written put-if-absent. The
+  `storage.Memory` is the reference backend tests of `host` run on.
+  `storage.R2` (`r2.go`, minio-go over R2's S3 API, `r2://bucket/prefix`,
+  credentials from `MARGINALIA_R2_*` only) stores one object per event under
+  `<log>/<20-digit nanos>-<random>.json`, written put-if-absent with
+  `If-None-Match: *` (a 501 switches it to a HEAD-then-PUT fallback, reported
+  by `ConditionalPut`), and `List` collapses those objects into the log's
+  key so every backend shows one layout; its `LogToken` costs a listing,
+  which is why the host answers waits from `WriteThrough` instead.
+  `storage/s3test` is the in-process S3 fake (conditional PUT, paging, copy,
+  a request counter) CI runs the suite and the host's cost tests on;
+  `TestR2Integration` runs the same suite on a real bucket when the
+  `MARGINALIA_R2_*` variables are set. The
   conformance suite (`storagetest.Run`) runs against every backend; a change
   token (`feedback.Store.Changed`) is what `await_review_done` polls, not the
   file. The source document `serve` reads, `--watch`'s polling and the
