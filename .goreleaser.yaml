@@ -23,6 +23,52 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The hosted image: the linux binaries above on a distroless base, as a
+# non-root user, pushed to GHCR on every release for linux/amd64 (what
+# Cloudflare Containers run) and linux/arm64, and joined under the version
+# tag and `latest` by the manifests below. The Dockerfile only COPYs the
+# binary goreleaser already built — one build path.
+dockers:
+  - id: amd64
+    goos: linux
+    goarch: amd64
+    use: buildx
+    dockerfile: Dockerfile
+    image_templates:
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-amd64
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title=marginalia
+      - --label=org.opencontainers.image.description=Hand an agent-authored document to a human for block-anchored review
+      - --label=org.opencontainers.image.source=https://github.com/gruesomeparty/marginalia
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=MIT
+  - id: arm64
+    goos: linux
+    goarch: arm64
+    use: buildx
+    dockerfile: Dockerfile
+    image_templates:
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-arm64
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.title=marginalia
+      - --label=org.opencontainers.image.description=Hand an agent-authored document to a human for block-anchored review
+      - --label=org.opencontainers.image.source=https://github.com/gruesomeparty/marginalia
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=MIT
+docker_manifests:
+  - name_template: ghcr.io/gruesomeparty/marginalia:{{ .Version }}
+    image_templates:
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-amd64
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-arm64
+  - name_template: ghcr.io/gruesomeparty/marginalia:latest
+    image_templates:
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-amd64
+      - ghcr.io/gruesomeparty/marginalia:{{ .Version }}-arm64
+
 # Publishes a cask to gruesomeparty/homebrew-tap, beside severance.
 #
 # A cask rather than a formula, and not because Marginalia is an app: goreleaser

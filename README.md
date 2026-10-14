@@ -248,8 +248,12 @@ sweep runs at startup and hourly. Diagrams are `--diagrams=off` in hosted mode
 unless you say otherwise: an agent's input is not worth a headless browser
 per publish.
 
-The operator's side — the edge, the authorization server, the connector —
-is in [docs/hosting.md](docs/hosting.md).
+Every release also publishes a container image,
+`ghcr.io/gruesomeparty/marginalia:<version>` for `linux/amd64` and
+`linux/arm64`: the released binary on a distroless base, non-root, `host` on
+port 8080, store and secrets from the environment. The operator's side — the
+image, the edge, the authorization server, the connector — is in
+[docs/hosting.md](docs/hosting.md).
 
 **Who is asking is decided on every request, before any handler runs.** A
 *human* reaches the pages through the edge, which puts a JWT on the request
