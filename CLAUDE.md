@@ -411,7 +411,15 @@ users are agents, not humans.
   and never a human's note. `Sweep` (startup, then hourly) moves a review
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
-  Diagrams default off in hosted mode. Credentials come from env only, and
+  Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
+  `--notify-url`) fire on the agent's side of the loop only — publish,
+  republish, a `reply`/`addressed` once the review is done — never on a
+  human's action; carry title, agent, counts and the URL and never a word
+  of a document or a note; are delivered off the request path (5s timeout,
+  one retry, a failure is a stderr line, never a failed publish); and are
+  debounced per review (one per minute, a burst collapses to "n updates",
+  flushed by a ticker or `Flush()` in tests with an injected clock).
+  Credentials come from env only, and
   nothing account-specific lives in this repo. The **image**
   (`Dockerfile`, goreleaser `dockers` + `docker_manifests`) is the released
   linux binary on `distroless/static:nonroot`, pushed to

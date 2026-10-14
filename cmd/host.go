@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -52,6 +53,8 @@ func newHostCmd() *cobra.Command {
 		limits      hosted.Limits
 		diagramMode string
 		mmdc        string
+		notifyURLs  []string
+		notifyForm  string
 	)
 	defaults := hosted.DefaultLimits()
 	cmd := &cobra.Command{
@@ -125,12 +128,16 @@ whose email becomes the author of what they write; and an agent, holding
 			if err != nil {
 				return err
 			}
+			notifier, err := notifier(notifyURLs, notifyForm, cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
 			h, err := hosted.Open(ctx, hosted.Options{
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
 				HumanAuth: humanAuth, DevIdentity: devIdentity,
 				OAuth: oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
-				Limits: limits, Diagrams: drawer,
+				Limits: limits, Diagrams: drawer, Notify: notifier,
 			})
 			if err != nil {
 				return err
@@ -165,9 +172,40 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().Int64Var(&limits.StoredBytes, "limit-stored-bytes", 0, fmt.Sprintf("most bytes held across every review, past which new publishes are refused — never a human's note (default %d; $MARGINALIA_LIMIT_STORED_BYTES)", defaults.StoredBytes))
 	cmd.Flags().DurationVar(&limits.RetainDone, "retain-done", 0, fmt.Sprintf("how long a finished review stays after its last activity before it is archived (default %s; $MARGINALIA_RETAIN_DONE)", defaults.RetainDone))
 	cmd.Flags().DurationVar(&limits.RetainOpen, "retain-open", 0, fmt.Sprintf("the same for a review never marked done (default %s; $MARGINALIA_RETAIN_OPEN)", defaults.RetainOpen))
+	cmd.Flags().StringArrayVar(&notifyURLs, "notify-url", nil, "POST a notification here when an agent publishes, republishes, or replies after you finished — an ntfy topic works as is; repeatable ($"+NotifyURLEnv+", comma-separated)")
+	cmd.Flags().StringVar(&notifyForm, "notify-format", "text", "notification body: text (ntfy-ready, with Title and Click headers) or json ({event, review_id, title, agent, url, at})")
 	cmd.Flags().StringVar(&diagramMode, "diagrams", "off", "draw mermaid diagrams: off (the default here — an agent's input is not worth a browser per publish), auto (when mermaid-cli is installed)")
 	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
+}
+
+// NotifyURLEnv stands in for --notify-url: a comma-separated list.
+const NotifyURLEnv = "MARGINALIA_NOTIFY_URL"
+
+// notifier builds the notifier from the flags and the environment, or
+// returns nil when nothing is configured.
+func notifier(urls []string, format string, log io.Writer) (*hosted.Notifier, error) {
+	if len(urls) == 0 {
+		for _, u := range strings.Split(os.Getenv(NotifyURLEnv), ",") {
+			if u = strings.TrimSpace(u); u != "" {
+				urls = append(urls, u)
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return nil, nil
+	}
+	switch format {
+	case "", "text", "json":
+	default:
+		return nil, fmt.Errorf("--notify-format %q: use text or json", format)
+	}
+	for _, u := range urls {
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return nil, fmt.Errorf("--notify-url %q is not an http(s) URL", u)
+		}
+	}
+	return &hosted.Notifier{URLs: urls, Format: format, Log: log}, nil
 }
 
 // limitsFromEnv fills unset limits from the MARGINALIA_LIMIT_* and
