@@ -316,14 +316,22 @@ users are agents, not humans.
   because storage throws in a private window.
 - **No database.** Documents in, HTML out, JSONL beside the source document.
 - **Persistent state goes through `internal/storage`** (PRD §5.9, §6): two
-  primitives — immutable blobs (put-if-absent, get, list by prefix) and
-  append-only logs (append, read all, change token) — plus a prefix move for
-  archiving. The interface has no rewrite, truncate or delete for log lines,
-  on purpose: the append-only invariant is structural, not a convention. Disk
-  is the default backend and writes `<doc>.feedback.jsonl` byte-identically to
-  before; R2 stores one object per event under a time-ordered key, written
-  put-if-absent. A shared conformance suite (`storagetest`) runs against every
-  backend. The source document `serve` reads, `--watch`'s polling and the
+  primitives — immutable blobs (`PutBlob` is put-if-absent, `GetBlob`, `List`
+  by prefix) and append-only logs (`AppendLog`, `ReadLog`, `LogToken`) — plus
+  `Move` of a prefix for archiving. The interface has no rewrite, truncate or
+  delete for log lines, on purpose: the append-only invariant is structural,
+  not a convention, and `internal/storage/boundary_test.go` fails on an
+  `O_APPEND` or `os.WriteFile` anywhere else. `storage.Disk` is the default
+  backend — `feedback.NewStore(doc)` is a Disk rooted at the document's
+  directory with the key `<doc>.feedback.jsonl`, so the file is byte-identical
+  to before (pinned by `TestLogBytesArePinned` and
+  `TestServeWritesTheSameLogBytes`) — and `feedback.OpenStore(backend, key)`
+  is the same log on any backend, which is what hosted mode uses.
+  `storage.Memory` is the reference backend tests of `host` run on. R2 stores
+  one object per event under a time-ordered key, written put-if-absent. The
+  conformance suite (`storagetest.Run`) runs against every backend; a change
+  token (`feedback.Store.Changed`) is what `await_review_done` polls, not the
+  file. The source document `serve` reads, `--watch`'s polling and the
   diagram cache are not state and stay on `os`.
 - **Hosted mode** (`marginalia host`, PRD §5.9) is one listener for many
   reviews: `/` inbox, `/r/{id}/…` the per-review `server.Server` routes,

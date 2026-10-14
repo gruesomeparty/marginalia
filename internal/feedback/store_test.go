@@ -1,6 +1,7 @@
 package feedback
 
 import (
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -70,5 +71,49 @@ func TestResolveLatestPerBlock(t *testing.T) {
 	}
 	if _, ok := got[""]; ok {
 		t.Error("review_done (empty block) must not appear in resolution")
+	}
+}
+
+// The file on disk is an interface — agents tail it, `import` dedupes against
+// it, other tools read it — so its bytes are pinned here exactly. A storage
+// refactor that changed a byte of this would change what every reader sees.
+func TestLogBytesArePinned(t *testing.T) {
+	doc := filepath.Join(t.TempDir(), "spec.md")
+	s := NewStore(doc)
+	events := []Event{
+		{Doc: doc, Block: "1/2", Quote: "Capped at 500", Hash: "9f2c01ab54de", Type: TypeComment, Text: "why 500?", Author: "berkay", Ts: "2026-07-03T10:00:00Z"},
+		{Doc: doc, Block: "1/2", Quote: "Capped at 500", Hash: "9f2c01ab54de", Type: TypeReply, Text: "batch limit", Author: "agent", Ts: "2026-07-03T10:05:00Z", ReplyTo: "abc123def456", Fields: map[string]string{"severity": "low"}},
+		{Doc: doc, Block: "2/1", Type: TypeSuggestEdit, Text: "two\nlines", Author: "berkay", Ts: "2026-07-03T10:06:00Z", Sub: &Sub{Quote: "no backoff", Prefix: "attempts, ", Suffix: ".", Start: 16, Hash: "0011223344aa"}},
+		{Doc: doc, Type: TypeReviewDone, Author: "berkay", Ts: "2026-07-03T10:07:00Z"},
+	}
+	for _, e := range events {
+		if err := s.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := os.ReadFile(s.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"doc":"` + doc + `","block":"1/2","quote":"Capped at 500","hash":"9f2c01ab54de","type":"comment","text":"why 500?","author":"berkay","ts":"2026-07-03T10:00:00Z"}` + "\n" +
+		`{"doc":"` + doc + `","block":"1/2","quote":"Capped at 500","hash":"9f2c01ab54de","type":"reply","text":"batch limit","author":"agent","ts":"2026-07-03T10:05:00Z","fields":{"severity":"low"},"reply_to":"abc123def456"}` + "\n" +
+		`{"doc":"` + doc + `","block":"2/1","quote":"","hash":"","type":"suggest_edit","text":"two\nlines","author":"berkay","ts":"2026-07-03T10:06:00Z","sub":{"quote":"no backoff","prefix":"attempts, ","suffix":".","start":16,"hash":"0011223344aa"}}` + "\n" +
+		`{"doc":"` + doc + `","block":"","quote":"","hash":"","type":"review_done","text":"","author":"berkay","ts":"2026-07-03T10:07:00Z"}` + "\n"
+	if string(got) != want {
+		t.Fatalf("the log's bytes changed:\n got: %q\nwant: %q", got, want)
+	}
+	info, err := os.Stat(s.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o644 {
+		t.Errorf("log mode = %o, want 644", perm)
+	}
+	back, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(back) != 4 || back[2].Sub == nil || back[2].Sub.Start != 16 || back[1].Fields["severity"] != "low" {
+		t.Fatalf("round trip lost something: %+v", back)
 	}
 }
