@@ -260,13 +260,18 @@ func (h *Host) about(req *mcp.CallToolRequest, in replyIn, typ string) (*mcp.Cal
 	if in.Name == "" {
 		return nil, mcpserver.ReplyOut{}, errors.New("name the document whose note you are answering")
 	}
-	_, targets, err := h.targets(in.ReviewID, in.Name)
+	r, targets, err := h.targets(in.ReviewID, in.Name)
 	if err != nil {
 		return nil, mcpserver.ReplyOut{}, err
 	}
 	out, err := mcpserver.Answer(targets[0], in.NoteID, in.Text, h.agentOf(req), typ)
 	if err != nil {
 		return nil, mcpserver.ReplyOut{}, err
+	}
+	// An answer or a claim after the human pressed Done is the loop coming
+	// back to them, which they would otherwise only see by looking.
+	if isDone(r) {
+		h.notify(NotifyReplied, r)
 	}
 	return nil, out, nil
 }

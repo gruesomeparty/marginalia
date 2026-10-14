@@ -248,6 +248,19 @@ sweep runs at startup and hourly. Diagrams are `--diagrams=off` in hosted mode
 unless you say otherwise: an agent's input is not worth a headless browser
 per publish.
 
+**Notifications.** The inbox shows what is waiting only when you look;
+`--notify-url <url>` (repeatable; `MARGINALIA_NOTIFY_URL`, comma-separated)
+gets a POST when an agent publishes a review, publishes a revision, or
+replies or claims after you pressed Done — never on anything you did. The
+body is plain text with the review's title, the agent and what happened, the
+review URL in the text and in a `Click` header, so an ntfy topic works as is;
+`--notify-format json` sends `{event, review_id, title, agent, url, at}` for
+a generic webhook. It never carries a word of a document or a note — the
+service is a third party — and it is delivered off the request path with a
+short timeout and one retry: a dead receiver is a line on stderr, never a
+failed publish. At most one notification per review per minute; a burst
+collapses into one "n updates".
+
 Every release also publishes a container image,
 `ghcr.io/gruesomeparty/marginalia:<version>` for `linux/amd64` and
 `linux/arm64`: the released binary on a distroless base, non-root, `host` on
@@ -749,6 +762,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
 | `--mcp-oauth-issuer`, `--mcp-oauth-audience`, `--mcp-oauth-jwks-url` | `host` | Accept access tokens from an OAuth authorization server on `/mcp` (the claude.ai connector) |
 | `--limit-*`, `--retain-done`, `--retain-open` | `host` | The caps and retention above |
+| `--notify-url <url>`, `--notify-format text\|json` | `host` | POST a notification on agent activity (ntfy-ready text, or JSON) |
 | `--json` | `suggestions`, `reply` | Machine-readable output |
 
 ### Environment
@@ -763,6 +777,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
 | `MARGINALIA_MCP_OAUTH_ISSUER`, `MARGINALIA_MCP_OAUTH_AUDIENCE`, `MARGINALIA_MCP_OAUTH_JWKS_URL` | Defaults for the `--mcp-oauth-*` flags of `host` |
 | `MARGINALIA_LIMIT_*`, `MARGINALIA_RETAIN_DONE`, `MARGINALIA_RETAIN_OPEN` | Defaults for the `--limit-*` and `--retain-*` flags of `host` |
+| `MARGINALIA_NOTIFY_URL` | Default `--notify-url`s for `host`, comma-separated |
 | `MARGINALIA_MMDC` | Path to mermaid-cli |
 | `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
 
