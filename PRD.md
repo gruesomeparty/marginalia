@@ -383,9 +383,17 @@ single writer, by design**: the process loads every review from the store at
 startup, keeps that state in memory, and writes through on every change, so
 reads, waits and the inbox never poll the store. Billed store operations are
 a design input — one PUT per comment, one listing per startup, nothing
-periodic. Infrastructure-as-code and secrets live in a separate private
-deploy repo; this repo ships the binary, the image and the docs, and nothing
-account-specific.
+periodic. This repo ships the binary, the image, the docs and a **generic
+deployment template**: `deploy/cloudflare` is a Worker in front of one
+Container (`max_instances: 1`), and its image tag moves with each release.
+It ships nothing account-specific. The account, the hostname, the bucket,
+the Access applications and every secret belong to the operator: the
+hostname is a deploy argument, and the settings are a local file uploaded
+as Worker secrets. They are kept on the operator's machine, or in a private
+repository of their own. *Always-on* means always reachable, not always
+running: the Container sleeps when idle and a request wakes it. An
+in-flight request, a waiting agent's included, keeps it awake. A wake costs
+the startup load, which is one listing plus a read of each open review.
 
 **Identity split.** Two kinds of caller, resolved per request before any
 handler runs:

@@ -7,3 +7,15 @@ updates:
     labels:
       - dependencies
       - github-actions
+  # The Cloudflare template's wrangler and container library, as one monthly
+  # PR: Containers move fast, and a deploy with a stale wrangler is where that
+  # would show.
+  - package-ecosystem: npm
+    directory: "/deploy/cloudflare"
+    schedule:
+      interval: monthly
+    groups:
+      cloudflare-template:
+        patterns: ["*"]
+    labels:
+      - dependencies

@@ -1,0 +1,37 @@
+// marginalia host on Cloudflare: one Worker in front of one Container.
+//
+// Nothing here names an account, a domain or a credential, and nothing
+// should: the hostname goes on the command line (`--domain`), every
+// MARGINALIA_* setting into a secrets file you keep outside this repo
+// (`--secrets-file`). README.md has the whole procedure.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "marginalia",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+
+  // The custom domain given at deploy is the only way in. A workers.dev
+  // address or a preview URL would be a second hostname that Cloudflare
+  // Access does not sit in front of.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  "containers": [
+    {
+      "class_name": "Marginalia",
+      // A one-line Dockerfile naming the released image; wrangler builds it
+      // and pushes it to Cloudflare's registry.
+      "image": "./Dockerfile",
+      // 1/4 vCPU and 1 GiB: every review is loaded into memory at start.
+      "instance_type": "basic",
+      // The host is the single writer of its store. Never raise this.
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "MARGINALIA", "class_name": "Marginalia" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Marginalia"] }],
+
+  "observability": { "enabled": true }
+}

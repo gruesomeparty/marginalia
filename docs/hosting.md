@@ -3,12 +3,15 @@
 `marginalia host` is one always-on instance that agents on other machines
 publish documents to over remote MCP and the owner reviews from a browser
 (PRD §5.9). This page is the operator's side of it: what the binary expects
-from the world around it, written as steps for a deploy repository. Nothing
-here is account-specific; every value is a placeholder.
+from the world around it. Nothing here is account-specific; every value is a
+placeholder.
 
-The binary ships here. Infrastructure — the container, the Worker in front of
-it, the bucket, the DNS, the Access applications, the secrets — belongs in a
-separate, private deploy repository.
+The binary, the image and a deployable Cloudflare template ship here:
+[`deploy/cloudflare`](../deploy/cloudflare/README.md) is a Worker and a
+Container that a `wrangler deploy` turns into a running instance. Everything
+that is yours stays out of this repository: the account, the domain, the
+bucket, the Access applications and the secrets. The hostname goes on the
+deploy command line, and the settings go in a file on your machine.
 
 ## What the instance expects
 
@@ -27,6 +30,7 @@ separate, private deploy repository.
 
 | Variable | What it is |
 |---|---|
+| `MARGINALIA_PUBLIC_URL` | The origin reviewers and agents reach the instance at, e.g. `https://review.<your-domain>`. Every URL handed out is built from it, so it must be a scheme and host only. It is required for OAuth, because it names the protected resource |
 | `MARGINALIA_STORE` | `file://<dir>`, or `r2://<bucket>/<prefix>` |
 | `MARGINALIA_R2_ACCOUNT_ID`, `MARGINALIA_R2_ACCESS_KEY_ID`, `MARGINALIA_R2_SECRET_ACCESS_KEY` | The R2 bucket's account and an API token scoped to it (object read and write); credentials are read from here and nowhere else |
 | `MARGINALIA_R2_ENDPOINT` | Optional: an S3 endpoint other than `<account>.r2.cloudflarestorage.com` |
@@ -40,10 +44,11 @@ separate, private deploy repository.
 | `MARGINALIA_AGENT_NAME` | What agents holding the static token write as; default `agent` |
 | `MARGINALIA_NOTIFY_URL` | Where to POST when an agent publishes or replies after you finished — an ntfy topic (`https://ntfy.sh/<topic>`) or a webhook; comma-separated for several. Titles, identities, counts and the URL only, never content |
 
-And the flags that are not secrets: `--addr` (`:8080` in a container),
-`--public-url https://review.<your-domain>` (every URL handed out is built
-from it; required for OAuth, since it names the protected resource), and the
-caps — `--limit-document-bytes`, `--limit-documents-per-publish`,
+The settings that are not credentials also have flags for running it by
+hand (`--public-url`, `--store`, `--human-jwt-issuer`, …); a flag wins over
+its variable. Credentials have no flag. `--addr` has no variable (`:8080` in
+a container, and the image's default). Then there are the caps —
+`--limit-document-bytes`, `--limit-documents-per-publish`,
 `--limit-revisions`, `--limit-publishes-per-hour`, `--limit-open-reviews`,
 `--limit-stored-bytes`, `--retain-done`, `--retain-open` (each with a
 `MARGINALIA_LIMIT_*` / `MARGINALIA_RETAIN_*` variable). The defaults are
@@ -81,40 +86,33 @@ instead (`marginalia host --insecure-dev-identity you@example.com`).
 
 ### On Cloudflare, with R2
 
-In the deploy repo, a Worker fronts a **Cloudflare Container** running the
-image. The points that are not optional:
+[`deploy/cloudflare`](../deploy/cloudflare/README.md) is the deployment, step
+by step. It is a Worker in front of one **Cloudflare Container**, with the
+store in R2 and Cloudflare Access in front of the pages. These points are
+what it encodes. Anyone building their own deployment has to keep them:
 
-- **Pin one instance.** The container's `max_instances` is `1`. The process
-  loads the store at startup and is its single writer; a second instance on
-  the same store would corrupt the budget and the inbox and race the logs.
-- **Pin the image** by tag — `ghcr.io/gruesomeparty/marginalia:<version>` —
-  or better by digest, and upgrade deliberately. Nothing in this repo
-  decides when a deploy moves.
-- **Forward the Access header.** The Worker must pass
-  `Cf-Access-Jwt-Assertion` through to the container unchanged; the instance
-  verifies it itself (see *Humans* below).
-- **No volume.** With `MARGINALIA_STORE=r2://<bucket>/<prefix>` the image
-  needs no writable disk; the container's own is disposable.
-- **Secrets as secrets.** `MARGINALIA_MCP_TOKEN`, `MARGINALIA_R2_*` and the
-  JWT settings go in as container secrets or environment variables, never in
-  the image.
-- **Public URL.** `--public-url https://review.<your-domain>` (or pass it in
-  the `CMD`), since every URL handed to an agent is built from it.
-
-A sketch of the container's environment:
-
-```
-MARGINALIA_STORE=r2://<bucket>/<prefix>
-MARGINALIA_R2_ACCOUNT_ID=<account id>
-MARGINALIA_R2_ACCESS_KEY_ID=<token id>
-MARGINALIA_R2_SECRET_ACCESS_KEY=<token secret>
-MARGINALIA_MCP_TOKEN=<random>
-MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
-MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
-MARGINALIA_MCP_OAUTH_ISSUER=https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<client-id>
-```
-
-and the command `host --addr :8080 --public-url https://review.<your-domain>`.
+- **One instance.** `max_instances` is `1`. The process loads the store at
+  startup and is its single writer. A second instance on the same store
+  would corrupt the budget and the inbox, and race the logs.
+- **The image comes through Cloudflare's registry.** A Container cannot pull
+  from GHCR. The template's `Dockerfile` is one line,
+  `FROM ghcr.io/gruesomeparty/marginalia:<version>`, which wrangler builds
+  and pushes there. Each release moves that tag, so a checkout of a release
+  tag deploys that release's image.
+- **The Access header reaches the container.** The Worker forwards every
+  request unchanged, `Cf-Access-Jwt-Assertion` included. The instance
+  verifies the header itself (see *Humans* below).
+- **No disk.** The store is `r2://<bucket>/<prefix>`. A Container's disk is
+  gone when it stops, and the template's Worker refuses any other store.
+- **Settings as secrets.** Every `MARGINALIA_*` value is uploaded as an
+  encrypted Worker secret (`--secrets-file`), and the Worker passes them to
+  the container's environment. None of them go in the image or in
+  `wrangler.jsonc`.
+- **It may sleep.** The Container stops after half an hour with no request
+  in flight and starts again on the next one. An agent waiting in
+  `await_review_done` counts as in flight, and the MCP endpoint is
+  stateless, so a restart is invisible to an agent. What a start costs is
+  the load described under *State in R2*.
 
 CI builds the image on every change (`goreleaser release --snapshot`, both
 architectures) and smoke-tests the amd64 one the way a platform starts it:
@@ -161,13 +159,24 @@ overview page. Those three values go into the container's secrets.
 
 ## Humans: Cloudflare Access in front of the pages
 
-1. In the deploy repo, put an **Access application** (self-hosted) on the
-   hostname the instance is served at, with a policy allowing the reviewer
-   (an email, a group). Access then authenticates every browser request and
-   forwards it with a `Cf-Access-Jwt-Assertion` header (and sets a
-   `CF_Authorization` cookie).
-2. Note the application's **AUD tag** and the team domain.
-3. Configure the instance:
+1. Put an **Access application** (self-hosted) on the hostname the instance
+   is served at, with a policy allowing the reviewer (an email, a group).
+   Access then authenticates every browser request and forwards it with a
+   `Cf-Access-Jwt-Assertion` header (and sets a `CF_Authorization` cookie).
+2. Put a second self-hosted application, with a single **Bypass** policy
+   that includes *Everyone*, on three paths of the same hostname:
+   - `/mcp`
+   - `/.well-known/oauth-protected-resource`
+   - `/healthz`
+
+   Without it, Access answers an agent's `/mcp` request with a redirect to a
+   login page. The claude.ai connector then never sees the 401 that tells it
+   where to authorize, and a bearer token never reaches the instance. These
+   paths are authenticated by the instance itself (`/mcp`), or are public by
+   design (the metadata document, the health check). The more specific path
+   wins, so everything else stays behind the first application.
+3. Note the first application's **AUD tag** and the team domain.
+4. Configure the instance:
 
    ```
    MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
@@ -177,10 +186,11 @@ overview page. Those three values go into the container's secrets.
    The keys are fetched from
    `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, cached, and
    refreshed when a token names a key the cache does not hold.
-4. The Worker in front of the container must **forward the
-   `Cf-Access-Jwt-Assertion` header** to it. The instance verifies the
-   signature, issuer, audience and validity itself; the token's `email`
-   becomes the author of everything that reviewer writes.
+5. Whatever is in front of the container must **forward the
+   `Cf-Access-Jwt-Assertion` header** to it. The template's Worker does. The
+   instance verifies the signature, issuer, audience and validity itself.
+   The token's `email` becomes the author of everything that reviewer
+   writes.
 
 Any other identity provider works the same way: set the issuer and audience
 to what it puts in its tokens, and the key-set URL if the issuer does not

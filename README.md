@@ -206,8 +206,8 @@ through `--store` (`MARGINALIA_STORE`), laid out the same on every backend —
 of a container is disposable. Startup loads every review from the store; from
 then on the process keeps them in memory and writes through, which makes it
 **single-instance by design**: one writer per store, and a deploy must pin
-exactly one. URLs handed to agents are built from `--public-url`, never the
-bind address. `MARGINALIA_MCP_TOKEN` gates `/mcp` and is required off
+exactly one. URLs handed to agents are built from `--public-url`
+(`MARGINALIA_PUBLIC_URL`), never the bind address. `MARGINALIA_MCP_TOKEN` gates `/mcp` and is required off
 loopback, as for `mcp --http`.
 
 Over `/mcp` the tools are the ones above with one substitution — a
@@ -267,6 +267,14 @@ Every release also publishes a container image,
 port 8080, store and secrets from the environment. The operator's side — the
 image, the edge, the authorization server, the connector — is in
 [docs/hosting.md](docs/hosting.md).
+
+**Deploying it to Cloudflare** is a template in this repository:
+[`deploy/cloudflare`](deploy/cloudflare/README.md) is a Worker in front of one
+Container running that image, with the store in R2 and Cloudflare Access in
+front of the pages. It holds nothing account-specific. From a release tag,
+`npx wrangler deploy --domain review.<your-domain> --secrets-file
+settings.env` brings up an instance. The hostname is the command-line
+argument, and the settings are a file on your machine that git ignores.
 
 **Who is asking is decided on every request, before any handler runs.** A
 *human* reaches the pages through the edge, which puts a JWT on the request
@@ -756,7 +764,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--http <addr>` | `mcp` | Serve the tools over Streamable HTTP at `/mcp` instead of stdio; off loopback, `MARGINALIA_MCP_TOKEN` must be set |
 | `--addr <addr>` | `host` | Where to listen; default `127.0.0.1:8080` |
 | `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) or `r2://<bucket>/<prefix>` |
-| `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at; every URL handed out is built from it |
+| `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at (scheme and host only); every URL handed out is built from it |
 | `--human-jwt-issuer`, `--human-jwt-audience`, `--human-jwks-url` | `host` | How to verify the edge's JWT on page requests |
 | `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
 | `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
@@ -772,6 +780,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
 | `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
 | `MARGINALIA_STORE` | Default `--store` for `host` |
+| `MARGINALIA_PUBLIC_URL` | Default `--public-url` for `host` |
 | `MARGINALIA_R2_ACCOUNT_ID`, `MARGINALIA_R2_ACCESS_KEY_ID`, `MARGINALIA_R2_SECRET_ACCESS_KEY` | Credentials for an `r2://` store; `MARGINALIA_R2_ENDPOINT` overrides the endpoint |
 | `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
 | `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |

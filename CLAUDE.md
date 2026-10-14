@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: M1–M5 shipped
+## Status: M1–M6 shipped
 
 The repo has a working Go module implementing PRD milestone **M1** — server mode
 for markdown (`serve`, block anchoring, append-only JSONL feedback,
@@ -27,18 +27,18 @@ items anchor individually (issue #12). **M2** is in: `feedback.Materialize`
 replays a log against the document as it now reads, so a re-render marks notes
 stale, surfaces ones whose block is gone, and shows the current state per block
 (issue #1).
-**M6, hosted mode** (epic #91, PRD §5.9), is the one in progress: one always-on
+**M6, hosted mode** (epic #91, PRD §5.9), is in: one always-on
 instance (`marginalia host`) that agents on other machines publish *content*
 to over remote MCP (`mcp --http`, Streamable HTTP, a claude.ai connector), the
 owner reviews from an inbox, and whose state lives behind `internal/storage` —
 immutable blobs plus append-only logs, disk the default backend, R2 the first
-remote one — on a single Cloudflare Container behind Cloudflare Access. It is
-additive: `serve` and stdio `mcp` are untouched and stay the default product.
+remote one — on a single Cloudflare Container behind Cloudflare Access, which
+`deploy/cloudflare` deploys. It is additive: `serve` and stdio `mcp` are
+untouched and stay the default product.
 `PRD.md` is the authoritative spec; read it before writing anything. This file summarizes it and flags the constraints that are
 easy to violate. When the PRD and this file disagree, the PRD wins (and update
-this file). Every milestone in the build order below has shipped except M6,
-whose sub-issues (#92–#103) are the roadmap; anything else open is in the
-tracker.
+this file). Every milestone in the build order below has shipped; what is
+open is in the tracker.
 
 ## What Marginalia is
 
@@ -428,6 +428,33 @@ users are agents, not humans.
   job builds it with a goreleaser snapshot and `scripts/image-smoke.sh`
   starts the amd64 one non-root with a `file:///tmp` store, checks
   `/healthz`, publishes over `/mcp`, and greps the history for secrets.
+- `deploy/cloudflare` is the **deployment template**, the one place the repo
+  ships infrastructure, and the split is the rule: what is generic lives
+  here, and what is one account's — account id, hostname, bucket, Access
+  AUD, every credential — never does. The hostname is `wrangler deploy
+  --domain`, and the settings are a gitignored `settings.env` uploaded with
+  `--secrets-file`. A Worker (`src/index.ts`) forwards every request to the
+  single container via `getContainer` and passes it every `MARGINALIA_*`
+  binding as its environment, so a setting a later release adds needs no
+  template change. That works because the binary reads every setting but
+  `--addr` (which the image's `CMD` sets) from env, `MARGINALIA_PUBLIC_URL`
+  included (`publicOrigin` refuses anything but scheme and host). The Worker refuses only what the binary cannot know
+  is wrong: no public URL, or a store that is not `r2://` (a container's
+  disk dies with it). The container sleeps after 30 minutes idle. An
+  in-flight request, which includes an agent's long `await_review_done`,
+  holds it awake. A cold start gets two minutes rather than the library's
+  20s, because the host loads every review before it listens. The
+  `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
+  block (`extra-files`). Containers pull only from Cloudflare's registry,
+  hence the rebuild. `deploy_template_test.go` pins that tag to
+  `.release-please-manifest.json`, pins `max_instances: 1`, and pins no
+  `account_id`/`routes`/`vars` and no `workers_dev` or preview URL. It also
+  checks that every name in `settings.example.env` is one the binary reads.
+  CI's `cloudflare-template` job typechecks the Worker and runs a dry-run
+  bundle, without the image build, since a release PR moves the tag before
+  that image exists. `/mcp`, `/.well-known/oauth-protected-resource` and
+  `/healthz` need an Access **Bypass** application: an agent cannot log in,
+  and the host authenticates those paths itself.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay) and the 2026-07-02
@@ -545,8 +572,8 @@ feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done
 pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
 → **M5 static share mode (`export`/`import`) — done** → **M6 hosted mode
 (#91: `mcp --http`, `internal/storage`, `host`, `publish_document`, identity,
-OAuth, inbox, caps, R2, image, notifications) — in progress, on
-`feature/hosted`**.
+OAuth, inbox, caps, R2, image, notifications, the `deploy/cloudflare`
+template) — done**.
 
 ## Commands
 
