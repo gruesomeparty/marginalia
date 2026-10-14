@@ -39,7 +39,15 @@ separate, private deploy repository.
 
 And the flags that are not secrets: `--addr` (`:8080` in a container),
 `--public-url https://review.<your-domain>` (every URL handed out is built
-from it; required for OAuth, since it names the protected resource).
+from it; required for OAuth, since it names the protected resource), and the
+caps — `--limit-document-bytes`, `--limit-documents-per-publish`,
+`--limit-revisions`, `--limit-publishes-per-hour`, `--limit-open-reviews`,
+`--limit-stored-bytes`, `--retain-done`, `--retain-open` (each with a
+`MARGINALIA_LIMIT_*` / `MARGINALIA_RETAIN_*` variable). The defaults are
+conservative; the README lists them. Finished reviews are archived under
+`archive/` in the store after `--retain-done`, open ones after
+`--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
+review is restored by moving its prefix back under `reviews/`.
 
 ## Humans: Cloudflare Access in front of the pages
 

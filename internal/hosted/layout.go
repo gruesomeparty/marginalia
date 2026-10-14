@@ -103,6 +103,10 @@ type Meta struct {
 	Theme    string   `json:"theme,omitempty"`
 	Created  string   `json:"created"`
 	Updated  string   `json:"updated"` // when this revision was published
+	// Bytes is the documents' size summed over every revision so far — a
+	// running total carried on the metadata, so the stored-bytes budget can
+	// be rebuilt at startup from the one listing it already does.
+	Bytes int64 `json:"bytes,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/gruesomeparty/marginalia/internal/diagram"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/identity"
@@ -63,6 +64,14 @@ type Options struct {
 	Log io.Writer
 	// Now is the clock, injectable for tests. Nil means time.Now.
 	Now func() time.Time
+	// Limits are the caps and retention (limits.go). Zero fields take the
+	// defaults.
+	Limits Limits
+	// Diagrams draws mermaid when set; nil shows the anchored source. Off
+	// by default in hosted mode: mermaid-cli is the expensive path, and an
+	// agent's input is not something to shell out for unless the operator
+	// said so.
+	Diagrams *diagram.Renderer
 }
 
 // Host is one running instance: the reviews it serves, in memory, and the
@@ -87,6 +96,9 @@ type Host struct {
 	// put-if-absent would refuse the second, but only after its first
 	// document had been written.
 	pub sync.Mutex
+	// limits and use are the caps and what counts against them.
+	limits Limits
+	use    usage
 }
 
 func (h *Host) interrupt() { h.closeOnce.Do(func() { close(h.closing) }) }
@@ -130,9 +142,18 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	h := &Host{opts: opts, store: storage.NewWriteThrough(opts.Store), reviews: map[string]*Review{}, closing: make(chan struct{})}
+	h := &Host{opts: opts, reviews: map[string]*Review{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
+	h.use.publishes = map[string][]time.Time{}
+	h.store = storage.NewWriteThrough(&metered{Store: opts.Store, h: h, bytes: map[string]int64{}})
 	if err := h.load(ctx); err != nil {
 		return nil, err
+	}
+	// The sweep at startup: what outlived its retention while the process
+	// was down goes to the archive before it is served again.
+	if archived, err := h.Sweep(ctx); err != nil {
+		return nil, err
+	} else if len(archived) > 0 {
+		h.logf("marginalia: %d review(s) archived at startup\n", len(archived))
 	}
 	h.mcp = mcp.NewServer(&mcp.Implementation{Name: "marginalia", Title: "Marginalia document review (hosted)", Version: session.Version}, nil)
 	h.tools()
@@ -166,6 +187,7 @@ func (h *Host) load(ctx context.Context) error {
 			continue
 		}
 		h.reviews[id] = r
+		h.recordStored(r.Meta.Bytes)
 	}
 	return nil
 }
@@ -226,6 +248,7 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		Title:    meta.Title,
 		Review:   cfg,
 		Theme:    theme,
+		Diagrams: h.opts.Diagrams,
 		Author:   "reviewer",
 		AuthorOf: authorOf,
 		Log:      h.out(),
@@ -270,10 +293,6 @@ type Publish struct {
 	Config string // inline review YAML
 	Theme  string
 }
-
-// maxDocumentBytes is the fixed per-document guard until the configurable
-// caps of #100.
-const maxDocumentBytes = 1 << 20
 
 // Publish stores a new review — revision 1 of every document, then its
 // metadata — and serves it. Nothing is written until every document has
@@ -331,7 +350,17 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	if len(p.Docs) == 0 {
 		return nil, errors.New("nothing to publish — send at least one document")
 	}
+	// The caps, before anything is parsed or written. A refusal names the
+	// limit and its value.
+	if err := h.checkPublish(meta, p); err != nil {
+		return nil, err
+	}
 	id, n := meta.ID, meta.Revision
+	var docBytes int64
+	for _, d := range p.Docs {
+		docBytes += int64(len(d.Content))
+	}
+	meta.Bytes += docBytes
 	seen := map[string]bool{}
 	entries := make([]server.Entry, 0, len(p.Docs))
 	for _, d := range p.Docs {
@@ -344,9 +373,6 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 		seen[d.Name] = true
 		if len(d.Content) == 0 {
 			return nil, fmt.Errorf("document %q is empty", d.Name)
-		}
-		if len(d.Content) > maxDocumentBytes {
-			return nil, fmt.Errorf("document %q is %d bytes; the limit is %d", d.Name, len(d.Content), maxDocumentBytes)
 		}
 		if document.FormatFor(d.Name) == "" {
 			return nil, session.UnsupportedInput(filepath.Ext(d.Name))
@@ -385,6 +411,7 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	h.mu.Lock()
 	h.reviews[id] = r
 	h.mu.Unlock()
+	h.recordPublish(meta.Agent, docBytes)
 	h.logf("marginalia: review %s revision %d published (%d document(s)) → %s\n", id, n, len(p.Docs), h.URL(id))
 	return r, nil
 }
@@ -505,6 +532,8 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 		how = append(how, "no credential: loopback only")
 	}
 	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), strings.Join(how, " or "))
+	h.logf("marginalia: limits: %s\n", h.describeLimits())
+	go h.sweeper(ctx)
 	err := httpSrv.Serve(ln)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
