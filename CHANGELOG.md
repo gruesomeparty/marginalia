@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/gruesomeparty/marginalia/compare/v0.1.2...v0.2.0) (2026-10-14)
+
+
+### Features
+
+* **host:** /mcp as an OAuth resource server, so the instance works as a claude.ai connector ([#111](https://github.com/gruesomeparty/marginalia/issues/111)) ([2749b06](https://github.com/gruesomeparty/marginalia/commit/2749b06f6e456ff2e1ef208553a04b495ed0501c))
+* **host:** hard caps on what agents can publish, and archiving of what outlived its retention ([#113](https://github.com/gruesomeparty/marginalia/issues/113)) ([acb7443](https://github.com/gruesomeparty/marginalia/commit/acb7443cb4d7730b4a030fa83c4ce7c47a2e0db1))
+* **host:** notify the human when an agent publishes or replies ([#116](https://github.com/gruesomeparty/marginalia/issues/116)) ([5178895](https://github.com/gruesomeparty/marginalia/commit/51788952b5130d298172fbd2038263b892fb1bfd))
+* **host:** one listener for many reviews, state in internal/storage ([#108](https://github.com/gruesomeparty/marginalia/issues/108)) ([43a11e4](https://github.com/gruesomeparty/marginalia/commit/43a11e4830e6c392ef725fbc253f921cad0cfe1a))
+* **host:** publish_document — content in, a review URL out, revisions on republish ([#109](https://github.com/gruesomeparty/marginalia/issues/109)) ([a85cc2a](https://github.com/gruesomeparty/marginalia/commit/a85cc2a26f7ab628370509f8d6f17babd65451d0))
+* **host:** resolve who is asking — verified human at the edge, agent on /mcp ([#110](https://github.com/gruesomeparty/marginalia/issues/110)) ([e00ea4d](https://github.com/gruesomeparty/marginalia/commit/e00ea4d384102804faa07c0643900f12ad9ddbbe))
+* **host:** the inbox — every review, newest first, with what it is waiting on ([#112](https://github.com/gruesomeparty/marginalia/issues/112)) ([1ac10d3](https://github.com/gruesomeparty/marginalia/commit/1ac10d32266547e33456e93c6f22cf10e7ec05ec))
+* **mcp:** serve the tools over Streamable HTTP with --http and a bearer token ([#106](https://github.com/gruesomeparty/marginalia/issues/106)) ([5e2aaba](https://github.com/gruesomeparty/marginalia/commit/5e2aaba1b3b92e709dd45e454f25a2d98bb06767))
+* **storage:** put persistent state behind internal/storage, disk the default ([#107](https://github.com/gruesomeparty/marginalia/issues/107)) ([a32f738](https://github.com/gruesomeparty/marginalia/commit/a32f73865e49c6a2e2e922204718cb32474541cb))
+* **storage:** R2 backend — the first remote implementation of internal/storage ([#114](https://github.com/gruesomeparty/marginalia/issues/114)) ([62e1008](https://github.com/gruesomeparty/marginalia/commit/62e1008d47b750c70a819a4066bbdb9134cff5ff))
+
 ## [0.1.2](https://github.com/gruesomeparty/marginalia/compare/v0.1.1...v0.1.2) (2026-09-26)
 
 
