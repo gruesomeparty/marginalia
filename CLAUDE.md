@@ -443,7 +443,13 @@ users are agents, not humans.
   disk dies with it). The container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's
-  20s, because the host loads every review before it listens. The
+  20s, because the host loads every review before it listens. The binary
+  reads env once, at start, so the Durable Object keeps a hash of the
+  settings the running container started with (`started-with`, never the
+  values). The first request after a deploy that changed them restarts the
+  container: SIGTERM, a drain, then a fresh start. Without this, a rotated
+  token would wait for a sleep that a waiting agent postpones
+  indefinitely. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
   hence the rebuild. `deploy_template_test.go` pins that tag to
