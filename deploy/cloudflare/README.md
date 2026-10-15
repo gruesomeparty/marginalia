@@ -138,11 +138,14 @@ inbox. Point an agent at it with the token, for example in Claude Code's
 - **One instance, always.** The host is its store's single writer: it loads
   everything at startup and keeps it in memory. `max_instances` stays `1`.
   Never point a second deployment at the same bucket and prefix.
-- **Changing a setting.** Edit `settings.env` and deploy again. The file is
-  applied additively, so removing a setting takes
-  `npx wrangler secret delete <NAME>`. The container reads its settings when
-  it starts, so a change reaches a running instance only after the instance
-  next stops.
+- **Changing a setting.** Edit `settings.env` and deploy again. The binary
+  reads its settings once, when it starts. So the Worker remembers a hash of
+  the settings the running container started with. On the first request
+  after a deploy that changed them, it stops the container and starts it
+  again. The stop is a SIGTERM, so the host finishes in-flight requests
+  first. A rotated token takes effect on that request, without waiting for
+  the container to sleep. The file is applied additively, so removing a
+  setting takes `npx wrangler secret delete <NAME>`, and then a deploy.
 - **Upgrading.** Check out the next release tag and run `npm ci`, then deploy
   with the same command. The new `Dockerfile` names the new image.
 - **Logs.** `npx wrangler tail` streams the Worker's logs. The container's

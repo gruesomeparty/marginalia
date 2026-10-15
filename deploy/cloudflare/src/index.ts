@@ -1,8 +1,8 @@
-// The Worker in front of `marginalia host`. It does three things and holds
-// no state: refuses to start a misconfigured instance, hands every
-// MARGINALIA_* setting to the container, and forwards each request to the
-// one container there is. Identity is not checked here — Cloudflare Access
-// sits in front of the Worker, and the binary verifies Access's JWT itself.
+// The Worker in front of `marginalia host`. It refuses to start a
+// misconfigured instance, hands every MARGINALIA_* setting to the container,
+// and forwards each request to the one container there is. Identity is not
+// checked here — Cloudflare Access sits in front of the Worker, and the
+// binary verifies Access's JWT itself.
 import { Container, getContainer } from "@cloudflare/containers";
 
 // Long enough for the host to load every review from R2 before it listens.
@@ -10,6 +10,13 @@ import { Container, getContainer } from "@cloudflare/containers";
 // first request after sleep would otherwise fail on a store that is merely
 // large, not broken.
 const COLD_START_MS = 120_000;
+
+// How long the host gets to finish what is in flight once told to stop.
+const STOP_GRACE_MS = 15_000;
+
+// Where the Durable Object remembers which settings the running container
+// was started with — a hash, never the values.
+const STARTED_WITH = "started-with";
 
 export class Marginalia extends Container<Env> {
 	defaultPort = 8080;
@@ -21,14 +28,13 @@ export class Marginalia extends Container<Env> {
 	pingEndpoint = "localhost/healthz";
 	envVars = settings(this.env);
 
+	private readonly wanted = fingerprint(this.envVars);
 	private starting?: Promise<void>;
 
 	override async fetch(request: Request): Promise<Response> {
-		if (!this.ctx.container?.running || this.starting) {
-			// One start for every request that arrives during it.
-			this.starting ??= this.startAndWaitForPorts({
-				cancellationOptions: { portReadyTimeoutMS: COLD_START_MS },
-			}).finally(() => {
+		if (this.starting || !this.ctx.container?.running || (await this.outdated())) {
+			// One (re)start for every request that arrives during it.
+			this.starting ??= this.restart().finally(() => {
 				this.starting = undefined;
 			});
 			try {
@@ -40,6 +46,33 @@ export class Marginalia extends Container<Env> {
 			}
 		}
 		return super.fetch(request);
+	}
+
+	// outdated says the running container was started with settings other
+	// than this deploy's. The binary reads its environment once, at start, so
+	// without this a rotated token or a changed setting would wait for the
+	// container's next sleep — which an agent that keeps waiting postpones
+	// indefinitely.
+	private async outdated(): Promise<boolean> {
+		return this.ctx.storage.kv.get<string>(STARTED_WITH) !== (await this.wanted);
+	}
+
+	private async restart(): Promise<void> {
+		if (this.ctx.container?.running) {
+			// SIGTERM: the host stops accepting, drains what is in flight,
+			// and exits. Every write it acknowledged is already in R2.
+			await this.stop();
+			for (let waited = 0; this.ctx.container.running && waited < STOP_GRACE_MS; waited += 250) {
+				await scheduler.wait(250);
+			}
+			if (this.ctx.container.running) {
+				await this.destroy();
+			}
+		}
+		await this.startAndWaitForPorts({
+			cancellationOptions: { portReadyTimeoutMS: COLD_START_MS },
+		});
+		this.ctx.storage.kv.put(STARTED_WITH, await this.wanted);
 	}
 }
 
@@ -65,6 +98,14 @@ function settings(env: Env): Record<string, string> {
 		}
 	}
 	return out;
+}
+
+// fingerprint is a hash of the settings, so the Durable Object can tell a
+// deploy that changed them without keeping a copy of any secret.
+async function fingerprint(vars: Record<string, string> | undefined): Promise<string> {
+	const canonical = JSON.stringify(Object.entries(vars ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)));
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
+	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // misconfigured names what the binary cannot know is wrong here. Everything
