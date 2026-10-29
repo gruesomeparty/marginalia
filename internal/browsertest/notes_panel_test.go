@@ -70,7 +70,22 @@ func TestNotesPanelListsEveryNote(t *testing.T) {
 		t.Fatalf("%d notes on answered blocks still listed under the Not answered filter", left)
 	}
 
-	// Closing it is remembered, like the reviewer's other display choices.
+	// The panel stays under the header when the header grows — it wraps to
+	// another row when a label in it changes — so its close button is never
+	// left underneath.
+	gap := get(t, ctx, chromedp.Evaluate[float64](`(async () => {
+		document.querySelector("header").style.paddingBottom = "3rem";
+		await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+		return document.getElementById("notes-panel").getBoundingClientRect().top - document.querySelector("header").getBoundingClientRect().bottom;
+	})()`, chromedp.EvalAwaitPromise))
+	if gap < -0.5 || gap > 0.5 {
+		t.Fatalf("panel top is %.1fpx from the header's bottom after the header grew", gap)
+	}
+
+	// Open is remembered across a reload, and so is closed, like the
+	// reviewer's other display choices.
+	do(t, ctx, chromedp.Reload(), chromedp.WaitVisible(chromedp.CSS("#notes-panel .entry")))
+
 	do(t, ctx,
 		chromedp.Click(chromedp.CSS("#notes-close")),
 		chromedp.WaitNotVisible(chromedp.CSS("#notes-panel")),

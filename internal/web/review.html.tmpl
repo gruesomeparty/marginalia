@@ -640,11 +640,17 @@ window.__MARGINALIA__ = {{.DataJSON}};
     hint.hidden = !hiddenN;
     hint.textContent = hiddenN + (hiddenN === 1 ? " note is" : " notes are") + " on blocks the current filter hides.";
   }
+  // Under the sticky header, however many rows it wraps to — and it wraps
+  // again when a label in it changes, so the panel follows it rather than
+  // sliding its own close button under the header.
+  function placeNotesPanel(){
+    if(notesPanel) notesPanel.style.top = document.querySelector("header").getBoundingClientRect().bottom + "px";
+  }
+  if(notesPanel && window.ResizeObserver) new ResizeObserver(placeNotesPanel).observe(document.querySelector("header"), {box: "border-box"});
   function showNotesPanel(on){
     if(!notesPanel) return;
     notesPanel.hidden = !on;
-    // Under the sticky header, however many rows it wrapped to.
-    notesPanel.style.top = document.querySelector("header").getBoundingClientRect().bottom + "px";
+    placeNotesPanel();
     notesToggle.setAttribute("aria-expanded", on ? "true" : "false");
     try{ localStorage.setItem("marginalia.notes", on ? "open" : "closed"); }catch(e){}
     renderNotesPanel();
