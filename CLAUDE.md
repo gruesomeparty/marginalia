@@ -241,7 +241,12 @@ users are agents, not humans.
   is `!b.readonly` and `readonly` in the payload *is* `cfg.Locked()` — the
   server's own gate, not a second guess; if they diverged the bar would say
   finished and Done would refuse, so `render_test.go` asserts the projection
-  equals `Locked` for every block. **Movement** binds `ArrowDown`/`ArrowUp`
+  equals `Locked` for every block. The **outline** (issue #132,
+  `web/sections.go`) only regroups that rule: each block carries the
+  `section` it rolls up into (the outermost heading level that occurs at
+  least twice for markdown; a tree's top-level node, one below a lone root),
+  and `sections_test.go` pins that the per-section totals sum to the
+  document's. **Movement** binds `ArrowDown`/`ArrowUp`
   (and shifted, for next/previous *unanswered*, wrapping) plus `j`/`k`/`n`/`p`
   when free: a configured action key always wins, because the agent asked for
   that vocabulary, and since `review` requires a key to be a single character,
