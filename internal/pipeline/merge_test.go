@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gruesomeparty/marginalia/internal/review"
+	reviewcfg "github.com/gruesomeparty/marginalia/internal/review"
 )
 
 type gateOut struct {
@@ -350,7 +350,7 @@ func TestMergeVerdictCommentIsInert(t *testing.T) {
 // decision actions must be the ones merge-verdict.sh reads.
 func TestMergeReviewConfigLoads(t *testing.T) {
 	path := filepath.Join(filepath.Dir(script(t)), "..", ".github", "merge-review.yaml")
-	cfg, err := review.Load(path)
+	cfg, err := reviewcfg.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}

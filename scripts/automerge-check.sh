@@ -2,7 +2,7 @@
 # Eligibility gate for auto-merging a pipeline PR into its integration branch.
 #
 # Usage (what .github/workflows/integration-automerge.yml does):
-#   jq -n --argjson pr "$(gh pr view N --json number,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository,body)" \
+#   jq -n --argjson pr "$(gh pr view N --json number,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository,body,labels)" \
 #         --argjson issue "$(gh issue view M --json number,state,labels)" \
 #         --arg sha "$HEAD_SHA" '{pr: $pr, issue: $issue, ci_sha: $sha}' \
 #     | scripts/automerge-check.sh
@@ -15,6 +15,8 @@
 #   - base is feature/*                     never main, never anything else
 #   - head is a claude/* branch in this repo a fork cannot name its way in
 #   - not a draft
+#   - not labelled review:blocking          the adversarial review found a
+#                                           reason it must not merge
 #   - CI passed on the PR's current head    not on a commit since replaced
 #   - body says "Closes #M" for one issue   the issue is what was approved
 #   - #M is open, approved-for-agent, and labelled base:<that same base>
@@ -54,6 +56,8 @@ ci_sha="$(field .ci_sha)"
 [[ "$head" == claude/* ]] || refuse "#$number comes from $head, not a claude/* pipeline branch"
 [ "$(jq -r '.pr.isCrossRepository | tostring' <<<"$input")" = "false" ] || refuse "#$number comes from a fork"
 [ "$(jq -r '.pr.isDraft | tostring' <<<"$input")" = "false" ] || refuse "#$number is a draft"
+jq -e '[.pr.labels // [] | .[].name] | index("review:blocking") | not' >/dev/null <<<"$input" ||
+  refuse "#$number is labelled review:blocking"
 [ -n "$ci_sha" ] && [ "$ci_sha" = "$head_sha" ] ||
   refuse "#$number's head is ${head_sha:-unknown}, but CI passed on ${ci_sha:-nothing}"
 

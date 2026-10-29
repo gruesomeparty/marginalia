@@ -544,6 +544,16 @@ weekday schedule and by hand, and is armed by a repository secret
 (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`): unattended write access is a
 deliberate choice, made by adding the credential, not a default.
 
+**Review loop.** Every pull request, whoever opened it, gets an adversarial
+review (`skills/review-pr/SKILL.md`, `.github/workflows/review-prs.yml`): an
+agent looks for the reason it should not merge — an invariant broken, a trust
+boundary crossed, a claim the diff does not meet — and the result is one
+`review:pass|concerns|blocking` label and one comment, refreshed as the PR
+moves. The reviewing agent only reads and `scripts/apply-review.sh` applies its
+verdict, as with triage; external PRs are reviewed without ever running their
+code or exposing a secret to them. The review informs Berkay and the work loop;
+it never merges, approves or replaces the human gate on `main`.
+
 **Integration branches.** The rule is *no change reaches `main` without
 Berkay's review or the merge gate's leave* (below) — not *every step waits for
 Berkay*. A larger piece of work

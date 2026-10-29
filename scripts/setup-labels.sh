@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Creates (or updates) every label the feedback, triage and work loops use.
-# Idempotent; the triage workflow runs it before it applies a verdict.
+# Creates (or updates) every label the feedback, triage, work and review loops
+# use. Idempotent; the triage and review workflows run it before they apply a
+# verdict.
 set -euo pipefail
 repo="${REPO:-gruesomeparty/marginalia}"
 create(){ gh label create "$1" --repo "$repo" --color "$2" --description "$3" --force >/dev/null; }
@@ -28,6 +29,10 @@ create priority:p3        "fef2c0" "Nice to have"
 create size:s             "c2e0c6" "One package, an afternoon"
 create size:m             "bfd4f2" "A few files across one feature"
 create size:l             "d4c5f9" "Cross-cutting or needs design"
+# Review (scripts/apply-review.sh is the only writer of these).
+create review:pass        "0e8a16" "Adversarial review: nothing found that should stop a merge"
+create review:concerns    "fbca04" "Adversarial review: a real problem to fix before merging"
+create review:blocking    "b60205" "Adversarial review: breaks an invariant, a boundary or main"
 # Human-only.
 create hold               "000000" "Approved, but the work loop must wait"
 # Merge loop (scripts/merge-loop.sh is the only writer of the merge:* labels).

@@ -74,6 +74,7 @@ func TestAutomergeRefuses(t *testing.T) {
 		"human branch":     {func(pr, _, _ map[string]any) { pr["headRefName"] = "berkay/wip" }, "not a claude/* pipeline branch"},
 		"fork":             {func(pr, _, _ map[string]any) { pr["isCrossRepository"] = true }, "from a fork"},
 		"draft":            {func(pr, _, _ map[string]any) { pr["isDraft"] = true }, "is a draft"},
+		"review blocking":  {func(pr, _, _ map[string]any) { pr["labels"] = labels("review:blocking") }, "labelled review:blocking"},
 		"stale CI":         {func(_, _, in map[string]any) { in["ci_sha"] = "old999" }, "CI passed on old999"},
 		"no closes":        {func(pr, _, _ map[string]any) { pr["body"] = "Implements the storage layer." }, "names no issue"},
 		"two issues":       {func(pr, _, _ map[string]any) { pr["body"] = "Closes #94, fixes #95" }, "closes several issues"},
