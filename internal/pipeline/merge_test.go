@@ -403,8 +403,8 @@ func TestMergeVerdictRefusesAnUnparseablePublishTime(t *testing.T) {
 }
 
 // fakeGH is a stand-in gh for merge-loop.sh: it serves pr-<n>.json and
-// files-<n>.json from dir, fails `pr diff` for any PR listed in nodiff, and
-// logs every call.
+// files-<n>.json from dir, fails `pr diff` for any PR listed in nodiff and
+// the file listing for any PR listed in nofiles, and logs every call.
 const fakeGH = `#!/usr/bin/env bash
 dir="$(dirname "$0")"
 echo "gh $*" >>"$dir/calls.log"
@@ -413,7 +413,7 @@ case "$1 $2" in
   "pr diff") if grep -qx "$3" "$dir/nodiff" 2>/dev/null; then echo "diff too large" >&2; exit 1; fi; echo "diff --git a/x b/x" ;;
   "api --paginate")
     case "$3" in
-      */files) n="${3%/files}"; cat "$dir/files-${n##*/}.json" ;;
+      */files) n="${3%/files}"; n="${n##*/}"; if grep -qx "$n" "$dir/nofiles" 2>/dev/null; then exit 1; fi; cat "$dir/files-$n.json" ;;
       *) echo '[]' ;;
     esac ;;
 esac
@@ -421,7 +421,9 @@ exit 0
 `
 
 // One PR whose diff GitHub refuses to serve must not end the sweep: it falls
-// back to asking for a GitHub approval, and the next PR is still decided.
+// back to asking for a GitHub approval, and the next PR is still decided. A PR
+// whose file listing fails is skipped, never decided on the weaker list that
+// cannot see a rename's old path.
 func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, v any) {
@@ -440,7 +442,10 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "nodiff"), []byte("1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range []int{1, 2} {
+	if err := os.WriteFile(filepath.Join(dir, "nofiles"), []byte("3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 2, 3} {
 		p := prOf(lowRisk())
 		p["number"], p["state"], p["latestReviews"] = n, "OPEN", []any{}
 		if n == 1 {
@@ -456,7 +461,7 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2")
+	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2", "3")
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"REPO=o/r", "OWNER=gruesomeparty", "GH_TOKEN=x", "MERGE_LOOP_AUTO=true",
@@ -481,5 +486,8 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 	}
 	if strings.Contains(log, "pr merge 1 ") {
 		t.Errorf("#1 was merged:\n%s", log)
+	}
+	if strings.Contains(log, "pr merge 3 ") || !strings.Contains(string(out), "#3: could not list the PR's files") {
+		t.Errorf("#3 was decided without its file listing:\n%s\n%s", out, log)
 	}
 }

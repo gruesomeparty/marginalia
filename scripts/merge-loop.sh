@@ -87,10 +87,13 @@ for n in "$@"; do
   fi
   # GraphQL names a renamed file by its new path only; the REST listing also
   # gives the old one, so moving a file out of a sensitive directory still
-  # counts as touching it.
-  if files="$(gh api --paginate "repos/$REPO/pulls/$n/files" | jq -s '[add[] | {path: .filename} + (if .previous_filename then {previous_filename} else {} end)]')"; then
-    pr="$(jq --argjson files "$files" '.files = $files' <<<"$pr")"
+  # counts as touching it. Without that listing the gate would decide on the
+  # weaker one, so the PR waits for the next run instead.
+  if ! files="$(gh api --paginate "repos/$REPO/pulls/$n/files" | jq -s '[add[] | {path: .filename} + (if .previous_filename then {previous_filename} else {} end)]')"; then
+    echo "::warning::#$n: could not list the PR's files; skipped"
+    continue
   fi
+  pr="$(jq --argjson files "$files" '.files = $files' <<<"$pr")"
   [ "$(jq -r .state <<<"$pr")" = OPEN ] || continue
   head="$(jq -r .headRefOid <<<"$pr")"
 
