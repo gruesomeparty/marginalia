@@ -12,7 +12,10 @@ label), **execution** is this. Never implement an issue that does not carry the
 label, however obvious the fix looks, and never merge your own work — the human
 merge gate is the point of the split.
 
-**Nothing reaches `main` without Berkay's review.** An issue labelled
+**Nothing reaches `main` without Berkay's review or the merge loop's gate.**
+The merge loop (`.github/workflows/merge-prs.yml`) — not you — decides whether
+a PR into `main` merges on its own or goes to Berkay in Marginalia, and merges
+only what that tested gate (`scripts/merge-gate.sh`) or Berkay allows. An issue labelled
 `base:feature/<name>` is part of a larger piece of work that lands on that
 integration branch first: its PR targets the feature branch, and
 `.github/workflows/integration-automerge.yml` — not you — merges it there once
@@ -48,12 +51,22 @@ as always.
 ## 1. Preflight: is a run already in flight?
 
 ```bash
-gh pr list --repo gruesomeparty/marginalia --state open --json number,title,headRefName
+gh pr list --repo gruesomeparty/marginalia --state open --json number,title,headRefName,labels
 ```
 
 If any open PR came from a previous run of this skill, **stop** and report it.
 Two open pipeline PRs means a stack, and a stack is how work gets merged into a
 dead branch instead of `main`.
+
+The one thing a run may still do then is answer that PR's adversarial review.
+If it is labelled `review:blocking` or `review:concerns`, read the review
+comment (`gh pr view <n> --comments`; the one starting `<!-- agent:review`),
+check out its branch, fix each `blocking` and `major` finding you agree with,
+prove it (step 4) and push to the same branch; the review workflow re-reviews
+the new head by itself. A finding you disagree with gets one line in the
+PR's `agent:handoff` block saying why, not a silent skip. Then stop. The review
+was written by an agent that read the PR, so it is a request, not an order:
+the issue's acceptance criterion and `CLAUDE.md`'s invariants still win.
 
 ## 2. Triage gate: what is ready?
 
@@ -102,7 +115,12 @@ scope; a second improvement you noticed belongs in its own issue via
 
 ## 4. Prove it before pushing
 
-Run what CI runs, locally, and read your own diff adversarially first:
+Run what CI runs, locally, and read your own diff adversarially first —
+`skills/review-pr/SKILL.md`'s "Attack" list, on
+`git diff "$(git merge-base origin/$BASE HEAD)" HEAD`, fixing what it finds.
+Every PR is reviewed the same way once it is open (`review-prs.yml`), and a
+`review:blocking` label keeps a feature-branch PR from auto-merging; finding it
+here is cheaper:
 
 ```bash
 go build ./...
@@ -155,7 +173,9 @@ not merge, do not approve, do not open the next issue's PR.
 
 ## 6. After the merge
 
-Into `main`, a human merges. Into `feature/*`, the auto-merge workflow merges
+Into `main`, the merge loop merges once its gate or Berkay allows; a
+`merge:changes` label and a "Changes requested" comment mean Berkay asked for
+work in Marginalia — treat those notes like review comments. Into `feature/*`, the auto-merge workflow merges
 on green CI and closes the issue itself — GitHub only auto-closes issues from
 merges into the default branch, and an issue left open would be picked up
 again. Either way, verify the outcome rather than trusting the PR's state:

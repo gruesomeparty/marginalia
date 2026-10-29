@@ -73,6 +73,11 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # This repository's own workflows start runs with the workflow
+          # token (a triage approval, a merge, the chain), and the action
+          # refuses a bot actor unless named. Only that one: an outside app
+          # stays refused, and the github-actions bot acts for no one else.
+          allowed_bots: github-actions[bot]
           prompt: |
             REPO: ${{ github.repository }}
             ISSUE: ${{ inputs.issue || (github.event_name == 'issues' && github.event.issue.number) || '' }}

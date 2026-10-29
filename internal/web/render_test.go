@@ -341,7 +341,7 @@ func TestRenderCarriesTheLongDocumentControls(t *testing.T) {
 	for _, want := range []string{
 		`id="progress"`, `id="progtext"`, `id="progfill"`,
 		`data-filter="unanswered"`, `data-filter="mine"`, `data-filter="noted"`,
-		`id="outstanding"`, `id="outstanding-list"`,
+		`id="sheet"`, `id="outstanding-list"`, `id="sheet-submit"`,
 		`"require_verdict":true`,
 	} {
 		if !strings.Contains(out, want) {

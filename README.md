@@ -358,7 +358,10 @@ You get a page. Click a block, pick a verdict, done.
 
 - **One tap where possible.** An action with nothing to fill in saves on the
   tap. Most feedback is a verdict, not prose, and a review where saying "nit"
-  means typing is a review that gets abandoned.
+  means typing is a review that gets abandoned. Those one-tap actions sit
+  apart in the composer as one compact control, Approve in green and Reject
+  in red (always labelled, never colour alone), so a verdict no longer looks
+  like the start of a comment.
 - **Keyboard.** `Enter` on a focused block opens the composer. A configured
   action's key writes it without one. And on a long document:
 
@@ -383,16 +386,28 @@ You get a page. Click a block, pick a verdict, done.
   is left:
 
   ```
-  12 of 61 answered · 12 comments · 3 to re-check · 2 outstanding
+  12 of 61 answered · 3 of 9 sections · 12 comments · 3 to re-check
   ```
+
+  On a long document the bar barely moves, so the page also groups blocks by
+  top-level section: an outline in the left column lists each one with how
+  many of its blocks are answered, ticks it when all of them are, and takes
+  you there on a click. That is a markdown document's outermost chapters (a
+  lone title over H2 chapters groups by chapter), a diff's files, and a
+  tree's top-level nodes. The rule for what counts as answered is the same.
 
 - **Filters** for how you actually work: not answered, ones you answered, ones
   the requester asked about, ones waiting to be re-checked. The menu label says
   how many blocks are out of view, so a filter is never a silent lie. An inline
   block — a list item, a diagram statement — dims instead of hiding, because
   removing a bullet renumbers the list around it.
-- **Done tells you what is missing.** With `require_verdict`, it names the
-  blocks still waiting and takes you to any of them, instead of only refusing.
+- **Done is a summary, not a click.** It opens a sheet that shows what you
+  said (counts by type), how many blocks you left unanswered, and a box for an
+  optional overall note. Nothing is written until you press **Submit**. Cancel
+  or Esc leaves the log untouched. With `require_verdict` the sheet lists the
+  blocks still waiting, takes you to any of them, and will not submit until
+  they are answered. The overall note becomes the `text` of the `review_done`
+  event, so the agent reads it alongside the signal to go.
 - **Your display is yours.** The **Display** menu picks System / Light / Dark
   and turns code ligatures off. Those choices live in your browser, never on
   the agent's disk. `--theme` picks the palette it arrives in: `default`,
@@ -906,7 +921,7 @@ links to where it is tracked.
 |---|---|
 | **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs have landed. Still missing: OpenAPI anchored by operation rather than as a generic tree, HCL, SQL migrations, and source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
 | **Only flowcharts decompose** | Other mermaid diagram types stay reviewable as a single source block rather than per statement. |
-| **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. The interface is half the product and the untested half. |
+| **The page's JavaScript is barely tested** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | `internal/browsertest` drives the page in headless Chrome for the composer, one-tap actions, replies and diagram clicks. Keyboard movement, folding, share-mode storage and `--watch` reloads are still verified by hand; each PR that touches the page adds its case. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
 | **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
 | **No blocking handoff from the CLI** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | MCP has `await_review_done`. There is no `serve --until-done`, no long-poll endpoint, and no outbound notification. |

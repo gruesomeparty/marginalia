@@ -385,7 +385,7 @@ reads, waits and the inbox never poll the store. Billed store operations are
 a design input — one PUT per comment, one listing per startup, nothing
 periodic. This repo ships the binary, the image, the docs and a **generic
 deployment template**: `deploy/cloudflare` is a Worker in front of one
-Container (`max_instances: 1`), and its image tag moves with each release.
+Container (one Durable Object, so one instance), and its image tag moves with each release.
 It ships nothing account-specific. The account, the hostname, the bucket,
 the Access applications and every secret belong to the operator: the
 hostname is a deploy argument, and the settings are a local file uploaded
@@ -544,8 +544,19 @@ weekday schedule and by hand, and is armed by a repository secret
 (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`): unattended write access is a
 deliberate choice, made by adding the credential, not a default.
 
+**Review loop.** Every pull request, whoever opened it, gets an adversarial
+review (`skills/review-pr/SKILL.md`, `.github/workflows/review-prs.yml`): an
+agent looks for the reason it should not merge — an invariant broken, a trust
+boundary crossed, a claim the diff does not meet — and the result is one
+`review:pass|concerns|blocking` label and one comment, refreshed as the PR
+moves. The reviewing agent only reads and `scripts/apply-review.sh` applies its
+verdict, as with triage; external PRs are reviewed without ever running their
+code or exposing a secret to them. The review informs Berkay and the work loop;
+it never merges, approves or replaces the human gate on `main`.
+
 **Integration branches.** The rule is *no change reaches `main` without
-Berkay's review* — not *every step waits for Berkay*. A larger piece of work
+Berkay's review or the merge gate's leave* (below) — not *every step waits for
+Berkay*. A larger piece of work
 (hosted mode, #91) is a chain of issues each labelled `base:feature/<name>`:
 their PRs target that feature branch, and `integration-automerge.yml` merges
 each one there on green CI, closes its issue, and — only with the repository
@@ -558,6 +569,20 @@ feature branch reaches `main` through one PR a human reviews. This replaces a
 stack, which is what it is for: every PR is based on a real, merged branch, a
 review fix is a follow-up PR rather than a rebase of everything above it, and
 squash merges cannot orphan the next layer.
+
+**The merge loop.** Not every PR into `main` needs a human; the merge loop
+(`merge-prs.yml`) decides which do, and Marginalia is how it asks. A tested
+script (`scripts/merge-gate.sh`), not a prompt, makes the call from what
+cannot be written by whoever opened the PR: green CI on the head, the
+adversarial review's label for that same head, the author, the paths touched,
+the size. Low-risk PRs merge on their own only when the repository opts in
+(`MERGE_LOOP_AUTO`); everything else — concerns, outsiders, forks, the files
+that decide how the project is built, released, deployed or trusted, large or
+breaking changes — is published to the hosted instance as a review whose
+vocabulary is the decision (*Merge it*, *Request changes*), and the loop
+merges the exact commit the maintainer reviewed, or posts the notes back to
+the PR. It is the tool reviewing its own pipeline: the agent hands the human a
+document and acts on the structured answer.
 
 ## 9. Milestones
 

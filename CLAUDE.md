@@ -241,7 +241,12 @@ users are agents, not humans.
   is `!b.readonly` and `readonly` in the payload *is* `cfg.Locked()` — the
   server's own gate, not a second guess; if they diverged the bar would say
   finished and Done would refuse, so `render_test.go` asserts the projection
-  equals `Locked` for every block. **Movement** binds `ArrowDown`/`ArrowUp`
+  equals `Locked` for every block. The **outline** (issue #132,
+  `web/sections.go`) only regroups that rule: each block carries the
+  `section` it rolls up into (the outermost heading level that occurs at
+  least twice for markdown; a tree's top-level node, one below a lone root),
+  and `sections_test.go` pins that the per-section totals sum to the
+  document's. **Movement** binds `ArrowDown`/`ArrowUp`
   (and shifted, for next/previous *unanswered*, wrapping) plus `j`/`k`/`n`/`p`
   when free: a configured action key always wins, because the agent asked for
   that vocabulary, and since `review` requires a key to be a single character,
@@ -319,6 +324,10 @@ users are agents, not humans.
   no `review_done`), `done`, `replied` (a `reply`/`addressed` after the last
   `review_done`) — and counts from `feedback.Materialize`, never a second
   tally. Tabs are a query string; `/api/reviews` is the same rows as JSON.
+  A row leads with its status and outstanding count, metadata after
+  (issue #134), and rows group under Today / Earlier by last activity in UTC
+  — headings only when both groups hold a row (`Inbox.Now` pins the clock in
+  tests). Grouping is presentation only; `Host.rows()` is unchanged.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
@@ -440,7 +449,19 @@ users are agents, not humans.
   `--addr` (which the image's `CMD` sets) from env, `MARGINALIA_PUBLIC_URL`
   included (`publicOrigin` refuses anything but scheme and host). The Worker refuses only what the binary cannot know
   is wrong: no public URL, or a store that is not `r2://` (a container's
-  disk dies with it). The container sleeps after 30 minutes idle. An
+  disk dies with it). It also answers, without waking the container, the
+  agent-path requests the host would only refuse — `/mcp` with no bearer,
+  or with a wrong static token when no OAuth issuer is set (constant-time,
+  by digest), and `/.well-known/*` the host does not serve — because those
+  paths are public in Access and every forwarded request starts a sleeping,
+  billed container. An anonymous `/healthz` is answered from the Durable
+  Object's state (`awake()`, which neither starts the container nor renews
+  its activity): `ok` or `ok (asleep)`; the static token buys the real
+  check. Every other path is the reviewer's, and one arriving without
+  Access's `Cf-Access-Jwt-Assertion` header (Access missing or
+  misconfigured) gets a 403 at the edge; presence only, the host verifies
+  the JWT. The host still checks every credential itself. The
+  container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's
   20s, because the host loads every review before it listens. The binary
@@ -449,11 +470,20 @@ users are agents, not humans.
   values). The first request after a deploy that changed them restarts the
   container: SIGTERM, a drain, then a fresh start. Without this, a rotated
   token would wait for a sleep that a waiting agent postpones
-  indefinitely. The
+  indefinitely. The container runs under the `durable_object` scheduling
+  policy (Cloudflare refuses `default` on some accounts, and a policy is
+  immutable once created), so the Durable Object names the image and the
+  instance size when it starts it. `@cloudflare/containers` passes neither,
+  so `Marginalia` hands the library a proxy of `ctx.container` whose
+  `start()` adds them; the image reference is part of the settings hash, so
+  a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
   hence the rebuild. `deploy_template_test.go` pins that tag to
-  `.release-please-manifest.json`, pins `max_instances: 1`, and pins no
+  `.release-please-manifest.json`, pins the `durable_object` scheduling
+  policy and a single unnamed `getContainer` (that policy has no
+  `max_instances`; one Durable Object is what keeps the host its store's
+  single writer), and pins no
   `account_id`/`routes`/`vars` and no `workers_dev` or preview URL. It also
   checks that every name in `settings.example.env` is one the binary reads.
   CI's `cloudflare-template` job typechecks the Worker and runs a dry-run
@@ -537,8 +567,12 @@ instead of silently misanchoring. A note about one sentence adds `sub`
 action the requesting agent configured (`blocker`, `nit`, …) — an action with
 nothing to fill in is one tap, and one that declares `fields` carries them in
 the event's `fields` map. A **Done**
-button appends a `review_done` event — the agent's signal to proceed;
-`require_verdict` withholds it until every commentable block is answered.
+button opens a summary sheet (issue #129: counts by type, what is unanswered,
+an optional overall note) and only its **Submit** appends a `review_done`
+event — the agent's signal to proceed, so one stray click must not send it.
+The overall note is that event's `text`, not a new type and not a note on
+some block. `require_verdict` withholds Submit until every commentable block
+is answered.
 
 ## Agent feedback loop (PRD §8)
 
@@ -577,8 +611,8 @@ criterion (exit 3 when the queue holds nothing implementable, so a run stops and
 asks rather than guessing what "done" means). Rules the pipeline exists to keep:
 **one issue → one PR based on the issue's base → stop** (never a second open PR,
 never a stack on another `claude/*` branch — that is how work gets merged into a
-dead branch), never merge or approve, **no auto-merge to `main` without Berkay's
-review** — an issue labelled `base:feature/<name>` targets that integration
+dead branch), never merge or approve, **only the merge loop merges into
+`main`, and only what its gate allows** (below) — an issue labelled `base:feature/<name>` targets that integration
 branch instead, and `integration-automerge.yml` merges it there on green CI
 through `scripts/automerge-check.sh`, which refuses `main` outright (tested in
 `internal/pipeline`); the feature branch reaches `main` through one
@@ -592,6 +626,53 @@ the PR's state. `.github/workflows/implement-approved.yml` runs it when an issue
 hand; the queue is ordered by triage's priority and skips `hold`. It is armed
 by credentials, not by editing the file: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
+
+The review loop is `skills/review-pr/SKILL.md`, run by
+`.github/workflows/review-prs.yml` on every PR — Berkay's, an agent's, the work
+loop's, a fork's — so every one carries exactly one of `review:pass`,
+`review:concerns`, `review:blocking` and one comment, edited in place when the
+head moves. It is triage's split again: the agent reads the PR as git objects
+from a default-branch checkout (the PR's code is never checked out or run),
+writes `review/<n>.json`, and a job with no agent applies it through
+`scripts/apply-review.sh` (tested in `internal/pipeline`), which derives the
+label from the findings' severities, refuses a verdict for a commit other than
+the one fetched, and makes visible text inert (no mentions, links or comment
+markers). **No `pull_request_target`**: a fork's PR gets no secrets on
+`pull_request`, so the two-hourly sweep reviews it from the default branch, and
+finds any unreviewed head by the `sha:` in its own comment's hidden block.
+Drafts and bots are skipped. It never approves, requests changes or blocks a
+merge into `main`; `automerge-check.sh` refuses a `review:blocking` PR into a
+feature branch, and the work loop's preflight answers a blocking or concerns
+review on its open PR before it stops.
+
+The last stage is the **merge loop** (`.github/workflows/merge-prs.yml`,
+`scripts/merge-loop.sh`), at Berkay's request: not every PR needs a human, and
+the loop decides which do. It runs no agent and never checks out a PR. For
+each open PR into `main`, `scripts/merge-gate.sh` (tested in
+`internal/pipeline`) answers `skip` (feature base, draft, `hold`, Renovate,
+release-please, other bots), `wait` (CI not green on the head, a conflict, no
+adversarial review *of the current head* — the review comment's `sha:` — or
+`review:blocking`), `merge` (the maintainer approved this exact head, or
+nothing asks for a human and `MERGE_LOOP_AUTO=true`), or `human`, listing
+every reason: `review:concerns`, an untrusted author or a fork, a sensitive
+path (workflows, scripts, the loop skills, deploy, `go.mod`, PRD — not
+CLAUDE.md or `skills/review-doc`, which nearly every PR updates — the storage,
+identity, MCP and review-protocol packages), over 400 lines or 20 files, a
+breaking change, `needs-human`, or auto-merge being off — which is the
+default, so out of the box every PR still waits for Berkay. A `human` PR's
+diff and a cover page are published to the hosted instance
+(`MARGINALIA_URL` + `MARGINALIA_MCP_TOKEN` secrets, `scripts/marginalia-call.sh`
+over stateless `/mcp`) with `.github/merge-review.yaml`, whose `merge_pr` and
+`request_changes` actions are the decision; `scripts/merge-verdict.sh` reads
+only a human's events since that revision was published, after `review_done`.
+A push republishes the same review (`review_id`), so notes re-anchor. Without
+the secrets, or if publishing fails, a GitHub approval of the head by the
+owner is the decision instead (it always counts). State is one sticky
+`<!-- agent:merge v1 sha: review: published: state: -->` comment of
+github-actions' own, and labels `merge:human`/`merge:changes`. A merge always
+passes `--match-head-commit`; made with the workflow token it starts no push
+workflow, so the loop dispatches `release.yml` (or merges with a
+`MERGE_TOKEN` secret instead).
 
 Dependency updates are the one exception to the human gate on `main`, at
 Berkay's request: Renovate (`renovate.json`) owns every ecosystem —
@@ -625,6 +706,16 @@ template) — done**.
   `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
+- Browser tests (`internal/browsertest`, issue #60) drive the real page with
+  **chromedp**, chosen over Playwright so the suite stays Go, shares the
+  repo's helpers, and needs no `package.json` in a single-binary project.
+  They boot `session.Build` on a temp document behind `httptest` and assert on
+  the DOM *and* the appended JSONL. No Chrome → skip; `MARGINALIA_BROWSER=require`
+  (set on CI's ubuntu job) makes that a failure; `MARGINALIA_CHROME` names the
+  binary. Diagrams use a stand-in `mmdc` that copies the committed real render,
+  so no Node is needed. A PR that changes the page's JS brings a case. Prose
+  blocks keep their notes and composer as the *next sibling* (`[data-block] +
+  .existing`), not inside; diagram statements put theirs under the figure.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
 - Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it
