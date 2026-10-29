@@ -549,6 +549,27 @@ first); Berkay gates what becomes work via an `approved-for-agent` label; an
 agent session implements the approved queue on branches/PRs. Guardrail: quote
 document *structure*, never *content* — no secrets or private text in issues.
 
+**Write for two readers.** Issue and PR text is for Berkay: short and plain.
+Everything for agents — context, plan, paths, acceptance detail, handoff state
+— goes in a hidden HTML comment in the body, one block per purpose
+(`<!-- agent:report … -->` from `request-feature`, `<!-- agent:triage … -->`
+from triage, `<!-- agent:handoff … -->` on a pipeline PR), replaced in place
+and never containing `-->`. Every skill and loop prompt that writes to GitHub
+follows it. No Claude session or project links in commits, PRs or comments.
+
+Triage is `skills/triage-issues/SKILL.md`, run by `.github/workflows/triage.yml`
+on every opened/reopened issue and a six-hourly sweep. The agent there **only
+reads**: it runs with read-only permissions and writes one verdict file per
+issue, and a separate job with no agent applies them through
+`scripts/apply-triage.sh` (tested in `internal/pipeline`), which owns the label
+set — type, `priority:p0…p3`, `size:s|m|l`, `triaged`, `agent-ready`,
+`needs-info`/`needs-decision`, `duplicate` — never touches `base:*` or `hold`,
+and adds `approved-for-agent` only with the repository variable
+`TRIAGE_AUTO_APPROVE=true`, for a ready, not-large issue by a trusted author
+(the repo owner plus `TRIAGE_TRUSTED`). The repository is public; an issue's
+text must not be able to approve or auto-merge anything, which is why that
+decision is a script and not a prompt.
+
 The third stage is `skills/implement-approved/SKILL.md` (`/marginalia:implement-approved`),
 gated by `scripts/approved-queue.sh`: it reads `gh issue list --json` output and
 names the oldest issue that states both an expected behaviour and an acceptance
@@ -566,16 +587,18 @@ merge dispatch the next run,
 match CI's pinned `golangci-lint` version (a linter built for an older Go
 toolchain exits with a version error that reads like success), and after a merge
 verify the files are on `main` and the issue actually closed rather than trusting
-the PR's state. `.github/workflows/implement-approved.yml` runs it on
-`workflow_dispatch` only; the cron is commented out because arming it grants an
-agent write access on a timer.
+the PR's state. `.github/workflows/implement-approved.yml` runs it when an issue gains
+`approved-for-agent`, when a `claude/*` PR merges, on a weekday cron and by
+hand; the queue is ordered by triage's priority and skips `hold`. It is armed
+by credentials, not by editing the file: without a `CLAUDE_CODE_OAUTH_TOKEN` or
+`ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
 
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
 **M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
-pipeline — in place (skill + triage gate + manual workflow; schedule disarmed)**
+pipeline — in place (triage loop + skill + gate + work loop, armed by a secret)**
 → **M5 static share mode (`export`/`import`) — done** → **M6 hosted mode
 (#91: `mcp --http`, `internal/storage`, `host`, `publish_document`, identity,
 OAuth, inbox, caps, R2, image, notifications, the `deploy/cloudflare`

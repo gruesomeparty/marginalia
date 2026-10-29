@@ -26,20 +26,44 @@ of filing a duplicate.
 
 ## 2. File the issue
 
-Use the `agent-feedback` issue form:
+Write for two readers. The visible body is for Berkay: what you tried and what
+you expected, in two to four plain sentences. Everything an agent needs to act
+on it — the exact invocation, the error, the workaround, the version, the
+context, your guess at a fix — goes in one hidden block at the end, which
+renders as nothing on GitHub:
 
 ```bash
 gh issue create --repo gruesomeparty/marginalia \
   --label agent-feedback --label <category> \
   --title "<concise limitation>" \
-  --body "<what you attempted (exact invocation), expected, actual/error, workaround, marginalia version, requesting context>"
+  --body "$(cat <<'BODY'
+<What you were trying to do and what got in the way, in plain words.>
+
+**Expected:** <the behaviour you needed, one sentence>
+**Acceptance:** <one checkable line: how anyone can tell it is done>
+
+<!-- agent:report
+invocation: marginalia <exact command>
+actual: <error or behaviour, structure only>
+workaround: <what you did instead, or none>
+version: <marginalia version>
+context: <project/harness — structure, not content>
+suggested_fix: <files or approach, if you have one>
+-->
+BODY
+)"
 ```
 
 `<category>` is one of: `format-support`, `customization`, `skill-gap`, `bug`.
+Text inside the block must not contain `-->`; write `- ->` if you have to quote
+it. When you add a use case to an existing issue, the same split holds: one
+visible sentence, the detail in an `<!-- agent:report … -->` block in the
+comment.
 
 ## 3. What makes an implementable issue
 
-Include the exact `marginalia` invocation, the expected behavior, the actual
-behavior/error, and a one-line acceptance criterion. The maintainer gates work
-with the `approved-for-agent` label; well-formed issues can be implemented from
-the issue alone.
+An expected behaviour and a one-line acceptance criterion, visible, and the
+exact invocation in the hidden block. Triage (`triage-issues`) labels the
+issue, adds its own `<!-- agent:triage … -->` plan beside yours, and says when
+it is ready; the maintainer gates work with the `approved-for-agent` label, and
+a well-formed issue can be implemented from the issue alone.

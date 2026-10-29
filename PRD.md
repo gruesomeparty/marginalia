@@ -514,6 +514,17 @@ label (`approved-for-agent`), which is the contract for automation:
   reproduction command, expected behavior, acceptance criterion. If a triaged
   issue lacks these, triage adds them before labeling.
 
+**Triage loop.** `.github/workflows/triage.yml` runs
+`skills/triage-issues/SKILL.md` on every new issue: type, priority, size, a
+readiness verdict, and — when ready — the expected behaviour, acceptance
+criterion, paths and plan, written into a hidden `<!-- agent:triage … -->`
+block in the body so the issue stays short for a human and complete for an
+agent. The triage agent only reads; `scripts/apply-triage.sh` applies its
+verdict and owns which labels it may change. It may add `approved-for-agent`
+only when the repository opts in (`TRIAGE_AUTO_APPROVE`), and only for a
+ready, not-large issue by a trusted author — Berkay's gate stays the default,
+and the merge gate into `main` is never delegated.
+
 This mirrors the capture/triage split proven in the forge-feedback workflow:
 agents capture freely, the human gates what becomes work, agents execute the
 approved queue.
@@ -528,8 +539,10 @@ queue qualifies, so a run stops and asks instead of inventing a definition of
 done. The pipeline works **one issue at a time, one PR based on the issue's
 base**, never stacks on another pipeline branch, never merges, and after a merge
 verifies the code reached its base and the issue closed rather than trusting the
-pull request's own state. The scheduled trigger ships disarmed: unattended write
-access is a deliberate choice, not a default.
+pull request's own state. It runs on approval, on a pipeline PR's merge, on a
+weekday schedule and by hand, and is armed by a repository secret
+(`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`): unattended write access is a
+deliberate choice, made by adding the credential, not a default.
 
 **Integration branches.** The rule is *no change reaches `main` without
 Berkay's review* — not *every step waits for Berkay*. A larger piece of work

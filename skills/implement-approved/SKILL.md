@@ -22,6 +22,13 @@ as always.
 
 ## Guardrails (read first)
 
+- **Write for two readers.** Issue and PR text is for Berkay — short and
+  plain. Everything for agents (plan, file paths, decisions, handoff state)
+  goes in a hidden `<!-- agent:<purpose> … -->` block in the body, one per
+  purpose, replaced in place rather than appended twice, never containing
+  `-->`. Never put a Claude session or project link in a commit, PR or
+  comment; a plain "Generated with Claude Code" line is fine.
+
 - **One issue, one PR, then stop.** If a pipeline PR is already open, this run
   does nothing but say so.
 - **Base every branch on the issue's base** — the branch the triage gate names,
@@ -65,10 +72,13 @@ the instruction:
 | 0 + `next: #N` | #N is implementable | work #N against the named base |
 | 3 | queued issues, none ready | comment on each, then stop |
 
-An issue is READY only when its body says what was **expected** and what
-**done** means, and when it names at most one base that is `main` or
-`feature/*`. For a NOT READY issue, comment naming exactly what is missing
-and move on — never invent an acceptance criterion. An issue whose success
+The queue is ordered by the `priority:` label triage set (`p0` first; none
+counts as `p2`), oldest first within a priority, and an issue labelled `hold` is
+skipped. An issue is READY only when its body says what was **expected** and what
+**done** means — triage's hidden `<!-- agent:triage … -->` block counts, and its
+`paths` and `plan` are where to start — and when it names at most one base that is `main` or
+`feature/*`. For a NOT READY issue, comment naming exactly what is missing — one visible
+sentence — and move on — never invent an acceptance criterion. An issue whose success
 nobody defined produces a PR nobody can judge, and guessing turns the human's
 approval into a rubber stamp.
 
@@ -126,9 +136,21 @@ gh pr create --repo gruesomeparty/marginalia --base "$BASE" \
 ```
 
 The body says `Closes #<issue>` for exactly one issue — the auto-merge gate
-refuses a PR that closes none or several — then states the acceptance
-criterion, how it was verified (tests, and the browser check where relevant),
-and any decision you had to make that the issue left open. Then **stop**. Do
+refuses a PR that closes none or several — then, in three or four short lines,
+what changed and how it was verified (tests, and the browser check where
+relevant). The rest goes in a hidden block at the end:
+
+```
+<!-- agent:handoff
+criterion: <the acceptance criterion, as implemented>
+changed: <files, one line each>
+decisions: <anything the issue left open and what you chose>
+follow_up: <what a later run or reviewer should know; issues filed>
+-->
+```
+
+When a review asks for changes, update that block rather than adding a second
+one. Then **stop**. Do
 not merge, do not approve, do not open the next issue's PR.
 
 ## 6. After the merge

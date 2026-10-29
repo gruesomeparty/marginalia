@@ -4,10 +4,17 @@
 # integration-automerge.yml. This workflow never merges anything, and nothing
 # reaches main without a human.
 #
-# NOT ARMED. It runs only when someone dispatches it by hand. To let it run
-# unattended, add an ANTHROPIC_API_KEY repository secret and uncomment the
-# schedule below — that grants an agent write access to this repo on a timer,
-# so it should be a deliberate decision rather than a default.
+# This is the work loop. It runs when an issue is approved (the
+# approved-for-agent label is added, by Berkay or by triage when
+# TRIAGE_AUTO_APPROVE is on), when a pipeline PR merges (so the next issue
+# starts without waiting for the schedule), on a weekday schedule as a sweep,
+# and by hand. Each run still does at most one issue and stops while a pipeline
+# PR is open, so the loop moves at the pace PRs are reviewed.
+#
+# Armed by credentials, not by editing this file: with no CLAUDE_CODE_OAUTH_TOKEN
+# (from `claude setup-token`) or ANTHROPIC_API_KEY repository secret every run
+# skips with a notice. Adding one grants an agent write access to this repo on
+# these triggers — a deliberate decision; removing it disarms the loop.
 name: Implement approved queue
 on:
   workflow_dispatch:
@@ -16,8 +23,12 @@ on:
         description: "Issue to implement (blank: whatever the triage gate names next)"
         required: false
         type: string
-  # schedule:
-  #   - cron: '17 6 * * 1-5'   # weekdays 06:17 UTC
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: '17 6 * * 1-5'   # weekdays 06:17 UTC
 permissions:
   contents: write
   issues: write
@@ -30,6 +41,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   implement:
+    # Only the events that can make a new issue workable: an approval, or a
+    # pipeline PR merging (which frees the one-open-PR slot).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'issues' && github.event.label.name == 'approved-for-agent') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged &&
+        startsWith(github.event.pull_request.head.ref, 'claude/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,19 +60,22 @@ jobs:
       - name: Install the linter version CI pins
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
       - name: Require credentials
+        id: creds
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "${ANTHROPIC_API_KEY}" ]; then
-            echo "::error::ANTHROPIC_API_KEY is not set; this workflow cannot run unattended without it" >&2
-            exit 1
+          if [ -n "$OAUTH$KEY" ]; then echo "ready=true" >>"$GITHUB_OUTPUT"; else
+            echo "::notice::No CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret; the work loop is disarmed"
           fi
       - uses: anthropics/claude-code-action@v1
+        if: steps.creds.outputs.ready == 'true'
         with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
             REPO: ${{ github.repository }}
-            ISSUE: ${{ inputs.issue }}
+            ISSUE: ${{ inputs.issue || (github.event_name == 'issues' && github.event.issue.number) || '' }}
 
             Follow skills/implement-approved/SKILL.md in this checkout, exactly.
 
@@ -67,6 +89,16 @@ jobs:
             exist yet); run go build, go test -race, the coverage gate and
             golangci-lint; then open one PR against that base with
             "Closes #<issue>" and stop.
+
+            Write for two readers. The PR's visible text is for Berkay: a title,
+            "Closes #<issue>", and three or four short lines on what changed and
+            how it was verified. Everything for agents — the plan you followed,
+            files touched, decisions the issue left open, what a follow-up run
+            needs — goes in one hidden <!-- agent:handoff ... --> block at the
+            end of the body. The issue's <!-- agent:triage ... --> block, if
+            present, is your starting plan, not a spec: the issue's own text and
+            the acceptance criterion win where they differ. Never put a Claude
+            session or project link in a commit, PR or comment.
 
             Never merge or approve. Never implement an issue that lacks the
             approved-for-agent label or an acceptance criterion — comment on it

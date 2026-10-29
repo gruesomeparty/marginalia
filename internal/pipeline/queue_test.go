@@ -172,3 +172,35 @@ func TestQueueAcceptsExplicitMain(t *testing.T) {
 		t.Fatalf("exit=%d\n%s", code, out)
 	}
 }
+
+// Triage ranks the queue: a p0 is worked before an older p3, and an issue with
+// no priority label sits where triage's default would put it, at p2.
+func TestQueueWorksHighestPriorityFirst(t *testing.T) {
+	out, _, code := run(t, `[
+	  {"number": 3, "title": "Old minor", `+ready+`, "labels": [{"name": "priority:p3"}]},
+	  {"number": 8, "title": "Unranked", `+ready+`},
+	  {"number": 9, "title": "Urgent", `+ready+`, "labels": [{"name": "priority:p0"}]}
+	]`)
+	if code != 0 || !strings.Contains(out, "next: #9") {
+		t.Fatalf("exit=%d, want #9 next\n%s", code, out)
+	}
+	if !(strings.Index(out, "#9 ") < strings.Index(out, "#8 ") && strings.Index(out, "#8 ") < strings.Index(out, "#3 ")) {
+		t.Errorf("queue not ordered p0, unranked, p3:\n%s", out)
+	}
+}
+
+// hold is a human asking an approved issue to wait: it is listed, never worked,
+// and a queue holding nothing else is not a triage failure.
+func TestQueueSkipsHeldIssues(t *testing.T) {
+	out, _, code := run(t, `[
+	  {"number": 2, "title": "Wait", `+ready+`, "labels": [{"name": "hold"}, {"name": "priority:p0"}]},
+	  {"number": 5, "title": "Go", `+ready+`}
+	]`)
+	if code != 0 || !strings.Contains(out, "next: #5") || !strings.Contains(out, "#2     HOLD") {
+		t.Fatalf("exit=%d\n%s", code, out)
+	}
+	out, _, code = run(t, `[{"number": 2, "title": "Wait", `+ready+`, "labels": [{"name": "hold"}]}]`)
+	if code != 0 || !strings.Contains(out, "on hold") {
+		t.Fatalf("all held: exit=%d\n%s", code, out)
+	}
+}
