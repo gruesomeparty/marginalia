@@ -108,6 +108,15 @@ func TestSplitBlockEdges(t *testing.T) {
 	}
 }
 
+// A comment trailing a statement on its line belongs to that statement.
+func TestSplitTrailingComment(t *testing.T) {
+	src := "SELECT 1; -- one\n-- about two\nSELECT 2;"
+	got := Split([]byte(src))
+	if len(got) != 2 || got[1].Comment != "about two" || src[got[0].Start:got[0].End] != "SELECT 1; -- one" {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestSplitTolerates(t *testing.T) {
 	for name, src := range map[string]string{
 		"empty":                "",

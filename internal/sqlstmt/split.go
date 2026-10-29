@@ -66,6 +66,14 @@ func (s *scanner) run() []Stmt {
 				i++
 			case c == '-' && at(src, i+1) == '-', c == '/' && at(src, i+1) == '*':
 				end := s.skipComment(i)
+				// A comment on the line a statement ends on is about that
+				// statement, not the next: it joins its range and stays out
+				// of the next one's quote and hash.
+				if n := len(s.out); s.seg < 0 && n > 0 && !bytes.ContainsRune(src[s.out[n-1].End:i], '\n') {
+					s.out[n-1].End = end
+					i = end
+					continue
+				}
 				if s.seg < 0 {
 					s.seg = i
 				}
