@@ -99,3 +99,22 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npx wrangler deploy --dry-run --outdir dist --containers-rollout=none
+  # What a pull request adds to go.mod or the Cloudflare template's
+  # package-lock.json: refused if it carries a known high-severity
+  # vulnerability or a licence an MIT project cannot ship. Agents open PRs
+  # here, and so does Renovate, which merges its own on green.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # Permissive licences only. Checked against the changed
+          # dependencies, not the whole graph, so a new one that is not on
+          # this list is a decision to make in that PR.
+          allow-licenses: >-
+            MIT, MIT-0, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, MPL-2.0,
+            Unlicense, 0BSD, CC0-1.0, BlueOak-1.0.0, Python-2.0, Zlib
