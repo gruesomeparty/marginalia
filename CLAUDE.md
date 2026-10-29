@@ -440,7 +440,19 @@ users are agents, not humans.
   `--addr` (which the image's `CMD` sets) from env, `MARGINALIA_PUBLIC_URL`
   included (`publicOrigin` refuses anything but scheme and host). The Worker refuses only what the binary cannot know
   is wrong: no public URL, or a store that is not `r2://` (a container's
-  disk dies with it). The container sleeps after 30 minutes idle. An
+  disk dies with it). It also answers, without waking the container, the
+  agent-path requests the host would only refuse — `/mcp` with no bearer,
+  or with a wrong static token when no OAuth issuer is set (constant-time,
+  by digest), and `/.well-known/*` the host does not serve — because those
+  paths are public in Access and every forwarded request starts a sleeping,
+  billed container. An anonymous `/healthz` is answered from the Durable
+  Object's state (`awake()`, which neither starts the container nor renews
+  its activity): `ok` or `ok (asleep)`; the static token buys the real
+  check. Every other path is the reviewer's, and one arriving without
+  Access's `Cf-Access-Jwt-Assertion` header (Access missing or
+  misconfigured) gets a 403 at the edge; presence only, the host verifies
+  the JWT. The host still checks every credential itself. The
+  container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's
   20s, because the host loads every review before it listens. The binary
@@ -449,11 +461,20 @@ users are agents, not humans.
   values). The first request after a deploy that changed them restarts the
   container: SIGTERM, a drain, then a fresh start. Without this, a rotated
   token would wait for a sleep that a waiting agent postpones
-  indefinitely. The
+  indefinitely. The container runs under the `durable_object` scheduling
+  policy (Cloudflare refuses `default` on some accounts, and a policy is
+  immutable once created), so the Durable Object names the image and the
+  instance size when it starts it. `@cloudflare/containers` passes neither,
+  so `Marginalia` hands the library a proxy of `ctx.container` whose
+  `start()` adds them; the image reference is part of the settings hash, so
+  a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
   hence the rebuild. `deploy_template_test.go` pins that tag to
-  `.release-please-manifest.json`, pins `max_instances: 1`, and pins no
+  `.release-please-manifest.json`, pins the `durable_object` scheduling
+  policy and a single unnamed `getContainer` (that policy has no
+  `max_instances`; one Durable Object is what keeps the host its store's
+  single writer), and pins no
   `account_id`/`routes`/`vars` and no `workers_dev` or preview URL. It also
   checks that every name in `settings.example.env` is one the binary reads.
   CI's `cloudflare-template` job typechecks the Worker and runs a dry-run

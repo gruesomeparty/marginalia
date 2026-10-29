@@ -385,7 +385,7 @@ reads, waits and the inbox never poll the store. Billed store operations are
 a design input — one PUT per comment, one listing per startup, nothing
 periodic. This repo ships the binary, the image, the docs and a **generic
 deployment template**: `deploy/cloudflare` is a Worker in front of one
-Container (`max_instances: 1`), and its image tag moves with each release.
+Container (one Durable Object, so one instance), and its image tag moves with each release.
 It ships nothing account-specific. The account, the hostname, the bucket,
 the Access applications and every secret belong to the operator: the
 hostname is a deploy argument, and the settings are a local file uploaded

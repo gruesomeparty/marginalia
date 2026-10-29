@@ -19,13 +19,18 @@
   "containers": [
     {
       "class_name": "Marginalia",
-      // A one-line Dockerfile naming the released image; wrangler builds it
-      // and pushes it to Cloudflare's registry.
-      "image": "./Dockerfile",
-      // 1/4 vCPU and 1 GiB: every review is loaded into memory at start.
-      "instance_type": "basic",
-      // The host is the single writer of its store. Never raise this.
-      "max_instances": 1
+      // The Durable Object starts the container itself, naming the image and
+      // the instance size (src/index.ts). Cloudflare refuses the "default"
+      // policy on some accounts, and a policy is immutable once deployed.
+      // There is no max_instances: there is one container because the
+      // Worker only ever asks for one Durable Object, and the host is its
+      // store's single writer — keep it that way.
+      "scheduling_policy": "durable_object",
+      "images": {
+        // A one-line Dockerfile naming the released image; wrangler builds
+        // it and pushes it to Cloudflare's registry.
+        "marginalia": { "dockerfile": "./Dockerfile" }
+      }
     }
   ],
   "durable_objects": {
