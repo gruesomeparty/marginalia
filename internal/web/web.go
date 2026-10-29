@@ -93,11 +93,14 @@ type clientBlock struct {
 	// Notes are the requester's guidance for this block — the agent asking,
 	// not the human answering.
 	Notes []review.Note `json:"notes,omitempty"`
+	// Section is the outline entry the block rolls up into (sections.go).
+	Section string `json:"section,omitempty"`
 }
 
 type clientDoc struct {
-	Path   string        `json:"path"`
-	Blocks []clientBlock `json:"blocks"`
+	Path     string          `json:"path"`
+	Blocks   []clientBlock   `json:"blocks"`
+	Sections []clientSection `json:"sections,omitempty"`
 }
 
 type payload struct {
@@ -175,9 +178,15 @@ func ReviewInfo(c *review.Config, doc *document.Document, rel string) Review {
 // ordinals are omitted deliberately: the page reads those off the block
 // element's data attributes.
 func project(doc *document.Document, cfg *review.Config, names []string) clientDoc {
-	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks))}
-	for _, b := range doc.Blocks {
+	of, secs := sections(doc)
+	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks)), Sections: secs}
+	for i, b := range doc.Blocks {
+		section := ""
+		if secs != nil {
+			section = of[i]
+		}
 		out.Blocks = append(out.Blocks, clientBlock{
+			Section:     section,
 			ID:          b.ID,
 			Parent:      b.Parent,
 			HasChildren: b.HasChildren,
@@ -213,6 +222,7 @@ type viewData struct {
 	DataJSON    template.JS
 	Nav         []*navNode
 	ShowNav     bool
+	Outline     []clientSection
 	Total       int
 	DoneN       int
 	SetDone     bool
@@ -242,9 +252,10 @@ func Render(w io.Writer, p Page) error {
 	if p.Rel != "" {
 		names = append(names, p.Rel)
 	}
+	client := project(doc, cfg, names)
 	raw, err := json.Marshal(payload{
 		Static: p.Static,
-		Doc:    project(doc, cfg, names), Events: events, Resolution: p.Resolution,
+		Doc:    client, Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
 		Base: p.Base,
 	})
@@ -275,6 +286,7 @@ func Render(w io.Writer, p Page) error {
 		DataJSON:    template.JS(raw),
 		Nav:         buildNav(p.Docs, p.Nested, p.Base),
 		ShowNav:     len(p.Docs) > 1,
+		Outline:     client.Sections,
 		Total:       len(p.Docs),
 		DoneN:       done,
 		SetDone:     p.SetDone,

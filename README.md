@@ -379,8 +379,15 @@ You get a page. Click a block, pick a verdict, done.
   is left:
 
   ```
-  12 of 61 answered · 12 comments · 3 to re-check · 2 outstanding
+  12 of 61 answered · 3 of 9 sections · 12 comments · 3 to re-check
   ```
+
+  On a long document the bar barely moves, so the page also groups blocks by
+  top-level section: an outline in the left column lists each one with how
+  many of its blocks are answered, ticks it when all of them are, and takes
+  you there on a click. That is a markdown document's outermost chapters (a
+  lone title over H2 chapters groups by chapter), a diff's files, and a
+  tree's top-level nodes. The rule for what counts as answered is the same.
 
 - **Filters** for how you actually work: not answered, ones you answered, ones
   the requester asked about, ones waiting to be re-checked. The menu label says

@@ -126,6 +126,15 @@ main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
 .nav .dir{color:var(--muted)}
 .nav .n{display:inline-block;min-width:1.15rem;height:1.15rem;line-height:1.15rem;text-align:center;background:var(--marker);color:var(--on-marker);border-radius:var(--r-pill);font-size:var(--fs-xs);margin-left:.3rem}
 .nav .tick{margin-left:.3rem;color:var(--accent)}
+/* The outline (issue 132): one row per top-level section, answered-of-
+   commentable within it, so a long document's progress is a list of places
+   rather than a bar that barely moves. */
+.nav .outline{margin-top:var(--sp-4)}
+.nav .outline ul{padding-left:0}
+.nav .sec{font:inherit;color:var(--fg);background:transparent;border:0;padding:.1rem .35rem;border-radius:var(--r-sm);cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.nav .sec:hover{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent)}
+.nav .outline .of{margin-left:.3rem;color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
+.nav .outline li.done .sec{color:var(--muted)}
 /* A phone gets the buttons, not the breadcrumb: the nav already says which
    file is open, and a header that overflows scrolls the whole page sideways. */
 @media (max-width:640px){header{gap:.5rem}header .where,header .count{display:none}header button{padding:.35rem .55rem}}
@@ -361,12 +370,18 @@ header #fold+button{margin-left:.5rem}
   </span>
 </header>
 <div class="layout">
-{{if .ShowNav}}
+{{if or .ShowNav .Outline}}
 <aside class="nav">
-  <details open>
+  {{if .ShowNav}}<details open>
     <summary id="setcount">{{.Total}} documents · {{.DoneN}} done</summary>
     {{template "navlist" .Nav}}
-  </details>
+  </details>{{end}}
+  {{if .Outline}}<details open class="outline">
+    <summary id="outline-count">{{len .Outline}} sections</summary>
+    <ul>{{range .Outline}}
+      <li data-section="{{.ID}}"><button type="button" class="sec">{{.Label}}</button><span class="of"></span><span class="tick" hidden title="Every block answered">✓</span></li>{{end}}
+    </ul>
+  </details>{{end}}
 </aside>
 {{end}}
 <main id="doc"{{if .Doc.IsTree}} class="tree{{if eq .Doc.Format "diff"}} diff{{end}}"{{end}}>
@@ -1092,6 +1107,36 @@ window.__MARGINALIA__ = {{.DataJSON}};
   function outstandingBlocks(){
     return data.doc.blocks.filter(function(b){ return commentable(b) && !answered(b.id); });
   }
+  // Per section, the same rule rolled up: a section is done when every
+  // commentable block in it is answered. Sections with nothing commentable
+  // are not counted, so a read-only chapter cannot hold the count back.
+  function sectionProgress(){
+    var secs = data.doc.sections;
+    if(!secs || !secs.length) return null;
+    var tally = {};
+    data.doc.blocks.forEach(function(b){
+      if(!commentable(b) || !b.section) return;
+      var t = tally[b.section] = tally[b.section] || {n:0, answered:0};
+      t.n++;
+      if(answered(b.id)) t.answered++;
+    });
+    var done = 0, total = 0;
+    secs.forEach(function(s){
+      var t = tally[s.id] || {n:0, answered:0};
+      var row = document.querySelector('.outline li[data-section="' + s.id.replace(/"/g, '\\"') + '"]');
+      var finished = t.n > 0 && t.answered === t.n;
+      if(t.n){ total++; if(finished) done++; }
+      if(!row) return;
+      row.classList.toggle("done", finished);
+      row.querySelector(".tick").hidden = !finished;
+      var of = row.querySelector(".of");
+      of.textContent = t.n && !finished ? t.answered + "/" + t.n : "";
+      of.title = t.n ? t.answered + " of " + t.n + " blocks answered" : "nothing to answer here";
+    });
+    var count = document.getElementById("outline-count");
+    if(count) count.textContent = done + " of " + total + " sections done";
+    return {done: done, total: total};
+  }
   function progress(){
     var el = document.getElementById("progress");
     var total = data.doc.blocks.filter(commentable).length;
@@ -1100,6 +1145,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     el.hidden = false;
     document.getElementById("progfill").style.width = Math.round(done/total*100) + "%";
     var text = done + " of " + total + " answered";
+    var secs = sectionProgress();
+    if(secs) text += " \u00b7 " + secs.done + " of " + secs.total + " sections";
     document.getElementById("progtext").textContent = text;
     el.title = text + (requireVerdict ? " — this review asks for a verdict on every one" : "");
   }
@@ -1233,6 +1280,33 @@ window.__MARGINALIA__ = {{.DataJSON}};
     doNav(what);
   });
 
+  // Jumping to a block the current filter hides would scroll to nothing, so
+  // drop back to showing everything first.
+  function goTo(id){
+    if(!passes(id)){
+      filterMode = "all";
+      Array.prototype.forEach.call(document.querySelectorAll("#filters button"), function(x){
+        x.setAttribute("aria-pressed", x.dataset.filter === "all" ? "true" : "false");
+      });
+      applyFolds();
+    }
+    land(elOf[id]);
+  }
+  // On a phone the outline sits above the document, so it starts folded:
+  // twelve rows of chapters before the first line of text is in the way.
+  (function(){
+    var ol = document.querySelector(".outline");
+    if(ol && window.matchMedia && window.matchMedia("(max-width:900px)").matches) ol.open = false;
+  })();
+  // An outline row goes to its section's first block with an element of its
+  // own (an inline list item has none to land on).
+  Array.prototype.forEach.call(document.querySelectorAll(".outline li[data-section]"), function(row){
+    row.querySelector(".sec").addEventListener("click", function(){
+      var first = data.doc.blocks.find(function(b){ return b.section === row.dataset.section && elOf[b.id]; });
+      if(first) goTo(first.id);
+    });
+  });
+
   // --- what Done is waiting for -------------------------------------------
   function showOutstanding(){
     var left = outstandingBlocks();
@@ -1248,18 +1322,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var id = document.createElement("span"); id.className = "id"; id.textContent = b.id;
       btn.appendChild(id);
       btn.appendChild(document.createTextNode(b.quote || b.text || ""));
-      btn.addEventListener("click", function(){
-        // Jumping to a block the current filter hides would scroll to nothing,
-        // so drop back to showing everything first.
-        if(!passes(b.id)){
-          filterMode = "all";
-          Array.prototype.forEach.call(document.querySelectorAll("#filters button"), function(x){
-            x.setAttribute("aria-pressed", x.dataset.filter === "all" ? "true" : "false");
-          });
-          applyFolds();
-        }
-        land(elOf[b.id]);
-      });
+      btn.addEventListener("click", function(){ goTo(b.id); });
       list.appendChild(btn);
     });
     panel.hidden = false;
