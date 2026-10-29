@@ -980,6 +980,7 @@ go test -race ./...                                     # tests
 go test -run TestName ./internal/document/              # one test
 go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80
 golangci-lint run                                       # matches CI's pinned version
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...   # reachable vulns (CI: PRs + weekly)
 go run . serve <doc.md> --open                          # run it
 ```
 

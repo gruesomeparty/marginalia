@@ -627,4 +627,7 @@ template) — done**.
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
+- Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it
+  through the `# renovate:` comment) on PRs, `main` and weekly; it gates
+  Renovate's automerge too.
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
