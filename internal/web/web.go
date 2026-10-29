@@ -20,7 +20,7 @@ var files embed.FS
 // include — the two layers of the stylesheet live in tokens.css so a page
 // cannot drift from the other by growing a palette of its own.
 var tmpl = template.Must(template.New("review.html.tmpl").
-	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}).
+	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}). //nolint:gosec // only for goldmark output (raw HTML off) and SVG that internal/diagram sanitized
 	ParseFS(files, "review.html.tmpl", "inbox.html.tmpl", "tokens.css"))
 
 // NavDoc is one document of the review set as the navigation tree sees it.
@@ -272,7 +272,7 @@ func Render(w io.Writer, p Page) error {
 		Orphans:     lost,
 		OrphanTitle: orphanTitle(len(lost)),
 		Title:       title,
-		DataJSON:    template.JS(raw),
+		DataJSON:    template.JS(raw), //nolint:gosec // json.Marshal output, which escapes <, > and &
 		Nav:         buildNav(p.Docs, p.Nested, p.Base),
 		ShowNav:     len(p.Docs) > 1,
 		Total:       len(p.Docs),

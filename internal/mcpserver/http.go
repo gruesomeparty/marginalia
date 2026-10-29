@@ -23,7 +23,7 @@ import (
 // variable and never a flag: flags show up in process lists, shell histories
 // and crash reports, and a token that leaks that way grants every tool here
 // to whoever found it.
-const TokenEnv = "MARGINALIA_MCP_TOKEN"
+const TokenEnv = "MARGINALIA_MCP_TOKEN" //nolint:gosec // the name of an environment variable, not a credential
 
 // Handler serves the same tools as stdio over Streamable HTTP at /mcp, and a
 // health check at /healthz that needs no credential, so a container platform
@@ -206,7 +206,7 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener, token string) e
 	stopped := make(chan struct{})
 	defer close(stopped)
 	drained := make(chan error, 1)
-	go func() {
+	go func() { //nolint:gosec // the drain runs after ctx is done, so it needs a context of its own
 		select {
 		case <-ctx.Done():
 		case <-stopped:

@@ -23,5 +23,5 @@ func openBrowser(url string) error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(name, args...).Start()
+	return exec.Command(name, args...).Start() //nolint:gosec // the platform opener from browserCommand, with the page URL as its argument
 }
