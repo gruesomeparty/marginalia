@@ -1,7 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -113,5 +116,47 @@ func TestDoneWaitsForEveryDocumentInASet(t *testing.T) {
 	case <-s.Done():
 	case <-time.After(time.Second):
 		t.Fatal("Done did not close after session_done")
+	}
+}
+
+// A parked long-poll must not hold the shutdown drain: Shutdown does not
+// cancel request contexts, so without an answer the drain runs into its
+// deadline and Serve reports an error where it should have stopped cleanly.
+func TestShutdownAnswersAParkedWait(t *testing.T) {
+	s, _, _ := newTestServer(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- s.Serve(ctx, ln) }()
+
+	answered := make(chan int, 1)
+	go func() {
+		res, err := http.Get("http://" + ln.Addr().String() + "/api/wait?since=0&timeout=60")
+		if err != nil {
+			answered <- -1
+			return
+		}
+		_ = res.Body.Close()
+		answered <- res.StatusCode
+	}()
+	time.Sleep(200 * time.Millisecond) // let the wait park
+	stopped := time.Now()
+	cancel()
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Errorf("Serve returned %v with a wait parked, want a clean stop", err)
+		}
+		if d := time.Since(stopped); d > 2*time.Second {
+			t.Errorf("shutdown took %s with a wait parked", d)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve did not return")
+	}
+	if code := <-answered; code != http.StatusOK {
+		t.Errorf("the parked wait got %d, want an answer", code)
 	}
 }

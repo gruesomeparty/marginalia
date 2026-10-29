@@ -190,6 +190,7 @@ func (s *Server) Run(ctx context.Context) error {
 // exits.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	httpSrv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
+	httpSrv.RegisterOnShutdown(s.stopWaits)
 	stopped := make(chan struct{})
 	defer close(stopped)
 	drained := make(chan error, 1)

@@ -803,7 +803,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `POST /api/feedback[?doc=]` | Append one event (capped at 1 MB; 413 past it) |
 | `GET /api/resolution[?doc=]` | The materialized view — per-block state, stale, orphaned |
 | `GET /api/revision` | The re-parse counter, for `--watch` |
-| `GET /api/wait?since=N[&timeout=S]` | Long-poll: answers once more than N events have been saved this run, or after S seconds (default 30, max 60) |
+| `GET /api/wait?since=N[&timeout=S]` | Long-poll: answers once more than N events have been saved this run, or after S seconds (default 30, max 60). It counts what this server saved: a `reply` or `addressed` written through MCP goes to the log directly and does not wake it |
 | `POST /api/session_done` | `review_done` on every document in the set |
 
 A posted event names its own document, and the server only writes to documents

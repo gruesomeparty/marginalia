@@ -27,11 +27,19 @@ type changes struct {
 	tick    chan struct{} // closed and replaced on every append
 	done    map[string]bool
 	allDone chan struct{} // closed once every document has a review_done
+	// stopping is closed when the HTTP server starts shutting down. Shutdown
+	// does not cancel request contexts, so a parked long-poll would hold the
+	// drain to its deadline and turn a clean exit into an error.
+	stopping chan struct{}
+	stopOnce sync.Once
 }
 
 func newChanges() changes {
-	return changes{tick: make(chan struct{}), done: map[string]bool{}, allDone: make(chan struct{})}
+	return changes{tick: make(chan struct{}), done: map[string]bool{}, allDone: make(chan struct{}), stopping: make(chan struct{})}
 }
+
+// stopWaits answers every parked long-poll, now and from here on.
+func (s *Server) stopWaits() { s.changes.stopOnce.Do(func() { close(s.changes.stopping) }) }
 
 // recorded wakes every waiter after an event reaches the log.
 func (s *Server) recorded(target *Entry, e feedback.Event) {
@@ -99,6 +107,11 @@ func (s *Server) handleWait(w http.ResponseWriter, r *http.Request) {
 			case <-tick:
 			case <-timer.C:
 				writeJSON(w, http.StatusOK, waitResult{Events: n, Done: done, TimedOut: true})
+				return
+			case <-s.changes.stopping:
+				// Shutting down: answer with what is known, and let the
+				// caller's next wait find the server gone.
+				writeJSON(w, http.StatusOK, waitResult{Events: n, Done: done})
 				return
 			case <-r.Context().Done():
 				return
