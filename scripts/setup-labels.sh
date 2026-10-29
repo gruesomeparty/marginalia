@@ -30,3 +30,7 @@ create size:m             "bfd4f2" "A few files across one feature"
 create size:l             "d4c5f9" "Cross-cutting or needs design"
 # Human-only.
 create hold               "000000" "Approved, but the work loop must wait"
+# Merge loop (scripts/merge-loop.sh is the only writer of the merge:* labels).
+create needs-human        "5319e7" "Merge loop: always ask the maintainer before merging"
+create merge:human        "1d76db" "Merge loop: waiting on the maintainer's review"
+create merge:changes      "e99695" "Merge loop: the maintainer asked for changes"

@@ -545,7 +545,8 @@ weekday schedule and by hand, and is armed by a repository secret
 deliberate choice, made by adding the credential, not a default.
 
 **Integration branches.** The rule is *no change reaches `main` without
-Berkay's review* — not *every step waits for Berkay*. A larger piece of work
+Berkay's review or the merge gate's leave* (below) — not *every step waits for
+Berkay*. A larger piece of work
 (hosted mode, #91) is a chain of issues each labelled `base:feature/<name>`:
 their PRs target that feature branch, and `integration-automerge.yml` merges
 each one there on green CI, closes its issue, and — only with the repository
@@ -558,6 +559,20 @@ feature branch reaches `main` through one PR a human reviews. This replaces a
 stack, which is what it is for: every PR is based on a real, merged branch, a
 review fix is a follow-up PR rather than a rebase of everything above it, and
 squash merges cannot orphan the next layer.
+
+**The merge loop.** Not every PR into `main` needs a human; the merge loop
+(`merge-prs.yml`) decides which do, and Marginalia is how it asks. A tested
+script (`scripts/merge-gate.sh`), not a prompt, makes the call from what
+cannot be written by whoever opened the PR: green CI on the head, the
+adversarial review's label for that same head, the author, the paths touched,
+the size. Low-risk PRs merge on their own only when the repository opts in
+(`MERGE_LOOP_AUTO`); everything else — concerns, outsiders, forks, the files
+that decide how the project is built, released, deployed or trusted, large or
+breaking changes — is published to the hosted instance as a review whose
+vocabulary is the decision (*Merge it*, *Request changes*), and the loop
+merges the exact commit the maintainer reviewed, or posts the notes back to
+the PR. It is the tool reviewing its own pipeline: the agent hands the human a
+document and acts on the structured answer.
 
 ## 9. Milestones
 

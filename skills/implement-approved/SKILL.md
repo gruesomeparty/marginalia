@@ -12,7 +12,10 @@ label), **execution** is this. Never implement an issue that does not carry the
 label, however obvious the fix looks, and never merge your own work — the human
 merge gate is the point of the split.
 
-**Nothing reaches `main` without Berkay's review.** An issue labelled
+**Nothing reaches `main` without Berkay's review or the merge loop's gate.**
+The merge loop (`.github/workflows/merge-prs.yml`) — not you — decides whether
+a PR into `main` merges on its own or goes to Berkay in Marginalia, and merges
+only what that tested gate (`scripts/merge-gate.sh`) or Berkay allows. An issue labelled
 `base:feature/<name>` is part of a larger piece of work that lands on that
 integration branch first: its PR targets the feature branch, and
 `.github/workflows/integration-automerge.yml` — not you — merges it there once
@@ -155,7 +158,9 @@ not merge, do not approve, do not open the next issue's PR.
 
 ## 6. After the merge
 
-Into `main`, a human merges. Into `feature/*`, the auto-merge workflow merges
+Into `main`, the merge loop merges once its gate or Berkay allows; a
+`merge:changes` label and a "Changes requested" comment mean Berkay asked for
+work in Marginalia — treat those notes like review comments. Into `feature/*`, the auto-merge workflow merges
 on green CI and closes the issue itself — GitHub only auto-closes issues from
 merges into the default branch, and an issue left open would be picked up
 again. Either way, verify the outcome rather than trusting the PR's state:

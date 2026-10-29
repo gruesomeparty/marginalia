@@ -2,6 +2,9 @@ name: Release
 on:
   push:
     branches: [main]
+  # The merge loop dispatches this after a merge made with the workflow token,
+  # which starts no push workflow of its own.
+  workflow_dispatch:
 permissions: {}
 jobs:
   release-please:
