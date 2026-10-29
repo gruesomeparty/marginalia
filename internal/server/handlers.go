@@ -465,5 +465,9 @@ func (s *Server) append(r *http.Request, target *Entry, e *feedback.Event) error
 	if e.Ts == "" {
 		e.Ts = time.Now().UTC().Format(time.RFC3339)
 	}
-	return target.Store.Append(*e)
+	if err := target.Store.Append(*e); err != nil {
+		return err
+	}
+	s.recorded(target, *e)
+	return nil
 }

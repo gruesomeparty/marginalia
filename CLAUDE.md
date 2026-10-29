@@ -88,6 +88,13 @@ users are agents, not humans.
   documents). A `.marginalia.yml` in a served directory is whitelist + order +
   labels, and is then the *only* tree — so a listed-but-missing path is a hard
   error and startup reports how many supported files the index excluded.
+- `serve --until-done` / `--timeout` and `GET /api/wait` (issue #44,
+  `internal/server/wait.go`): `Server.append` calls `recorded`, which bumps a
+  counter, wakes long-polls and closes `Done()` once every served document has
+  a `review_done` **written by this process** — one already in a log is an
+  earlier round's answer. `serveUntil` (cmd) cancels Run on Done or the
+  deadline, so the drain still finishes before the exit; a timeout exits 124
+  through `exitError`, which `Execute` honours.
 - Server routes: `GET /` (first document), `GET /d/{rel...}` (one page per
   document), `GET /api/doc[?doc=]`, `GET|POST /api/feedback[?doc=]`,
   `POST /api/session_done`. A posted event names its document and the server

@@ -752,6 +752,8 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `--port` / `--host` | `serve` | Where to listen. Default `127.0.0.1:8787`; set the host to your Tailscale IP for remote review. |
 | `--open` | `serve` | Open the page in a browser |
 | `--watch` | `serve` | Re-parse when the file changes; the page offers a reload |
+| `--until-done` | `serve` | Exit 0 once every served document is marked done |
+| `--timeout <dur>` | `serve` | Stop after this long (`30m`) and exit 124 |
 | `--config <yaml>` | `serve`, `export` | Framing, vocabulary, read-only blocks |
 | `--review <name>` | `serve`, `export` | Start from a shipped framing |
 | `--theme <name>` | `serve`, `export` | Palette the page arrives in |
@@ -801,6 +803,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | `POST /api/feedback[?doc=]` | Append one event (capped at 1 MB; 413 past it) |
 | `GET /api/resolution[?doc=]` | The materialized view — per-block state, stale, orphaned |
 | `GET /api/revision` | The re-parse counter, for `--watch` |
+| `GET /api/wait?since=N[&timeout=S]` | Long-poll: answers once more than N events have been saved this run, or after S seconds (default 30, max 60) |
 | `POST /api/session_done` | `review_done` on every document in the set |
 
 A posted event names its own document, and the server only writes to documents
@@ -905,7 +908,7 @@ links to where it is tracked.
 | **The page's JavaScript has no tests** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | ~300 Go tests, zero browsers. Composer behaviour, diagram clicks, keyboard movement and share-mode storage are verified by hand, not by CI. The interface is half the product and the untested half. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
 | **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
-| **No blocking handoff from the CLI** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | MCP has `await_review_done`. There is no `serve --until-done`, no long-poll endpoint, and no outbound notification. |
+| **No outbound notification from `serve`** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | `serve --until-done`, `GET /api/wait` and MCP's `await_review_done` cover waiting. Only hosted mode can POST somewhere when a review moves (`--notify-url`). |
 | **Drawing needs Node** | `mmdc` is the only non-Go dependency anywhere near this tool. It is optional and degrades to anchored source. |
 
 ---

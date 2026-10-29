@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -40,6 +41,20 @@ func executeRoot(root *cobra.Command) error {
 func Execute() {
 	if err := executeRoot(newRootCmd()); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		var coded exitError
+		if errors.As(err, &coded) {
+			os.Exit(coded.code)
+		}
 		os.Exit(1)
 	}
 }
+
+// exitError is an error that wants a specific exit code, for a caller that
+// branches on it — `serve --timeout` says "nobody finished" with one.
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e exitError) Error() string { return e.err.Error() }
+func (e exitError) Unwrap() error { return e.err }
