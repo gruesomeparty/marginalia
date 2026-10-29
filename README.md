@@ -354,7 +354,10 @@ You get a page. Click a block, pick a verdict, done.
 
 - **One tap where possible.** An action with nothing to fill in saves on the
   tap. Most feedback is a verdict, not prose, and a review where saying "nit"
-  means typing is a review that gets abandoned.
+  means typing is a review that gets abandoned. Those one-tap actions sit
+  apart in the composer as one compact control, Approve in green and Reject
+  in red (always labelled, never colour alone), so a verdict no longer looks
+  like the start of a comment.
 - **Keyboard.** `Enter` on a focused block opens the composer. A configured
   action's key writes it without one. And on a long document:
 

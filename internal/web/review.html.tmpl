@@ -220,10 +220,27 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .block[data-count]:not([data-count="0"])::before,pre .block[data-count]:not([data-count="0"])::after{content:attr(data-count);min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--badge,var(--marker));color:var(--badge-fg,var(--on-marker));border-radius:var(--r-round);font-size:var(--fs-xs);font-family:var(--sans)}
 .block[data-count]:not([data-count="0"])::before{position:absolute;left:-2.4rem;top:.3rem}
 .composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:.8rem;box-shadow:var(--shadow);font-family:var(--sans);font-size:var(--fs-md)}
-.composer .chips{display:flex;gap:.4rem;margin-bottom:.5rem;flex-wrap:wrap}
-.composer .chip{padding:.25rem .7rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--fg);cursor:pointer;font:inherit}
+/* Two kinds of thing to say (issue 133): actions you write — a comment, an
+   edit, a question — and verdicts you tap. The verdicts sit apart as one
+   compact control, coloured by what they mean but always labelled, so
+   "Approve" no longer looks like the start of a comment. */
+.composer .chips{display:flex;align-items:center;gap:.4rem .75rem;margin-bottom:.5rem;flex-wrap:wrap}
+.composer .say,.composer .verdicts{display:flex;gap:.3rem;flex-wrap:wrap}
+.composer .verdicts{margin-left:auto;gap:0}
+.composer .chip{padding:.25rem .6rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--fg);cursor:pointer;font:inherit;font-size:var(--fs-base);white-space:nowrap}
 .composer .chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
-.composer .chip .k{margin-left:.35rem;opacity:.65;font-size:.78em;font-family:var(--mono)}
+.composer .chip .k{margin-left:.3rem;opacity:.65;font-size:.78em;font-family:var(--mono)}
+.composer .verdicts .chip{border-radius:0;margin-left:-1px;font-weight:600}
+.composer .verdicts .chip:first-child{border-radius:var(--r-pill) 0 0 var(--r-pill);margin-left:0}
+.composer .verdicts .chip:last-child{border-radius:0 var(--r-pill) var(--r-pill) 0}
+.composer .verdicts .chip:only-child{border-radius:var(--r-pill)}
+.composer .verdicts .chip:hover,.composer .verdicts .chip:focus-visible{position:relative}
+.composer .verdicts .chip.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--rule))}
+.composer .verdicts .chip.ok:hover{background:color-mix(in srgb,var(--ok) var(--tint-weak),transparent)}
+.composer .verdicts .chip.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--rule))}
+.composer .verdicts .chip.bad:hover{background:color-mix(in srgb,var(--bad) var(--tint-weak),transparent)}
+.composer .verdicts .chip[aria-pressed="true"].ok{background:var(--ok);color:var(--bg);border-color:var(--ok)}
+.composer .verdicts .chip[aria-pressed="true"].bad{background:var(--bad);color:var(--bg);border-color:var(--bad)}
 .composer .fields{display:flex;flex-wrap:wrap;gap:.5rem;margin:.1rem 0 .5rem}
 .composer .fields label{display:flex;flex-direction:column;gap:.15rem;font-size:var(--fs-sm);color:var(--muted)}
 .composer .fields select,.composer .fields input{font:inherit;font-size:var(--fs-base);padding:.3rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg)}
@@ -863,6 +880,11 @@ window.__MARGINALIA__ = {{.DataJSON}};
       c.appendChild(on);
     }
     var chips=document.createElement("div"); chips.className="chips";
+    // What you write on the left, what you tap on the right. An action with
+    // nothing to fill in is a verdict: one tap and it is saved.
+    var say=document.createElement("div"); say.className="say";
+    var verdicts=document.createElement("div"); verdicts.className="verdicts";
+    verdicts.setAttribute("role","group"); verdicts.setAttribute("aria-label","Verdict");
     var fieldBox=document.createElement("div"); fieldBox.className="fields";
     var ta=document.createElement("textarea"); ta.placeholder="Your note…";
     var inputs={};
@@ -901,6 +923,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     actions.forEach(function(a){
       var b=document.createElement("button"); b.type="button"; b.className="chip"; b.dataset.type=a.type;
       b.textContent=a.label||a.type;
+      if(a.type==="approve") b.classList.add("ok");
+      if(a.type==="reject") b.classList.add("bad");
       if(a.key){ var k=document.createElement("span"); k.className="k"; k.textContent=a.key; b.appendChild(k); }
       b.setAttribute("aria-pressed", a.type===current.type ? "true" : "false");
       b.onclick=function(){
@@ -910,8 +934,10 @@ window.__MARGINALIA__ = {{.DataJSON}};
         if(!needsInput(a) && !ta.value.trim()){ save(el, a, "", {}, selection); return; }
         select(a);
       };
-      chips.appendChild(b);
+      (needsInput(a) ? say : verdicts).appendChild(b);
     });
+    if(say.childElementCount) chips.appendChild(say);
+    if(verdicts.childElementCount) chips.appendChild(verdicts);
     var row=document.createElement("div"); row.className="actions";
     var saveBtn=document.createElement("button"); saveBtn.className="save"; saveBtn.type="button"; saveBtn.textContent="Save";
     var cancel=document.createElement("button"); cancel.type="button"; cancel.textContent="Cancel"; cancel.onclick=closeComposer;
