@@ -625,6 +625,16 @@ template) — done**.
   `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
+- Browser tests (`internal/browsertest`, issue #60) drive the real page with
+  **chromedp**, chosen over Playwright so the suite stays Go, shares the
+  repo's helpers, and needs no `package.json` in a single-binary project.
+  They boot `session.Build` on a temp document behind `httptest` and assert on
+  the DOM *and* the appended JSONL. No Chrome → skip; `MARGINALIA_BROWSER=require`
+  (set on CI's ubuntu job) makes that a failure; `MARGINALIA_CHROME` names the
+  binary. Diagrams use a stand-in `mmdc` that copies the committed real render,
+  so no Node is needed. A PR that changes the page's JS brings a case. Prose
+  blocks keep their notes and composer as the *next sibling* (`[data-block] +
+  .existing`), not inside; diagram statements put theirs under the figure.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
