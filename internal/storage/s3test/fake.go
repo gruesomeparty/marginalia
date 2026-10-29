@@ -304,5 +304,5 @@ func sum(data []byte) uint32 {
 func s3Error(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>%s</Code><Message>%s</Message></Error>`, code, msg)
+	_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>%s</Code><Message>%s</Message></Error>`, code, msg) //nolint:gosec // a test fake answering an S3 client, not a browser
 }

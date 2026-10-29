@@ -19,7 +19,7 @@ const DefaultStoreURI = "file://./marginalia-data"
 const (
 	R2AccountEnv = "MARGINALIA_R2_ACCOUNT_ID"
 	R2KeyEnv     = "MARGINALIA_R2_ACCESS_KEY_ID"
-	R2SecretEnv  = "MARGINALIA_R2_SECRET_ACCESS_KEY"
+	R2SecretEnv  = "MARGINALIA_R2_SECRET_ACCESS_KEY" //nolint:gosec // the name of an environment variable, not a credential
 	// R2EndpointEnv overrides the endpoint derived from the account id —
 	// for an S3-compatible store that is not R2, or a local fake.
 	R2EndpointEnv = "MARGINALIA_R2_ENDPOINT"

@@ -119,11 +119,11 @@ func newExportCmd() *cobra.Command {
 				return err
 			}
 			if dir := filepath.Dir(out); dir != "" && dir != "." {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // the export is a page to hand to someone; it is meant to be readable
 					return err
 				}
 			}
-			if err := os.WriteFile(out, page, 0o644); err != nil {
+			if err := os.WriteFile(out, page, 0o644); err != nil { //nolint:gosec // the export is a page to hand to someone; it is meant to be readable
 				return err
 			}
 			// One checked write: a report built in memory cannot fail

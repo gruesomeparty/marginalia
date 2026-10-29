@@ -88,6 +88,13 @@ users are agents, not humans.
   documents). A `.marginalia.yml` in a served directory is whitelist + order +
   labels, and is then the *only* tree — so a listed-but-missing path is a hard
   error and startup reports how many supported files the index excluded.
+- `serve --until-done` / `--timeout` and `GET /api/wait` (issue #44,
+  `internal/server/wait.go`): `Server.append` calls `recorded`, which bumps a
+  counter, wakes long-polls and closes `Done()` once every served document has
+  a `review_done` **written by this process** — one already in a log is an
+  earlier round's answer. `serveUntil` (cmd) cancels Run on Done or the
+  deadline, so the drain still finishes before the exit; a timeout exits 124
+  through `exitError`, which `Execute` honours.
 - Server routes: `GET /` (first document), `GET /d/{rel...}` (one page per
   document), `GET /api/doc[?doc=]`, `GET|POST /api/feedback[?doc=]`,
   `POST /api/session_done`. A posted event names its document and the server
@@ -326,6 +333,11 @@ users are agents, not humans.
   defined, and a palette that omits a colour the others define. That last one
   is not hypothetical — `--marker` was defined for light and never redefined
   for dark, so every dark-mode badge wore the light palette's yellow.
+  `contrast_test.go` holds every palette in both modes to WCAG AA over the
+  pairs the pages actually draw (issue #156): 4.5:1 text, 3:1 for a line that
+  carries meaning, which is why `--marker` (a fill) has a `--marker-ink` for
+  strokes and underlines. A rule that puts a colour on a new background adds
+  its pair to that table.
 - The **inbox** (`web.RenderInbox`, `hosted/inbox.go`) is the hosted front
   page: one row per review from `Host.rows()`, built from the parsed revision
   and the in-memory log (zero store reads after startup, pinned by test),
@@ -632,8 +644,11 @@ toolchain exits with a version error that reads like success), and after a merge
 verify the files are on `main` and the issue actually closed rather than trusting
 the PR's state. `.github/workflows/implement-approved.yml` runs it when an issue gains
 `approved-for-agent`, when a `claude/*` PR merges, on a weekday cron and by
-hand; the queue is ordered by triage's priority and skips `hold`. It is armed
-by credentials, not by editing the file: without a `CLAUDE_CODE_OAUTH_TOKEN` or
+hand; the queue is ordered by triage's priority and skips `hold`. It is **off**
+unless the repository variable `IMPLEMENT_LOOP` is `true`, at Berkay's request:
+issues are implemented in project sessions for now, so every trigger starts a
+run whose job is skipped, while triage, review and merge keep running. It is
+also armed by credentials: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
 
 The review loop is `skills/review-pr/SKILL.md`, run by
@@ -698,7 +713,7 @@ still waits for review.
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
 feedback scaffold) → **M2 revision loop (hash-stale, resolution view) — done** →
 **M3 trees: `.proto`, JSON/YAML/TOML, mermaid — done** → **M4 automated implementation
-pipeline — in place (triage loop + skill + gate + work loop, armed by a secret)**
+pipeline — in place (triage loop + skill + gate + work loop, the work loop paused behind `IMPLEMENT_LOOP`)**
 → **M5 static share mode (`export`/`import`) — done** → **M6 hosted mode
 (#91: `mcp --http`, `internal/storage`, `host`, `publish_document`, identity,
 OAuth, inbox, caps, R2, image, notifications, the `deploy/cloudflare`
