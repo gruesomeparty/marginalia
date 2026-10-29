@@ -78,9 +78,14 @@ export class Marginalia extends Container<Env> {
 
 export default {
 	async fetch(request, env): Promise<Response> {
-		const problem = misconfigured(settings(env));
+		const vars = settings(env);
+		const problem = misconfigured(vars);
 		if (problem) {
 			return new Response(`marginalia: ${problem}\n`, { status: 500 });
+		}
+		const refused = await refuse(request, vars);
+		if (refused) {
+			return refused;
 		}
 		return getContainer(env.MARGINALIA).fetch(request);
 	},
@@ -122,4 +127,50 @@ function misconfigured(vars: Record<string, string>): string | undefined {
 		return "MARGINALIA_STORE must be an r2:// store: a container's disk is gone when it sleeps";
 	}
 	return undefined;
+}
+
+// refuse answers, here at the edge, the requests the host would only refuse.
+// The agent paths are public in Access by necessity, and every request the
+// Worker forwards starts the container if it sleeps: without this, anyone
+// could keep it awake, and billed, with requests that carry no credential.
+// The host still checks every credential itself; this only saves it the
+// trouble of being woken to say no.
+async function refuse(request: Request, vars: Record<string, string>): Promise<Response | undefined> {
+	const path = new URL(request.url).pathname;
+	const oauth = Boolean(vars.MARGINALIA_MCP_OAUTH_ISSUER);
+	if (path.startsWith("/.well-known/")) {
+		// The host serves only the OAuth metadata, and only with an issuer.
+		return oauth && path.startsWith("/.well-known/oauth-protected-resource")
+			? undefined
+			: new Response("404 page not found\n", { status: 404 });
+	}
+	if (path !== "/mcp" && !path.startsWith("/mcp/")) {
+		return undefined;
+	}
+	const header = request.headers.get("Authorization") ?? "";
+	const bearer = /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1];
+	if (bearer) {
+		// With OAuth, a JWT can be checked only by the host. Without it, the
+		// static token is the only credential there is, and is checked here
+		// too, in constant time.
+		if (oauth || !vars.MARGINALIA_MCP_TOKEN || (await same(bearer, vars.MARGINALIA_MCP_TOKEN))) {
+			return undefined;
+		}
+	}
+	// The host's own challenge, so a client reads it the same either way.
+	const challenge = oauth
+		? `Bearer resource_metadata="${vars.MARGINALIA_PUBLIC_URL.replace(/\/$/, "")}/.well-known/oauth-protected-resource/mcp"`
+		: 'Bearer realm="marginalia"';
+	return new Response("marginalia: /mcp needs `Authorization: Bearer <token>`\n", {
+		status: 401,
+		headers: { "WWW-Authenticate": challenge },
+	});
+}
+
+// same compares two secrets in constant time, by their digests, which have
+// equal lengths whatever the inputs.
+async function same(a: string, b: string): Promise<boolean> {
+	const digest = (s: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s.trim()));
+	const [x, y] = await Promise.all([digest(a), digest(b)]);
+	return crypto.subtle.timingSafeEqual(x, y);
 }

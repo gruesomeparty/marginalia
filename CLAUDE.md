@@ -440,7 +440,13 @@ users are agents, not humans.
   `--addr` (which the image's `CMD` sets) from env, `MARGINALIA_PUBLIC_URL`
   included (`publicOrigin` refuses anything but scheme and host). The Worker refuses only what the binary cannot know
   is wrong: no public URL, or a store that is not `r2://` (a container's
-  disk dies with it). The container sleeps after 30 minutes idle. An
+  disk dies with it). It also answers, without waking the container, the
+  agent-path requests the host would only refuse — `/mcp` with no bearer,
+  or with a wrong static token when no OAuth issuer is set (constant-time,
+  by digest), and `/.well-known/*` the host does not serve — because those
+  paths are public in Access and every forwarded request starts a sleeping,
+  billed container. The host still checks every credential itself. The
+  container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's
   20s, because the host loads every review before it listens. The binary
