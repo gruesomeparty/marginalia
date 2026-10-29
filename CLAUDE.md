@@ -88,6 +88,13 @@ users are agents, not humans.
   documents). A `.marginalia.yml` in a served directory is whitelist + order +
   labels, and is then the *only* tree — so a listed-but-missing path is a hard
   error and startup reports how many supported files the index excluded.
+- `serve --until-done` / `--timeout` and `GET /api/wait` (issue #44,
+  `internal/server/wait.go`): `Server.append` calls `recorded`, which bumps a
+  counter, wakes long-polls and closes `Done()` once every served document has
+  a `review_done` **written by this process** — one already in a log is an
+  earlier round's answer. `serveUntil` (cmd) cancels Run on Done or the
+  deadline, so the drain still finishes before the exit; a timeout exits 124
+  through `exitError`, which `Execute` honours.
 - Server routes: `GET /` (first document), `GET /d/{rel...}` (one page per
   document), `GET /api/doc[?doc=]`, `GET|POST /api/feedback[?doc=]`,
   `POST /api/session_done`. A posted event names its document and the server
@@ -326,6 +333,11 @@ users are agents, not humans.
   defined, and a palette that omits a colour the others define. That last one
   is not hypothetical — `--marker` was defined for light and never redefined
   for dark, so every dark-mode badge wore the light palette's yellow.
+  `contrast_test.go` holds every palette in both modes to WCAG AA over the
+  pairs the pages actually draw (issue #156): 4.5:1 text, 3:1 for a line that
+  carries meaning, which is why `--marker` (a fill) has a `--marker-ink` for
+  strokes and underlines. A rule that puts a colour on a new background adds
+  its pair to that table.
 - The **inbox** (`web.RenderInbox`, `hosted/inbox.go`) is the hosted front
   page: one row per review from `Host.rows()`, built from the parsed revision
   and the in-memory log (zero store reads after startup, pinned by test),

@@ -93,6 +93,8 @@ type Server struct {
 	// stamps records each document's file as it was when the server was
 	// built, so the watcher's baseline predates anything it should catch.
 	stamps map[string]stamp
+	// changes is what the long-poll and --until-done wait on.
+	changes changes
 }
 
 // logf and logln are the one way anything in this package talks to the
@@ -117,7 +119,7 @@ func New(opts Options) *Server {
 	if opts.Review == nil {
 		opts.Review = review.Default()
 	}
-	s := &Server{opts: opts, mux: http.NewServeMux()}
+	s := &Server{opts: opts, mux: http.NewServeMux(), changes: newChanges()}
 	s.docs = opts.Docs
 	if len(s.docs) == 0 && opts.Doc != nil {
 		s.docs = []Entry{{Doc: opts.Doc, Store: opts.Store, Label: opts.Doc.Path, Rel: opts.Doc.Path}}
@@ -148,6 +150,7 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("GET /api/feedback", s.handleGetFeedback)
 	s.mux.HandleFunc("GET /api/resolution", s.handleResolution)
 	s.mux.HandleFunc("GET /api/revision", s.handleRevision)
+	s.mux.HandleFunc("GET /api/wait", s.handleWait)
 	s.mux.HandleFunc("POST /api/feedback", s.handlePostFeedback)
 	s.mux.HandleFunc("POST /api/session_done", s.handleSessionDone)
 	return s
@@ -187,10 +190,11 @@ func (s *Server) Run(ctx context.Context) error {
 // exits.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	httpSrv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
+	httpSrv.RegisterOnShutdown(s.stopWaits)
 	stopped := make(chan struct{})
 	defer close(stopped)
 	drained := make(chan error, 1)
-	go func() {
+	go func() { //nolint:gosec // the drain runs after ctx is done, so it needs a context of its own
 		select {
 		case <-ctx.Done():
 		case <-stopped:
