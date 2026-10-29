@@ -64,6 +64,10 @@ go install github.com/gruesomeparty/marginalia@latest
 Or grab a build from the [releases page](https://github.com/gruesomeparty/marginalia/releases)
 — Linux and macOS, amd64 and arm64. It is a single Go binary with no runtime
 dependencies.
+Each archive comes with an SPDX SBOM and a build provenance attestation, which
+you can check with
+`gh attestation verify <archive> --repo gruesomeparty/marginalia`.
+[SECURITY.md](SECURITY.md) explains this and how to report a vulnerability.
 
 ### Claude plugin
 
