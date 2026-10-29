@@ -18,6 +18,11 @@ const STOP_GRACE_MS = 15_000;
 // was started with — a hash, never the values.
 const STARTED_WITH = "started-with";
 
+// The image wrangler.jsonc names, and the instance it runs on: 1/4 vCPU and
+// 1 GiB, since every review is loaded into memory at start.
+const IMAGE = "marginalia";
+const INSTANCE = "basic";
+
 export class Marginalia extends Container<Env> {
 	defaultPort = 8080;
 	// Asleep after this long with no request in flight. A waiting agent's
@@ -28,8 +33,33 @@ export class Marginalia extends Container<Env> {
 	pingEndpoint = "localhost/healthz";
 	envVars = settings(this.env);
 
-	private readonly wanted = fingerprint(this.envVars);
+	private readonly wanted: Promise<string>;
 	private starting?: Promise<void>;
+
+	constructor(ctx: DurableObjectState<{}>, env: Env) {
+		super(ctx, env);
+		// Under the durable_object scheduling policy the container is
+		// started with an image and an instance size, and the library only
+		// passes env, entrypoint, internet access and labels. So it is handed
+		// a container whose start() adds the two.
+		const container = ctx.container;
+		if (container) {
+			const managed = new Proxy(container, {
+				get(target, key) {
+					if (key === "start") {
+						return (options: Omit<ContainerStartupOptions, "image" | "containerSnapshot">) =>
+							target.start({ ...options, image: target.images[IMAGE], instance: INSTANCE });
+					}
+					const value: unknown = Reflect.get(target, key);
+					return typeof value === "function" ? value.bind(target) : value;
+				},
+			});
+			Reflect.set(this, "container", managed);
+		}
+		// A new release is a new image, which a running container keeps until
+		// it is restarted: it counts as a changed setting.
+		this.wanted = fingerprint({ ...this.envVars, image: container?.images[IMAGE] ?? "" });
+	}
 
 	override async fetch(request: Request): Promise<Response> {
 		if (this.starting || !this.ctx.container?.running || (await this.outdated())) {
@@ -57,6 +87,12 @@ export class Marginalia extends Container<Env> {
 		return this.ctx.storage.kv.get<string>(STARTED_WITH) !== (await this.wanted);
 	}
 
+	// awake says whether the container is running, without starting it or
+	// counting as activity that keeps it awake.
+	async awake(): Promise<boolean> {
+		return Boolean(this.ctx.container?.running);
+	}
+
 	private async restart(): Promise<void> {
 		if (this.ctx.container?.running) {
 			// SIGTERM: the host stops accepting, drains what is in flight,
@@ -78,11 +114,17 @@ export class Marginalia extends Container<Env> {
 
 export default {
 	async fetch(request, env): Promise<Response> {
-		const problem = misconfigured(settings(env));
+		const vars = settings(env);
+		const problem = misconfigured(vars);
 		if (problem) {
 			return new Response(`marginalia: ${problem}\n`, { status: 500 });
 		}
-		return getContainer(env.MARGINALIA).fetch(request);
+		const container = getContainer(env.MARGINALIA);
+		const refused = await refuse(request, vars, () => container.awake());
+		if (refused) {
+			return refused;
+		}
+		return container.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;
 
@@ -122,4 +164,77 @@ function misconfigured(vars: Record<string, string>): string | undefined {
 		return "MARGINALIA_STORE must be an r2:// store: a container's disk is gone when it sleeps";
 	}
 	return undefined;
+}
+
+// refuse answers, here at the edge, the requests the host would only refuse
+// and anonymous health probes.
+// The agent paths are public in Access by necessity, and every request the
+// Worker forwards starts the container if it sleeps: without this, anyone
+// could keep it awake, and billed, with requests that carry no credential.
+// The host still checks every credential itself; this only saves it the
+// trouble of being woken to say no.
+async function refuse(
+	request: Request,
+	vars: Record<string, string>,
+	awake: () => Promise<boolean>,
+): Promise<Response | undefined> {
+	const path = new URL(request.url).pathname;
+	const oauth = Boolean(vars.MARGINALIA_MCP_OAUTH_ISSUER);
+	const bearer = /^Bearer\s+(\S+)\s*$/i.exec(request.headers.get("Authorization") ?? "")?.[1];
+	if (path === "/healthz") {
+		// Anyone may ask, so a stranger's probe is answered here from the
+		// container's state: it neither starts the container nor keeps it
+		// awake. The static token buys the real check, end to end.
+		if (bearer && vars.MARGINALIA_MCP_TOKEN && (await same(bearer, vars.MARGINALIA_MCP_TOKEN))) {
+			return undefined;
+		}
+		const headers = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
+		try {
+			return new Response((await awake()) ? "ok\n" : "ok (asleep)\n", { headers });
+		} catch (err) {
+			const why = err instanceof Error ? err.message : String(err);
+			return new Response(`marginalia: the container is unavailable: ${why}\n`, { status: 503, headers });
+		}
+	}
+	if (path.startsWith("/.well-known/")) {
+		// The host serves only the OAuth metadata, and only with an issuer.
+		return oauth && path.startsWith("/.well-known/oauth-protected-resource")
+			? undefined
+			: new Response("404 page not found\n", { status: 404 });
+	}
+	if (path !== "/mcp" && !path.startsWith("/mcp/")) {
+		// Every other path is the reviewer's, and Access lets a request
+		// through only with its JWT attached. One without it means Access is
+		// missing or misconfigured: the host would refuse it anyway, so it is
+		// refused here rather than woken for. The host verifies the JWT.
+		return request.headers.has("Cf-Access-Jwt-Assertion")
+			? undefined
+			: new Response("marginalia: this page is behind Cloudflare Access, which did not vouch for the request\n", {
+					status: 403,
+				});
+	}
+	if (bearer) {
+		// With OAuth, a JWT can be checked only by the host. Without it, the
+		// static token is the only credential there is, and is checked here
+		// too, in constant time.
+		if (oauth || !vars.MARGINALIA_MCP_TOKEN || (await same(bearer, vars.MARGINALIA_MCP_TOKEN))) {
+			return undefined;
+		}
+	}
+	// The host's own challenge, so a client reads it the same either way.
+	const challenge = oauth
+		? `Bearer resource_metadata="${vars.MARGINALIA_PUBLIC_URL.replace(/\/$/, "")}/.well-known/oauth-protected-resource/mcp"`
+		: 'Bearer realm="marginalia"';
+	return new Response("marginalia: /mcp needs `Authorization: Bearer <token>`\n", {
+		status: 401,
+		headers: { "WWW-Authenticate": challenge },
+	});
+}
+
+// same compares two secrets in constant time, by their digests, which have
+// equal lengths whatever the inputs.
+async function same(a: string, b: string): Promise<boolean> {
+	const digest = (s: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s.trim()));
+	const [x, y] = await Promise.all([digest(a), digest(b)]);
+	return crypto.subtle.timingSafeEqual(x, y);
 }
