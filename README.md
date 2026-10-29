@@ -366,6 +366,7 @@ You get a page. Click a block, pick a verdict, done.
   | `↓` / `↑` | next / previous block |
   | `⇧↓` / `⇧↑` | next / previous **unanswered** block, wrapping |
   | `j` `k` `n` `p` | the same, when the review has not claimed those letters |
+  | `i` | back to the inbox, on a hosted review (also the header's **← Inbox** link) |
   | `?` | what is actually bound right now |
 
   A configured action always wins its key — the agent asked for that

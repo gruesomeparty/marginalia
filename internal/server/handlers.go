@@ -87,6 +87,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Rel:      current.Rel,
 		Theme:    s.opts.Theme,
 		Base:     s.opts.BasePath,
+		Inbox:    s.opts.InboxURL,
 	}
 	setDone := true
 	for i := range s.docs {

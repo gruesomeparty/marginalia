@@ -427,3 +427,29 @@ func TestEventsWrittenBeforeSubAnchorsAreUntouched(t *testing.T) {
 		}
 	}
 }
+
+// A hosted review links back to the inbox it was opened from (issue: no way
+// back from /r/<id>/); `serve` and `export` have no inbox and show no link.
+func TestRenderInboxLinkOnlyWhereThereIsAnInbox(t *testing.T) {
+	doc, _ := document.ParseBytes("d.md", []byte("# Title\n\nHello world.\n"))
+	var hosted bytes.Buffer
+	if err := Render(&hosted, Page{Doc: doc, Author: "berkay", Base: "/r/abc", Inbox: "/"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`<a class="back" id="back" href="/"`, `"inbox":"/"`} {
+		if !strings.Contains(hosted.String(), want) {
+			t.Errorf("hosted page missing %q", want)
+		}
+	}
+	for _, p := range []Page{{Doc: doc, Author: "berkay"}, {Doc: doc, Author: "berkay", Static: true}} {
+		var buf bytes.Buffer
+		if err := Render(&buf, p); err != nil {
+			t.Fatal(err)
+		}
+		for _, bad := range []string{`id="back"`, `"inbox":`} {
+			if strings.Contains(buf.String(), bad) {
+				t.Errorf("page without an inbox (static=%v) has %q", p.Static, bad)
+			}
+		}
+	}
+}

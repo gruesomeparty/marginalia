@@ -119,6 +119,9 @@ func TestHostServesReviewsUnderTheirOwnPrefixAndSurvivesRestart(t *testing.T) {
 				if !strings.Contains(body, `"base":"/r/`+r.Meta.ID+`"`) {
 					t.Errorf("the page does not know its mount: %s", r.Meta.ID)
 				}
+				if !strings.Contains(body, `"inbox":"/"`) || !strings.Contains(body, `id="back" href="/"`) {
+					t.Errorf("the page has no way back to the inbox: %s", r.Meta.ID)
+				}
 				code, body = get(t, ts.URL+"/r/"+r.Meta.ID+"/api/doc")
 				if code != 200 {
 					t.Fatalf("/api/doc for %s: %d", r.Meta.ID, code)

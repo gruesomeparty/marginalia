@@ -256,6 +256,9 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		AuthorOf: authorOf,
 		Log:      h.out(),
 		BasePath: "/r/" + meta.ID,
+		// The inbox is at the host's root: --public-url is an origin and
+		// nothing else (publicOrigin), so a host is never mounted below "/".
+		InboxURL: "/",
 	})
 	return &Review{Meta: meta, Server: srv}, nil
 }
