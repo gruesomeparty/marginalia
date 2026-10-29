@@ -44,7 +44,7 @@ die() { echo "loop-vars: $*" >&2; exit 2; }
 row() {
   local want
   want="$(tr '[:lower:]' '[:upper:]' <<<"$1")"
-  grep -E "^${want}\|" <<<"$table" || die "unknown variable '$1'; known: $(cut -d'|' -f1 <<<"$table" | xargs)"
+  awk -F'|' -v n="$want" '$1 == n' <<<"$table" | grep . || die "unknown variable '$1'; known: $(cut -d'|' -f1 <<<"$table" | xargs)"
 }
 
 # read_by_workflows prints every vars.NAME the workflows mention, one per line.
@@ -122,7 +122,9 @@ case "$cmd" in
     [ $# -eq 3 ] || die "usage: $0 set NAME VALUE"
     r="$(row "$2")"; IFS='|' read -r name kind _ <<<"$r"
     [ "$kind" = list ] || die "$name is a switch; use: $0 on|off|toggle $name"
-    put "$name" "$(xargs <<<"$3")" ;;
+    value="$(tr -s '[:space:]' ' ' <<<"$3" | sed 's/^ //; s/ $//')"
+    [[ "$value" =~ ^[A-Za-z0-9-]+(\ [A-Za-z0-9-]+)*$ ]] || die "$name takes GitHub logins separated by spaces"
+    put "$name" "$value" ;;
   unset)
     [ $# -eq 2 ] || die "usage: $0 unset NAME"
     r="$(row "$2")"; IFS='|' read -r name _ <<<"$r"

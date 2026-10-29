@@ -103,6 +103,10 @@ func TestLoopVarsRefuses(t *testing.T) {
 		{"set", "NEW_THING", "x"},
 		{"on", "MERGE_TRUSTED"},
 		{"set", "MERGE_LOOP_AUTO", "true"},
+		{"on", ".*"},
+		{"on", "MERGE_LOOP_AUTO|"},
+		{"set", "TRIAGE_TRUSTED", "o'brien"},
+		{"set", "TRIAGE_TRUSTED", "alice,bob"},
 		{"toggle"},
 		{"frobnicate"},
 	} {
