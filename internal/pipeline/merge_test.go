@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -362,5 +364,122 @@ func TestMergeReviewConfigLoads(t *testing.T) {
 		if !slices.Contains(types, want) {
 			t.Fatalf("actions %v lack %q", types, want)
 		}
+	}
+}
+
+// A file moved out of a sensitive directory still touched it: the gate reads
+// the old path the REST listing gives, not only the new one.
+func TestMergeGateCountsTheOldPathOfARename(t *testing.T) {
+	in := lowRisk()
+	prOf(in)["files"] = []map[string]any{{"path": "docs/ci.yml", "previous_filename": ".github/workflows/ci.yml"}}
+	out := gate(t, in)
+	if out.Decision != "human" || !strings.Contains(strings.Join(out.Reasons, " "), ".github/workflows/ci.yml") {
+		t.Fatalf("got %+v, want human naming the old path", out)
+	}
+}
+
+// Times compare as instants: fractional seconds or a +00:00 offset must not
+// sort a decision before the revision it was made on.
+func TestMergeVerdictComparesTimesAsInstants(t *testing.T) {
+	got := mergeVerdict(t,
+		mergeEvent("merge_pr", "2026-10-29T08:00:00.250Z", ""),
+		mergeEvent("review_done", "2026-10-29T08:00:01+00:00", ""))
+	if got.Decision != "merge" {
+		t.Fatalf("got %q, want merge", got.Decision)
+	}
+	stale := mergeVerdict(t,
+		mergeEvent("merge_pr", "2026-10-29T07:59:59.900Z", ""),
+		mergeEvent("review_done", "not a time", ""))
+	if stale.Decision != "pending" {
+		t.Fatalf("got %q, want pending for events before or without a time", stale.Decision)
+	}
+}
+
+func TestMergeVerdictRefusesAnUnparseablePublishTime(t *testing.T) {
+	var out mergeVerdictOut
+	if code := runJSON(t, "merge-verdict.sh", map[string]any{"events": []any{}, "published_at": "yesterday", "number": 1}, &out); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+}
+
+// fakeGH is a stand-in gh for merge-loop.sh: it serves pr-<n>.json and
+// files-<n>.json from dir, fails `pr diff` for any PR listed in nodiff, and
+// logs every call.
+const fakeGH = `#!/usr/bin/env bash
+dir="$(dirname "$0")"
+echo "gh $*" >>"$dir/calls.log"
+case "$1 $2" in
+  "pr view") cat "$dir/pr-$3.json" ;;
+  "pr diff") if grep -qx "$3" "$dir/nodiff" 2>/dev/null; then echo "diff too large" >&2; exit 1; fi; echo "diff --git a/x b/x" ;;
+  "api --paginate")
+    case "$3" in
+      */files) n="${3%/files}"; cat "$dir/files-${n##*/}.json" ;;
+      *) echo '[]' ;;
+    esac ;;
+esac
+exit 0
+`
+
+// One PR whose diff GitHub refuses to serve must not end the sweep: it falls
+// back to asking for a GitHub approval, and the next PR is still decided.
+func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, v any) {
+		t.Helper()
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(fakeGH), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "nodiff"), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 2} {
+		p := prOf(lowRisk())
+		p["number"], p["state"], p["latestReviews"] = n, "OPEN", []any{}
+		if n == 1 {
+			p["labels"] = labels("review:concerns")
+		}
+		write(fmt.Sprintf("pr-%d.json", n), p)
+		write(fmt.Sprintf("files-%d.json", n), []map[string]any{{"filename": "internal/web/review.html.tmpl"}})
+	}
+	// Both PRs carry a review of their head, in this workflow's own comment.
+	review := `[{"id": 9, "user": {"login": "github-actions[bot]"}, "body": "<!-- agent:review v1\nsha: ` + gateHead + `\n-->"}]`
+	gh := strings.Replace(fakeGH, `*) echo '[]' ;;`, `*) echo '`+review+`' ;;`, 1)
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(gh), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2")
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"REPO=o/r", "OWNER=gruesomeparty", "GH_TOKEN=x", "MERGE_LOOP_AUTO=true",
+		"MARGINALIA_URL=http://127.0.0.1:1", "MARGINALIA_MCP_TOKEN=t", "MERGE_TOKEN=", "DRY_RUN=")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("merge-loop failed: %v\n%s", err, out)
+	}
+	calls, err := os.ReadFile(filepath.Join(dir, "calls.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(calls)
+	if !strings.Contains(string(out), "would not serve the diff") {
+		t.Errorf("no warning for the refused diff:\n%s", out)
+	}
+	if !strings.Contains(log, "issues/1/labels -f labels[]=merge:human") {
+		t.Errorf("#1 was not handed to the maintainer:\n%s", log)
+	}
+	if !strings.Contains(log, "pr merge 2 --repo o/r --squash --delete-branch --match-head-commit "+gateHead) {
+		t.Errorf("#2 was not merged after #1's diff failed:\n%s", log)
+	}
+	if strings.Contains(log, "pr merge 1 ") {
+		t.Errorf("#1 was merged:\n%s", log)
 	}
 }

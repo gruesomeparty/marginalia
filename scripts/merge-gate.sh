@@ -113,7 +113,7 @@ jq '
        (if $fork then "comes from a fork" else empty end),
        (if ($trusted | index($author)) or $pipeline then empty
         else "\($author | safe) is not a trusted author" end),
-       ([$pr.files // [] | .[].path | select(sensitive) | safe] | unique
+       ([$pr.files // [] | .[] | .path, (.previous_filename // empty) | select(sensitive) | safe] | unique
          | if length > 0 then "touches \(.[0:5] | join(", "))\(if length > 5 then " and \(length - 5) more" else "" end)" else empty end),
        ((($pr.additions // 0) + ($pr.deletions // 0)) as $n
          | if $n > max_lines then "changes \($n) lines (over \(max_lines))" else empty end),

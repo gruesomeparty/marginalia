@@ -80,7 +80,17 @@ trap 'rm -rf "$work"' EXIT
 
 for n in "$@"; do
   [[ "$n" =~ ^[0-9]+$ ]] || continue
-  pr="$(gh pr view "$n" --repo "$REPO" --json number,title,body,author,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository,labels,files,additions,deletions,mergeable,statusCheckRollup,latestReviews,state)"
+  # One PR GitHub will not describe must not end the sweep for the rest.
+  if ! pr="$(gh pr view "$n" --repo "$REPO" --json number,title,body,author,baseRefName,headRefName,headRefOid,isDraft,isCrossRepository,labels,files,additions,deletions,mergeable,statusCheckRollup,latestReviews,state)"; then
+    echo "::warning::#$n: could not read the PR; skipped"
+    continue
+  fi
+  # GraphQL names a renamed file by its new path only; the REST listing also
+  # gives the old one, so moving a file out of a sensitive directory still
+  # counts as touching it.
+  if files="$(gh api --paginate "repos/$REPO/pulls/$n/files" | jq -s '[add[] | {path: .filename} + (if .previous_filename then {previous_filename} else {} end)]')"; then
+    pr="$(jq --argjson files "$files" '.files = $files' <<<"$pr")"
+  fi
   [ "$(jq -r .state <<<"$pr")" = OPEN ] || continue
   head="$(jq -r .headRefOid <<<"$pr")"
 
@@ -100,7 +110,10 @@ for n in "$@"; do
     [ -n "$review_id" ] && [ -n "$published" ] && $marginalia; then
     if events="$(jq -n --arg id "$review_id" '{review_id: $id}' | "$here/marginalia-call.sh" feedback_since | jq '[.docs[].events[]]')"; then
       verdict="$(jq -n --argjson events "$events" --arg at "$published" --argjson n "$n" \
-        '{events: $events, published_at: $at, number: $n}' | "$here/merge-verdict.sh")"
+        '{events: $events, published_at: $at, number: $n}' | "$here/merge-verdict.sh")" || {
+        echo "::warning::#$n: could not read the maintainer's decision; skipped"
+        continue
+      }
       case "$(jq -r .decision <<<"$verdict")" in
         merge) approved_sha="$head" ;;
         changes)
@@ -156,8 +169,10 @@ for n in "$@"; do
       [ "$asked_sha" != "$head" ] || continue
       new_id="" url_note="approve the PR on GitHub"
       now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      if $marginalia; then
-        gh pr diff "$n" --repo "$REPO" >"$work/pr.diff"
+      if $marginalia && ! gh pr diff "$n" --repo "$REPO" >"$work/pr.diff"; then
+        # GitHub refuses to serve some diffs (too large, too many files).
+        echo "::warning::#$n: GitHub would not serve the diff; asking for a GitHub approval instead"
+      elif $marginalia; then
         jq -rn --argjson pr "$pr" --argjson gate "$gate" --arg repo "$REPO" '
           def inert: tostring | gsub("[\r\n]+"; " ") | gsub("[<>`*_\\[\\]#|]"; "") | .[0:200];
           "# Merge #\($pr.number)?\n\n"

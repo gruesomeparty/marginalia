@@ -32,7 +32,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 input="$(cat)"
-if ! jq -e '(.events | type == "array") and (.published_at | type == "string") and (.published_at | length > 0) and (.number | type == "number")' >/dev/null 2>&1 <<<"$input"; then
+if ! jq -e '(.events | type == "array") and (.published_at | type == "string") and (.published_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}(\\.[0-9]+)?(Z|[+-]00:00)$")) and (.number | type == "number")' >/dev/null 2>&1 <<<"$input"; then
   echo "merge-verdict: expected {events, published_at, number} on stdin" >&2
   exit 2
 fi
@@ -44,9 +44,13 @@ jq '
     | if length > $n then .[0:$n] + "…" else . end;
   def code: tostring | gsub("[`\n\r]"; "") | .[0:120];
 
-  # RFC 3339 in UTC, as the server writes it, compares as a string.
-  .published_at as $since
-  | [.events[] | select((.ts // "") >= $since)
+  # Compared as instants, not strings: an offset or fractional seconds would
+  # otherwise sort wrong. A time that does not parse never counts.
+  def instant: tostring | sub("\\.[0-9]+"; "") | sub("[+-]00:00$"; "Z")
+    | try fromdateiso8601 catch null;
+  (.published_at | instant) as $since
+  | if $since == null then error("published_at is not an RFC 3339 time") else . end
+  | [.events[] | ((.ts // "") | instant) as $at | select($at != null and $at >= $since)
       | select((.author // "") | test("^agent(:|$)") | not)] as $ev
   | ([$ev[] | select(.type == "review_done")] | length > 0) as $done
   | ([$ev[] | select(.type == "request_changes" or .type == "reject")] | length > 0) as $changes
