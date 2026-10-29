@@ -949,6 +949,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var id=el.dataset.block, current=want||actions[0];
     if(!current) return;
     var c=document.createElement("div"); c.className="composer";
+    // Inline, not a dialog: the block stays readable above it. Named, so a
+    // screen reader says where focus went.
+    c.setAttribute("role", "group"); c.setAttribute("aria-label", "New note on block " + id);
     // What the note is about, when it is about less than the whole block.
     if(selection){
       var on=document.createElement("div"); on.className="quoted";
@@ -1507,6 +1510,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
       });
       return;
     }
+    // A block that holds other controls (a list around its items, a fence
+    // around its statements, a tree node around its fold caret, a paragraph
+    // around a link) is announced as a group, not a button: a button may not
+    // contain controls, and a screen reader flattens what is inside one. It
+    // still takes focus, a click and Enter like any other block.
+    if(el.getAttribute("role") === "button" && el.querySelector("button,a[href],input,select,textarea,[tabindex],[role=button]")) el.setAttribute("role", "group");
     // Blocks nest — a list item sits inside its list, a sub-item inside it —
     // so only the innermost block under the pointer answers.
     el.addEventListener("click", function(e){

@@ -745,7 +745,14 @@ template) — done**.
   the DOM *and* the appended JSONL. No Chrome → skip; `MARGINALIA_BROWSER=require`
   (set on CI's ubuntu job) makes that a failure; `MARGINALIA_CHROME` names the
   binary. Diagrams use a stand-in `mmdc` that copies the committed real render,
-  so no Node is needed. A PR that changes the page's JS brings a case. Prose
+  so no Node is needed. A PR that changes the page's JS brings a case. axe-core
+  (`axe_test.go`, issue #155) audits a markdown page, the open composer, the
+  Done sheet, a tree, a drawn diagram and the inbox, failing on serious or
+  critical violations; the test fetches a pinned axe tarball from the npm
+  registry, checks its sha256 and caches it — the page never loads it. A
+  block that contains controls (a list, a fence, a tree node, a paragraph
+  with a link) is `role="group"`, not `button`, and list items keep their
+  native role. Prose
   blocks keep their notes and composer as the *next sibling* (`[data-block] +
   .existing`), not inside; diagram statements put theirs under the figure.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`

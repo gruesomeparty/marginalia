@@ -71,6 +71,16 @@ func browser(t *testing.T) context.Context {
 	)
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
 	ctx, cancelCtx := chromedp.NewContext(alloc)
+	// Start the browser before the clock does: a cold first launch on a CI
+	// runner can take most of the budget meant for the page. The start runs
+	// on the untimed context because the first run's context owns the
+	// browser, and cancelling a timeout on it would kill Chrome; a launch
+	// that hangs is left to go test's own -timeout.
+	if err := chromedp.Do(ctx); err != nil {
+		cancelCtx()
+		cancelAlloc()
+		t.Fatalf("starting the browser: %v", err)
+	}
 	ctx, cancelTimeout := context.WithTimeout(ctx, 20*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelCtx(); cancelAlloc() })
 	return ctx
