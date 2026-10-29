@@ -194,11 +194,14 @@ func TestMergeGateAsksTheMaintainer(t *testing.T) {
 			prOf(in)["author"] = map[string]any{"login": "someone"}
 			prOf(in)["headRefName"] = "fix"
 		}, "someone is not a trusted author"},
-		"workflow":  {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": ".github/workflows/ci.yml"}} }, ".github/workflows/ci.yml"},
-		"script":    {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "scripts/merge-gate.sh"}} }, "scripts/merge-gate.sh"},
-		"go.mod":    {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "go.mod"}} }, "go.mod"},
-		"identity":  {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "internal/hosted/oauth.go"}} }, "oauth.go"},
-		"claude.md": {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "CLAUDE.md"}} }, "CLAUDE.md"},
+		"workflow": {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": ".github/workflows/ci.yml"}} }, ".github/workflows/ci.yml"},
+		"script":   {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "scripts/merge-gate.sh"}} }, "scripts/merge-gate.sh"},
+		"go.mod":   {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "go.mod"}} }, "go.mod"},
+		"identity": {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "internal/hosted/oauth.go"}} }, "oauth.go"},
+		"prd.md":   {func(in map[string]any) { prOf(in)["files"] = []map[string]any{{"path": "PRD.md"}} }, "PRD.md"},
+		"loop skill": {func(in map[string]any) {
+			prOf(in)["files"] = []map[string]any{{"path": "skills/implement-approved/SKILL.md"}}
+		}, "skills/implement-approved"},
 		"deploy": {func(in map[string]any) {
 			prOf(in)["files"] = []map[string]any{{"path": "deploy/cloudflare/src/index.ts"}}
 		}, "deploy/"},
@@ -238,6 +241,24 @@ func TestMergeGateMergesWhatTheMaintainerApproved(t *testing.T) {
 	in["approved_sha"] = "3333333333333333333333333333333333333333"
 	if out := gate(t, in); out.Decision != "human" {
 		t.Fatalf("approval of another commit: got %+v, want human", out)
+	}
+}
+
+// CLAUDE.md and the review-doc skill document rather than decide, and nearly
+// every PR updates them; guarding them would send every PR to the maintainer.
+func TestMergeGateLetsDocsThrough(t *testing.T) {
+	in := lowRisk()
+	prOf(in)["files"] = []map[string]any{{"path": "CLAUDE.md"}, {"path": "skills/review-doc/SKILL.md"}, {"path": "internal/web/review.html.tmpl"}}
+	if out := gate(t, in); out.Decision != "merge" {
+		t.Fatalf("got %+v, want merge", out)
+	}
+	// Only that one file: a sibling skill whose name merely starts the same
+	// way, or a helper added beside it, is something the loops may run.
+	for _, p := range []string{"skills/review-doc-x/SKILL.md", "skills/review-doc/helper.sh"} {
+		prOf(in)["files"] = []map[string]any{{"path": p}}
+		if out := gate(t, in); out.Decision != "human" {
+			t.Fatalf("%s: got %+v, want human", p, out)
+		}
 	}
 }
 
