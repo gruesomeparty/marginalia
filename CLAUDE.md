@@ -642,7 +642,8 @@ adversarial review *of the current head* — the review comment's `sha:` — or
 `review:blocking`), `merge` (the maintainer approved this exact head, or
 nothing asks for a human and `MERGE_LOOP_AUTO=true`), or `human`, listing
 every reason: `review:concerns`, an untrusted author or a fork, a sensitive
-path (workflows, scripts, skills, deploy, `go.mod`, CLAUDE/PRD, the storage,
+path (workflows, scripts, the loop skills, deploy, `go.mod`, PRD — not
+CLAUDE.md or `skills/review-doc`, which nearly every PR updates — the storage,
 identity, MCP and review-protocol packages), over 400 lines or 20 files, a
 breaking change, `needs-human`, or auto-merge being off — which is the
 default, so out of the box every PR still waits for Berkay. A `human` PR's
