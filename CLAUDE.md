@@ -571,13 +571,14 @@ the PR's state. `.github/workflows/implement-approved.yml` runs it on
 agent write access on a timer.
 
 Dependency updates are the one exception to the human gate on `main`, at
-Berkay's request: Dependabot owns every ecosystem (github-actions, gomod, the
-Cloudflare template's npm; Renovate was configured but never installed, and is
-gone), and `deps-automerge.yml` squash-merges its PR on green CI through
-`scripts/deps-automerge-check.sh` — opened by `dependabot[bot]`, from its own
-`dependabot/*` branch, every commit its own, CI green on the current head,
-majors included. Anything else a person or an agent opens still waits for
-review; widening that gate is widening the exception.
+Berkay's request: Renovate (`renovate.json`) owns every ecosystem —
+github-actions, gomod, the root `Dockerfile`, the Cloudflare template's npm —
+and merges its own PR once every check is green, majors included, no review.
+`platformAutomerge` is off so Renovate itself waits for the checks rather
+than leaning on branch protection, and because the Renovate app merges, the
+push to `main` runs CI and release-please. `deploy/cloudflare/Dockerfile` is
+excluded: release-please moves that tag. Anything a person or an agent opens
+still waits for review.
 
 ## Build order (PRD §9)
 
