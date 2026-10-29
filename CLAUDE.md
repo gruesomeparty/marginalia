@@ -153,7 +153,13 @@ users are agents, not humans.
   split ambiguous, so every split is tried and the one naming a real statement
   wins. Each anchored edge also carries an invisible wide copy of itself
   (`.mg-hit`) so a two-pixel arrow is a clickable target, and a box no
-  statement declares answers for the statement that named it. Because those
+  statement declares answers for the statement that named it. The keyboard
+  reaches the picture too (issue #154): the page gives each statement one
+  focusable shape (its box, or an arrow's label), named "Statement …", in the
+  order the *source* declares them rather than mermaid's paint order, as a
+  roving tab stop — Tab and the arrows move, Enter opens the composer, and
+  closing it hands focus back. That is page script, so the SVG and its cache
+  are unchanged. Because those
   names are mermaid's internals and not API, `internal/diagram/testdata` holds
   a **real** `mmdc` output for `flowchart.mmd`, its version in the filename,
   and `fixture_test.go` drives it through the whole pipeline: a mermaid
