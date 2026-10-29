@@ -445,7 +445,10 @@ users are agents, not humans.
   or with a wrong static token when no OAuth issuer is set (constant-time,
   by digest), and `/.well-known/*` the host does not serve — because those
   paths are public in Access and every forwarded request starts a sleeping,
-  billed container. The host still checks every credential itself. The
+  billed container. An anonymous `/healthz` is answered from the Durable
+  Object's state (`awake()`, which neither starts the container nor renews
+  its activity): `ok` or `ok (asleep)`; the static token buys the real
+  check. The host still checks every credential itself. The
   container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's

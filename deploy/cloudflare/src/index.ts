@@ -57,6 +57,12 @@ export class Marginalia extends Container<Env> {
 		return this.ctx.storage.kv.get<string>(STARTED_WITH) !== (await this.wanted);
 	}
 
+	// awake says whether the container is running, without starting it or
+	// counting as activity that keeps it awake.
+	async awake(): Promise<boolean> {
+		return Boolean(this.ctx.container?.running);
+	}
+
 	private async restart(): Promise<void> {
 		if (this.ctx.container?.running) {
 			// SIGTERM: the host stops accepting, drains what is in flight,
@@ -83,11 +89,12 @@ export default {
 		if (problem) {
 			return new Response(`marginalia: ${problem}\n`, { status: 500 });
 		}
-		const refused = await refuse(request, vars);
+		const container = getContainer(env.MARGINALIA);
+		const refused = await refuse(request, vars, () => container.awake());
 		if (refused) {
 			return refused;
 		}
-		return getContainer(env.MARGINALIA).fetch(request);
+		return container.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;
 
@@ -129,15 +136,36 @@ function misconfigured(vars: Record<string, string>): string | undefined {
 	return undefined;
 }
 
-// refuse answers, here at the edge, the requests the host would only refuse.
+// refuse answers, here at the edge, the requests the host would only refuse
+// and anonymous health probes.
 // The agent paths are public in Access by necessity, and every request the
 // Worker forwards starts the container if it sleeps: without this, anyone
 // could keep it awake, and billed, with requests that carry no credential.
 // The host still checks every credential itself; this only saves it the
 // trouble of being woken to say no.
-async function refuse(request: Request, vars: Record<string, string>): Promise<Response | undefined> {
+async function refuse(
+	request: Request,
+	vars: Record<string, string>,
+	awake: () => Promise<boolean>,
+): Promise<Response | undefined> {
 	const path = new URL(request.url).pathname;
 	const oauth = Boolean(vars.MARGINALIA_MCP_OAUTH_ISSUER);
+	const bearer = /^Bearer\s+(\S+)\s*$/i.exec(request.headers.get("Authorization") ?? "")?.[1];
+	if (path === "/healthz") {
+		// Anyone may ask, so a stranger's probe is answered here from the
+		// container's state: it neither starts the container nor keeps it
+		// awake. The static token buys the real check, end to end.
+		if (bearer && vars.MARGINALIA_MCP_TOKEN && (await same(bearer, vars.MARGINALIA_MCP_TOKEN))) {
+			return undefined;
+		}
+		const headers = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
+		try {
+			return new Response((await awake()) ? "ok\n" : "ok (asleep)\n", { headers });
+		} catch (err) {
+			const why = err instanceof Error ? err.message : String(err);
+			return new Response(`marginalia: the container is unavailable: ${why}\n`, { status: 503, headers });
+		}
+	}
 	if (path.startsWith("/.well-known/")) {
 		// The host serves only the OAuth metadata, and only with an issuer.
 		return oauth && path.startsWith("/.well-known/oauth-protected-resource")
@@ -147,8 +175,6 @@ async function refuse(request: Request, vars: Record<string, string>): Promise<R
 	if (path !== "/mcp" && !path.startsWith("/mcp/")) {
 		return undefined;
 	}
-	const header = request.headers.get("Authorization") ?? "";
-	const bearer = /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1];
 	if (bearer) {
 		// With OAuth, a JWT can be checked only by the host. Without it, the
 		// static token is the only credential there is, and is checked here
