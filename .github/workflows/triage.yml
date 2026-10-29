@@ -86,9 +86,11 @@ jobs:
       contents: read
       issues: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: mkdir -p triage
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -113,7 +115,7 @@ jobs:
             it only when someone must answer something.
           claude_args: |
             --allowedTools "Read,Glob,Grep,Write,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search issues:*)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: triage
           path: triage/
@@ -127,8 +129,10 @@ jobs:
       issues: write
       actions: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: triage
           path: triage/
@@ -136,6 +140,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ISSUES: ${{ needs.pick.outputs.issues }}
           AUTO: ${{ vars.TRIAGE_AUTO_APPROVE == 'true' }}
           TRUSTED: ${{ github.repository_owner }} ${{ vars.TRIAGE_TRUSTED }}
@@ -170,6 +175,6 @@ jobs:
           # rule against loops), so an approval made here starts the work loop
           # explicitly; workflow_dispatch is the one event the token can raise.
           if [ "$approved" = 1 ]; then
-            gh workflow run implement-approved.yml --repo "$REPO" --ref "${{ github.event.repository.default_branch }}"
+            gh workflow run implement-approved.yml --repo "$REPO" --ref "$DEFAULT_BRANCH"
           fi
           exit "$failed"
