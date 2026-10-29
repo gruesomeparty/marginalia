@@ -40,6 +40,7 @@ func TestNotesPanelListsEveryNote(t *testing.T) {
 		chromedp.Click(chromedp.CSS("#notes-toggle")),
 		chromedp.WaitVisible(chromedp.CSS("#notes-panel .entry")),
 	)
+	audit(t, ctx, "notes panel open")
 	texts := get(t, ctx, chromedp.Evaluate[[]string](`[...document.querySelectorAll("#notes-panel .entry .text")].map(e => e.textContent)`))
 	want := []string{"Which Friday?", "How long does it take?", "Gone now."}
 	if len(texts) != len(want) {
