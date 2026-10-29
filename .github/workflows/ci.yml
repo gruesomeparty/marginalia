@@ -78,19 +78,65 @@ jobs:
           HOMEBREW_TAP_TOKEN: ''
       - name: Smoke-test the amd64 image
         run: ./scripts/image-smoke.sh
-      # distroless/static should stay clean, and the Go binary inside it is
-      # read too (Trivy parses its build info), so a fixable HIGH or CRITICAL
-      # anywhere in what we ship fails the build.
+      # The shipped image is scanned (the distroless base, and the Go binary
+      # inside it, whose build info Trivy reads) and compared with the same
+      # image built from the base branch. Only a fixable HIGH or CRITICAL this
+      # change adds fails the job; one already on the base branch is a
+      # warning, so a CVE disclosed against something we ship never blocks
+      # the PR that fixes it. A scan that cannot run (the vulnerability
+      # database failed to download, say) is a warning, not a red PR.
       - name: Name the amd64 image
         id: img
         run: echo "ref=$(docker images 'ghcr.io/gruesomeparty/marginalia' --format '{{.Repository}}:{{.Tag}}' | grep -- '-amd64$' | head -1)" >>"$GITHUB_OUTPUT"
       - name: Scan the amd64 image
+        id: scan-head
+        continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.img.outputs.ref }}
+          format: json
+          output: trivy-head.json
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+      - name: Check out the base branch
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.base_ref }}
+          path: .base
+          persist-credentials: false
+      # The base image the way goreleaser builds one: a static linux binary
+      # COPYed onto the base branch's own Dockerfile.
+      - name: Build the base branch image
+        id: base-image
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          ctx="$RUNNER_TEMP/base-image"
+          mkdir -p "$ctx"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go -C .base build -trimpath -ldflags '-s -w' -o "$ctx/marginalia" .
+          docker build -q -t marginalia-base:scan -f .base/Dockerfile "$ctx"
+      - name: Scan the base branch image
+        id: scan-base
+        if: github.event_name == 'pull_request' && steps.base-image.outcome == 'success'
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: marginalia-base:scan
+          format: json
+          output: trivy-base.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+      - name: Fail on vulnerabilities this change adds
+        env:
+          HEAD_OK: ${{ steps.scan-head.outcome == 'success' }}
+          BASE_OK: ${{ steps.scan-base.outcome == 'success' }}
+        run: |
+          head=""; base=""
+          [ "$HEAD_OK" = true ] && head=trivy-head.json
+          [ "$BASE_OK" = true ] && base=trivy-base.json
+          ./scripts/trivy-new.sh "$base" "$head"
   # deploy/cloudflare checked as far as a deploy goes without an account: the
   # Worker typechecks against the runtime its compatibility date names, and
   # wrangler bundles it and validates the config. The image build is left out
