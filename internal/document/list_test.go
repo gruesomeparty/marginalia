@@ -89,7 +89,7 @@ func TestListBlockSurvivesItemAnchoring(t *testing.T) {
 	if !strings.Contains(list.HTML, `<li class="block" data-block="1/2.1"`) {
 		t.Errorf("the list's markup should carry its items' anchors: %q", list.HTML)
 	}
-	for _, want := range []string{`data-hash="`, `data-quote="P0.1`, `data-kind="list_item"`, `role="button"`, "<ul>", "</ul>"} {
+	for _, want := range []string{`data-hash="`, `data-quote="P0.1`, `data-kind="list_item"`, `tabindex="0"`, "<ul>", "</ul>"} {
 		if !strings.Contains(list.HTML, want) {
 			t.Errorf("list HTML missing %q", want)
 		}

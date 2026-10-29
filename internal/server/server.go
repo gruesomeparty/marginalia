@@ -67,6 +67,10 @@ type Options struct {
 	// the root — "/r/<id>" under a hosted instance. The page builds every
 	// URL from it. Empty for `serve`.
 	BasePath string
+	// InboxURL is where the page's back link goes: the hosted inbox, which
+	// lists every review the host holds. Empty for `serve`, which has no
+	// inbox — its "/" is the first document — so the page shows no link.
+	InboxURL string
 
 	// Log is where the startup notices go. It defaults to stdout, which is
 	// what a person running `serve` expects — but under the MCP server stdout

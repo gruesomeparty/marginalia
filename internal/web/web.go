@@ -64,6 +64,10 @@ type Page struct {
 	// API calls and the navigation tree — starts with it, so the page never
 	// assumes it lives at "/".
 	Base string
+	// Inbox is the URL of the list this review was opened from — the hosted
+	// inbox — and "" where there is none (`serve`, `export`). The header's
+	// back link and the `i` shortcut exist only when it is set.
+	Inbox string
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -116,6 +120,8 @@ type payload struct {
 	// never an absolute path: under a hosted instance the review is mounted
 	// at /r/<id>.
 	Base string `json:"base"`
+	// Inbox is where `i` goes; "" means the page has nowhere to go back to.
+	Inbox string `json:"inbox,omitempty"`
 }
 
 // Review is the review configuration as the page and an API consumer see it:
@@ -229,6 +235,7 @@ type viewData struct {
 	Review      Review
 	Theme       Theme
 	Static      bool
+	Inbox       string
 }
 
 // Render writes the self-contained review page.
@@ -257,7 +264,7 @@ func Render(w io.Writer, p Page) error {
 		Static: p.Static,
 		Doc:    client, Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
-		Base: p.Base,
+		Base: p.Base, Inbox: p.Inbox,
 	})
 	if err != nil {
 		return err
@@ -293,6 +300,7 @@ func Render(w io.Writer, p Page) error {
 		Review:      info,
 		Theme:       p.Theme,
 		Static:      p.Static,
+		Inbox:       p.Inbox,
 	})
 }
 
