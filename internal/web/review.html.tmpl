@@ -630,7 +630,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(orphans.length){
       var h = document.createElement("li"); var h3 = document.createElement("h3"); h3.textContent = "No longer anchored"; h.appendChild(h3); list.appendChild(h);
       orphans.forEach(function(st){
-        (st.history||[]).forEach(function(n){
+        // An answer to a requester note belongs under that note, as above.
+        (st.history||[]).filter(function(n){ return !n.answers; }).forEach(function(n){
           entry(n, n.event && n.event.quote, true, function(){ var o = document.querySelector(".orphans"); if(o) o.scrollIntoView({block:"start", behavior:"smooth"}); });
         });
       });
