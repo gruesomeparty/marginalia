@@ -394,7 +394,9 @@ users are agents, not humans.
   `server.Server` routes mounted with `http.StripPrefix` and told their mount
   through `server.Options.BasePath` → `web.Page.Base` → the payload's `base`,
   which every fetch and nav link in the page starts from (the page never
-  assumes `/`), `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
+  assumes `/`), and told its inbox through `server.Options.InboxURL` (`/`),
+  which gives the header an **← Inbox** link and the `i` key — neither exists
+  under `serve` or `export`, which have no inbox, `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
   `mcp --http`), `/healthz`. Keys are the same on every backend:
   `reviews/<id>/meta/<n>.json` (versioned, highest wins),
   `reviews/<id>/rev/<n>/<name>` (immutable snapshots), `reviews/<id>/log/<name>`

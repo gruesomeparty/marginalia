@@ -25,6 +25,8 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--serif);line
 header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:var(--sans);font-size:var(--fs-base)}
 header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .count{color:var(--muted)}
+header .back{color:var(--muted);text-decoration:none;white-space:nowrap;flex-shrink:0}
+header .back:hover{color:var(--fg)}
 header .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
 header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
@@ -364,6 +366,7 @@ header #fold+button{margin-left:.5rem}
 </head>
 <body>
 <header>
+  {{if .Inbox}}<a class="back" id="back" href="{{.Inbox}}" title="Back to the inbox (i)">&larr; Inbox</a>{{end}}
   <strong>{{.Title}}</strong>
   {{if and .ShowNav (ne .Title .Doc.Path)}}<span class="where">{{.Doc.Path}}</span>{{end}}
   <span class="count" id="count">0 comments</span>
@@ -1296,6 +1299,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var what = navKeys[e.key];
     return what && keyFree(e.key) ? what : "";
   }
+  // `i` goes back to the inbox. Like the letters above it yields to a
+  // configured action (no shipped preset claims it; `copy` takes `u`, which
+  // is why it is not Gmail's key), and it only exists where there is an
+  // inbox to go back to.
+  function upKey(e){ return !!data.inbox && e.key === "i" && !e.shiftKey && keyFree("i"); }
+  function goUp(){ window.location.href = data.inbox; }
   function doNav(what){
     move(what === "next" || what === "nextOpen" ? 1 : -1, what === "nextOpen" || what === "prevOpen");
   }
@@ -1347,6 +1356,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       if(keyFree(k)) lines.push(k + " — " + names[navKeys[k]]);
       else lines.push(k + " — taken by " + (byKey[k].label || byKey[k].type));
     });
+    if(data.inbox) lines.push(keyFree("i") ? "i — back to inbox" : "i — taken by " + (byKey.i.label || byKey.i.type));
     toast(lines.join("  \u00b7  "));
   }
   // Typing into anything, or composing a note, owns the keyboard outright.
@@ -1362,6 +1372,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     // A focused block has its own handler, and a configured action there beats
     // navigation. It calls doNav itself for what is left over.
     if(e.target && e.target.closest && e.target.closest(".block")) return;
+    if(upKey(e)){ e.preventDefault(); goUp(); return; }
     var what = navFor(e);
     if(!what) return;
     e.preventDefault();
@@ -1521,6 +1532,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
         return;
       }
+      if(upKey(e)){ e.preventDefault(); goUp(); return; }
       var what = navFor(e);
       if(!what) return;
       e.preventDefault();
