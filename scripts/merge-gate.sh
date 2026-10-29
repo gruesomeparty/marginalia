@@ -57,10 +57,11 @@ jq '
   # reviewed or trusted. A PR touching one always goes to the maintainer, even
   # with a clean review: these are the files that decide what the loops, CI
   # and the release may do, and the boundaries the PRD names as invariants.
-  # CLAUDE.md and the review-doc skill are not on it: nearly every PR updates
-  # them, they document rather than decide, and the review reads them anyway.
+  # CLAUDE.md and the SKILL.md of the review-doc skill are not on it: nearly
+  # every PR updates them, they document rather than decide, and the review
+  # reads them anyway.
   def sensitive:
-    test("^(\\.github/|scripts/|skills/(?!review-doc/)|\\.claude/|\\.claude-plugin/|deploy/|internal/pipeline/"
+    test("^(\\.github/|scripts/|skills/(?!review-doc/SKILL\\.md$)|\\.claude/|\\.claude-plugin/|deploy/|internal/pipeline/"
       + "|internal/storage/|internal/identity/|internal/mcpserver/|internal/review/"
       + "|internal/hosted/(identity|oauth|limits)\\.go$"
       + "|(PRD|SECURITY)\\.md$|LICENSE$|Dockerfile$|\\.goreleaser|renovate\\.json$"
