@@ -7,6 +7,14 @@
   "automergeStrategy": "squash",
   "platformAutomerge": false,
   "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Tools a workflow pins with a trailing `# renovate:` comment",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": ["(?<currentValue>v[^\\s#]+)\\s*#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)"]
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": ["github-actions"],

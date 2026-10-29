@@ -1,0 +1,30 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Weekly, so a vulnerability published against code we already ship turns
+  # the badge red without waiting for someone to push.
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+      # govulncheck reports only vulnerable code the module actually reaches,
+      # standard library included, so it fails on what matters and stays quiet
+      # on a dependency we import but never call into. Pinned so a new release
+      # arrives as a Renovate PR rather than as a surprise on a weekly run.
+      - name: govulncheck
+        env:
+          GOVULNCHECK_VERSION: v1.9.0 # renovate: datasource=go depName=golang.org/x/vuln
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
