@@ -734,3 +734,7 @@ template) — done**.
   through the `# renovate:` comment) on PRs, `main` and weekly; it gates
   Renovate's automerge too.
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
+- Loop switches: `scripts/loop-vars.sh` shows and flips the repository
+  variables the Actions loops read (`IMPLEMENT_LOOP`, `MERGE_LOOP_AUTO`, …),
+  run with the maintainer's own `gh`; `.claude/skills/loop-vars` is its skill.
+  A new `vars.NAME` in a workflow needs a row in its table, or CI fails.
