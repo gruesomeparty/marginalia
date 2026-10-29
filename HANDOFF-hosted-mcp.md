@@ -134,6 +134,23 @@ This is the default product: `{ "command": "marginalia", "args": ["mcp"] }`. Use
 | One server you also review from | tailnet | C (or D over `ssh host marginalia mcp`) |
 | claude.ai Projects, Claude Code cloud, CI, several machines | anywhere | **A** (or B) |
 
+## 3a. MCP spec level ("MCP 2.0")
+
+There is no spec named "MCP 2.0". The current revision is **2026-07-28**: a stateless core with no `initialize` handshake and no `Mcp-Session-Id`, plus `Mcp-Method`/`Mcp-Name` headers, multi round-trip requests, cacheable list results, an extensions framework, and roots, sampling and logging deprecated. Some SDKs shipped it as their "v2.0", which is likely where the name comes from.
+
+Marginalia is already there:
+- It uses `go-sdk v1.8.0`, and v1.7.0+ targets 2026-07-28.
+- `/mcp` runs `StreamableHTTPOptions{Stateless: true}`, so a container restart is invisible to agents.
+- `cmd/mcp_test.go` negotiates `2026-07-28`.
+- `/mcp` is an RFC 9728 resource server.
+- It uses none of roots, sampling or logging.
+
+Things worth doing with the new spec:
+- **Long waits:** `await_review_done` holds one HTTP request for up to 1800s. Measure what timeout the claude.ai connector and Claude Code actually allow against the live instance. If they cut it shorter, lower the default (300s) or have the tool return early and let the agent loop on `feedback_since`.
+- **Edge use of `Mcp-Method`/`Mcp-Name`:** the Worker can log, meter or rate-limit per tool without parsing the JSON body (for example, budget `publish_document` at the edge).
+- **Naming:** the stdio tools' `session_id` means a *review* session. Now that MCP has no sessions, consider renaming it in a later breaking change.
+- **Extensions:** check whether a standard extension fits the review handover (for example, a UI or resource link to the review page) before inventing one.
+
 ## 4. Open backlog (all issues, none hosted-specific)
 
 | # | Title | Note |
