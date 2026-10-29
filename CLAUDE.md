@@ -280,7 +280,11 @@ users are agents, not humans.
   are out of view. **`require_verdict`** now names the outstanding blocks and
   scrolls to one on click, computed in the page but still enforced by the
   server — a 409 re-opens the same panel, so if the two ever disagree the
-  server wins visibly.
+  server wins visibly. The **all-notes panel** (issue #130, header
+  "Notes") lists every note in document order from `byBlock`, through the
+  same `passes()` filter as the page — one filter, not two — then the notes
+  that no longer anchor; an entry lands on its block. Open/closed is a
+  `localStorage` display choice.
 - Sentence-level notes (issue #49) are a **new event field, never a longer
   block id**: a sub-block id like `5.3/2#1` would be accepted by every consumer
   that already reads `block` and would silently mean something different to
