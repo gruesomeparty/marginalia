@@ -15,7 +15,9 @@
 # each merge and the next run is dispatched by hand.
 name: Integration auto-merge
 on:
-  workflow_run:
+  # The default branch's copy runs, and it checks out the default branch and
+  # never the PR's code, so the PR cannot change what decides its merge.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI]
     types: [completed]
 permissions:
@@ -34,7 +36,9 @@ jobs:
       startsWith(github.event.workflow_run.head_branch, 'claude/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Merge if eligible
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,6 +46,7 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           CI_SHA: ${{ github.event.workflow_run.head_sha }}
           CHAIN: ${{ vars.IMPLEMENT_CHAIN }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           prs="$(gh pr list --repo "$REPO" --state open --head "$HEAD_BRANCH" --json number --jq '[.[].number] | join(" ")')"
@@ -70,6 +75,6 @@ jobs:
             --comment "Implemented in #$prs, merged into \`$base\` after green CI. It reaches \`main\` with the reviewed \`$base\` → \`main\` PR."
 
           if [ "${CHAIN:-}" = "true" ]; then
-            gh workflow run implement-approved.yml --repo "$REPO" --ref "${{ github.event.repository.default_branch }}"
+            gh workflow run implement-approved.yml --repo "$REPO" --ref "$DEFAULT_BRANCH"
             echo "dispatched the next implement-approved run"
           fi
