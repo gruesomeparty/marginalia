@@ -19,7 +19,7 @@ What the files do:
 |---|---|
 | `wrangler.jsonc` | One Worker, one Container class, `max_instances: 1`, no `workers.dev` or preview URL |
 | `Dockerfile` | `FROM ghcr.io/gruesomeparty/marginalia:<version>`. Each release moves the tag. |
-| `src/index.ts` | Forwards every request to the single container and hands it every `MARGINALIA_*` setting. Refuses with a 500 when the public URL or an R2 store is missing, and answers an `/mcp` request with no valid credential itself, and an anonymous `/healthz` from the container's state, so a stranger cannot wake (and bill) the container. |
+| `src/index.ts` | Forwards every request to the single container and hands it every `MARGINALIA_*` setting. Refuses with a 500 when the public URL or an R2 store is missing, and answers an `/mcp` request with no valid credential itself, an anonymous `/healthz` from the container's state, and any page request Access did not let through, so a stranger cannot wake (and bill) the container. |
 | `settings.example.env` | Every setting, documented. Copy it to `settings.env`, which git ignores. |
 
 ## You need

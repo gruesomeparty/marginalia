@@ -173,7 +173,15 @@ async function refuse(
 			: new Response("404 page not found\n", { status: 404 });
 	}
 	if (path !== "/mcp" && !path.startsWith("/mcp/")) {
-		return undefined;
+		// Every other path is the reviewer's, and Access lets a request
+		// through only with its JWT attached. One without it means Access is
+		// missing or misconfigured: the host would refuse it anyway, so it is
+		// refused here rather than woken for. The host verifies the JWT.
+		return request.headers.has("Cf-Access-Jwt-Assertion")
+			? undefined
+			: new Response("marginalia: this page is behind Cloudflare Access, which did not vouch for the request\n", {
+					status: 403,
+				});
 	}
 	if (bearer) {
 		// With OAuth, a JWT can be checked only by the host. Without it, the

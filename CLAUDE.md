@@ -448,7 +448,10 @@ users are agents, not humans.
   billed container. An anonymous `/healthz` is answered from the Durable
   Object's state (`awake()`, which neither starts the container nor renews
   its activity): `ok` or `ok (asleep)`; the static token buys the real
-  check. The host still checks every credential itself. The
+  check. Every other path is the reviewer's, and one arriving without
+  Access's `Cf-Access-Jwt-Assertion` header (Access missing or
+  misconfigured) gets a 403 at the edge; presence only, the host verifies
+  the JWT. The host still checks every credential itself. The
   container sleeps after 30 minutes idle. An
   in-flight request, which includes an agent's long `await_review_done`,
   holds it awake. A cold start gets two minutes rather than the library's
