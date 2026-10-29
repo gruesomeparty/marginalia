@@ -93,6 +93,21 @@ func TestSplitRanges(t *testing.T) {
 	}
 }
 
+// END CASE closes the CASE it names, and BEGIN TRAN opens a transaction:
+// either one misread would fold the rest of the file into one statement.
+func TestSplitBlockEdges(t *testing.T) {
+	for name, src := range map[string]string{
+		"end case": "CREATE PROCEDURE p() BEGIN\n  CASE x WHEN 1 THEN SELECT 1; END CASE;\nEND;\nSELECT 2;\nSELECT 3;",
+		"tsql":     "BEGIN TRAN;\nUPDATE t SET a = 1;\nCOMMIT TRAN;",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := Split([]byte(src)); len(got) != 3 {
+				t.Errorf("got %d statements, want 3: %+v", len(got), got)
+			}
+		})
+	}
+}
+
 func TestSplitTolerates(t *testing.T) {
 	for name, src := range map[string]string{
 		"empty":                "",

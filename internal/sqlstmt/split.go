@@ -11,6 +11,7 @@
 package sqlstmt
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -33,7 +34,7 @@ type Stmt struct {
 
 // Split returns the statements of src in source order.
 func Split(src []byte) []Stmt {
-	s := &scanner{src: src}
+	s := &scanner{src: src, line: 1}
 	return s.run()
 }
 
@@ -48,6 +49,9 @@ type scanner struct {
 	// not end the statement.
 	depth int
 	first bool // the next word is the statement's first
+	// line is the 1-based line at offset lineAt, so line numbers are counted
+	// once over the file rather than from the top for every statement.
+	line, lineAt int
 }
 
 func (s *scanner) run() []Stmt {
@@ -103,7 +107,7 @@ func (s *scanner) run() []Stmt {
 		s.out = append(s.out, Stmt{
 			Kind:  KindComment,
 			Text:  text,
-			Line:  lineOf(src, s.seg),
+			Line:  s.lineOf(s.seg),
 			Start: s.seg,
 			End:   lastComment,
 		})
@@ -124,7 +128,7 @@ func (s *scanner) emit(end int) {
 		Object:  object,
 		Text:    text,
 		Comment: strings.Join(s.comments, " "),
-		Line:    lineOf(s.src, s.start),
+		Line:    s.lineOf(s.start),
 		Start:   s.seg,
 		End:     end,
 	})
@@ -146,7 +150,7 @@ func (s *scanner) word(i int) int {
 		// `BEGIN;` and `BEGIN TRANSACTION` open a transaction, not a block.
 		if first {
 			switch next := s.peek(j); next {
-			case "", ";", "TRANSACTION", "WORK", "ISOLATION", "READ", "DEFERRED", "IMMEDIATE", "EXCLUSIVE":
+			case "", ";", "TRANSACTION", "TRAN", "WORK", "ISOLATION", "READ", "DEFERRED", "IMMEDIATE", "EXCLUSIVE", "DISTRIBUTED":
 				return j
 			}
 		}
@@ -157,6 +161,13 @@ func (s *scanner) word(i int) int {
 		switch s.peek(j) {
 		case "IF", "LOOP", "WHILE", "REPEAT", "FOR":
 			// Closes a construct that was never counted.
+		case "CASE":
+			// `END CASE` closes one CASE: the word after END must not open
+			// another.
+			if s.depth > 0 {
+				s.depth--
+			}
+			return s.skipWord(j)
 		default:
 			if s.depth > 0 {
 				s.depth--
@@ -164,6 +175,17 @@ func (s *scanner) word(i int) int {
 		}
 	}
 	return j
+}
+
+// skipWord returns the offset past the word that follows i.
+func (s *scanner) skipWord(i int) int {
+	for i < len(s.src) && isSpace(s.src[i]) {
+		i++
+	}
+	for i < len(s.src) && isWord(s.src[i]) {
+		i++
+	}
+	return i
 }
 
 // peek returns the next word after i, upper-cased, or ";" for a semicolon,
@@ -260,7 +282,7 @@ func (s *scanner) skipDollar(i int) int {
 		return i + 1
 	}
 	tag := src[i : j+1]
-	end := strings.Index(string(src[j+1:]), string(tag))
+	end := bytes.Index(src[j+1:], tag)
 	if end < 0 {
 		return len(src)
 	}
@@ -288,7 +310,12 @@ func at(src []byte, i int) byte {
 	return 0
 }
 
-func lineOf(src []byte, i int) int { return strings.Count(string(src[:i]), "\n") + 1 }
+// lineOf returns the line of offset i, which never precedes the last asked.
+func (s *scanner) lineOf(i int) int {
+	s.line += bytes.Count(s.src[s.lineAt:i], []byte("\n"))
+	s.lineAt = i
+	return s.line
+}
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' }
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
