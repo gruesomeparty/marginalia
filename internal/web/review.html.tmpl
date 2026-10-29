@@ -280,6 +280,12 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
 .composer .actions .save{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .existing{margin:.3rem 0 .6rem;font-family:var(--sans);font-size:var(--fs-base)}
+/* The margin rail (issue 130): on a screen with room beside the text, notes
+   sit to the right of their block instead of between blocks, and the page
+   script places them. */
+body.rail main{margin-left:var(--sp-5);margin-right:auto}
+body.rail .existing.in-rail{position:absolute;z-index:1;width:18rem;margin:0;text-align:left;font-style:normal;font-weight:400;line-height:1.45;white-space:normal}
+body.rail .existing.in-rail.off{display:none}
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:var(--r-tab)}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
 .existing .item.current{border-left-width:3px}
@@ -589,6 +595,51 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(unanchored) parts.push(unanchored+" unanchored");
     document.getElementById("count").textContent = parts.join(" · ");
     renderNotesPanel();
+    layoutRail();
+  }
+  // --- margin rail --------------------------------------------------------
+  // Where there is room to the right of the text, each block's notes move
+  // into a column beside it, top-aligned with the block and pushed down
+  // below the previous one when they would overlap, so a note never pushes
+  // the document apart. Without the room — a phone, a narrow window, a wide
+  // tree — the notes stay inline exactly as before. The composer always
+  // opens inline: it is where the reviewer is typing, next to what they read.
+  var RAIL = 288, RAIL_GAP = 16;
+  var railSize = window.ResizeObserver ? new ResizeObserver(function(){ layoutRail(); }) : null;
+  function layoutRail(){
+    var main = document.querySelector("main");
+    if(!main) return;
+    var boxes = Array.prototype.slice.call(main.querySelectorAll(".existing"));
+    document.body.classList.add("rail");
+    var mr = main.getBoundingClientRect();
+    var room = window.innerWidth >= 1200 && mr.right + RAIL_GAP + RAIL <= document.documentElement.clientWidth - RAIL_GAP;
+    if(!room){
+      document.body.classList.remove("rail");
+      boxes.forEach(function(b){ b.classList.remove("in-rail", "off"); b.style.top = b.style.left = ""; });
+      return;
+    }
+    var placed = boxes.map(function(b){
+      b.classList.add("in-rail");
+      var el = b.mgFor, shown = el && el.getClientRects().length > 0;
+      b.classList.toggle("off", !shown);
+      return {box: b, top: shown ? el.getBoundingClientRect().top + window.scrollY : 0, shown: shown};
+    }).filter(function(p){ return p.shown; });
+    placed.sort(function(a, b){ return a.top - b.top; });
+    var floor = -Infinity;
+    placed.forEach(function(p){
+      // A reply box opening inside a note makes it taller: move the ones below.
+      if(railSize) railSize.observe(p.box);
+      var top = Math.max(p.top, floor);
+      var op = (p.box.offsetParent || document.body).getBoundingClientRect();
+      p.box.style.top = (top - (op.top + window.scrollY)) + "px";
+      p.box.style.left = (mr.right + RAIL_GAP - op.left) + "px";
+      floor = top + p.box.offsetHeight + 8;
+    });
+  }
+  window.addEventListener("resize", layoutRail);
+  if(window.ResizeObserver){
+    var mainEl = document.querySelector("main");
+    if(mainEl) new ResizeObserver(function(){ layoutRail(); }).observe(mainEl);
   }
   // --- all notes ----------------------------------------------------------
   // One list of every note, in document order, through the same filter the
@@ -735,6 +786,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return anchor;
   }
   function attach(el, box){
+    box.mgFor = el;
     // A statement of a drawn diagram: its notes belong under the whole
     // figure, where they are visible in both the picture and the source.
     var fig = el.closest("figure.diagram");

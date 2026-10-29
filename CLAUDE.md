@@ -284,7 +284,14 @@ users are agents, not humans.
   "Notes") lists every note in document order from `byBlock`, through the
   same `passes()` filter as the page — one filter, not two — then the notes
   that no longer anchor; an entry lands on its block. Open/closed is a
-  `localStorage` display choice.
+  `localStorage` display choice. The **margin rail** (issue #130 part 2) is page
+  script only: `layoutRail()` (called from `count()`, on resize and by
+  ResizeObservers on `main` and each placed box) moves every `.existing`
+  box, found through `box.mgFor` set in `attach()`, into an absolutely
+  positioned column right of the text, top-aligned to its block and pushed
+  below the previous box on overlap, whenever ≥1200px leaves 18rem beside
+  `main`; otherwise boxes stay inline exactly as before. The composer and
+  requester sidenotes always stay inline.
 - Sentence-level notes (issue #49) are a **new event field, never a longer
   block id**: a sub-block id like `5.3/2#1` would be accepted by every consumer
   that already reads `block` and would silently mean something different to
