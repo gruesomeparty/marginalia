@@ -11,10 +11,15 @@
 # and by hand. Each run still does at most one issue and stops while a pipeline
 # PR is open, so the loop moves at the pace PRs are reviewed.
 #
-# Armed by credentials, not by editing this file: with no CLAUDE_CODE_OAUTH_TOKEN
-# (from `claude setup-token`) or ANTHROPIC_API_KEY repository secret every run
-# skips with a notice. Adding one grants an agent write access to this repo on
-# these triggers — a deliberate decision; removing it disarms the loop.
+# Off unless the repository variable IMPLEMENT_LOOP is "true". Issues are
+# implemented in project sessions for now, so every trigger below (an
+# approval, a merge, the dispatches from triage, the merge loop and
+# integration auto-merge, the schedule, a manual run) starts a run whose job
+# is skipped. The triage, review and merge loops do not depend on this one.
+#
+# With the variable set it is also armed by credentials: with no
+# CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or ANTHROPIC_API_KEY
+# repository secret every run skips with a notice.
 name: Implement approved queue
 on:
   workflow_dispatch:
@@ -44,11 +49,12 @@ jobs:
     # Only the events that can make a new issue workable: an approval, or a
     # pipeline PR merging (which frees the one-open-PR slot).
     if: >-
+      vars.IMPLEMENT_LOOP == 'true' && (
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'issues' && github.event.label.name == 'approved-for-agent') ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged &&
-        startsWith(github.event.pull_request.head.ref, 'claude/'))
+        startsWith(github.event.pull_request.head.ref, 'claude/')))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] claude-code-action pushes its branch with these credentials
