@@ -30,9 +30,9 @@ type Stmt struct {
 	// Trailing is a comment on the line the statement ends on, markers
 	// stripped.
 	Trailing string
-	Line    int    // 1-based line the statement itself starts on
-	Start   int
-	End     int
+	Line     int // 1-based line the statement itself starts on
+	Start    int
+	End      int
 }
 
 // Split returns the statements of src in source order.
