@@ -338,6 +338,25 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:var(--r-tab)}
 .orphans .meta{color:var(--muted)}
 .orphans .was{color:var(--muted);font-style:italic;margin:.15rem 0}
+/* Every note in one list (issue 130): document order, the page's own filter,
+   and the notes that no longer anchor anywhere at the end, which until now
+   only had a section at the foot of the page. It sits under the sticky
+   header's stacking level, so the header's own menus open over it. */
+.notes-panel{position:fixed;top:0;right:0;bottom:0;z-index:9;width:22rem;max-width:100%;overflow:auto;background:var(--bg);border-left:1px solid var(--rule);box-shadow:var(--shadow);padding:var(--sp-4);font-family:var(--sans);font-size:var(--fs-base)}
+.notes-panel .head{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)}
+.notes-panel .head .n{color:var(--muted)}
+.notes-panel .close{margin-left:auto;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--muted);cursor:pointer;padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm)}
+.notes-panel .hint{color:var(--muted);font-size:var(--fs-sm);margin:0 0 var(--sp-3)}
+.notes-panel .entries{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-2)}
+.notes-panel .entries h3{font-size:var(--fs-sm);color:var(--muted);margin:var(--sp-4) 0 var(--sp-1);font-weight:600}
+.notes-panel .entry{display:block;width:100%;text-align:left;font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--rule);border-left:2px solid var(--marker-ink);border-radius:var(--r-tab);padding:var(--sp-2) var(--sp-3);cursor:pointer}
+.notes-panel .entry:hover{border-color:var(--accent)}
+.notes-panel .entry .type{color:var(--accent);font-weight:600;margin-right:var(--sp-2)}
+.notes-panel .entry .flag{font-size:var(--fs-xs);color:var(--muted);border:1px solid var(--rule);border-radius:var(--r-pill);padding:0 var(--sp-2);margin-right:var(--sp-1)}
+.notes-panel .entry .flag.stale,.notes-panel .entry .flag.orphan{color:var(--bad);border-color:var(--bad)}
+.notes-panel .entry .text{display:block;margin-top:var(--sp-1);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.notes-panel .entry .quote{display:block;margin-top:var(--sp-1);color:var(--muted);font-style:italic;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notes-panel .entry.orphan{border-left-color:var(--muted)}
 main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
@@ -372,6 +391,7 @@ header #fold+button{margin-left:.5rem}
     <span class="of" id="progtext"></span>
   </span>
   <span class="actions">
+    <button id="notes-toggle" type="button" class="secondary" aria-controls="notes-panel" aria-expanded="false">Notes</button>
     <details class="filter" id="filter">
       <summary>Show all</summary>
       <div class="panel">
@@ -464,6 +484,11 @@ header #fold+button{margin-left:.5rem}
   {{end}}
 </main>
 </div>
+<aside class="notes-panel" id="notes-panel" aria-label="All notes" hidden>
+  <div class="head"><strong>All notes</strong><span class="n" id="notes-n"></span><button type="button" class="close" id="notes-close" aria-label="Close all notes">×</button></div>
+  <p class="hint" id="notes-hidden" hidden></p>
+  <ol class="entries" id="notes-list"></ol>
+</aside>
 <div class="reloader" id="reloader" role="status" aria-live="polite" hidden>
   <span>This document changed on disk.</span>
   <button type="button" id="reload">Reload</button>
@@ -560,6 +585,73 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(stale) parts.push(stale+" stale");
     if(unanchored) parts.push(unanchored+" unanchored");
     document.getElementById("count").textContent = parts.join(" · ");
+    renderNotesPanel();
+  }
+  // --- all notes ----------------------------------------------------------
+  // One list of every note, in document order, through the same filter the
+  // page uses (passes), so there is one filter and not two. A note that no
+  // longer anchors is listed at the end and jumps to the section that keeps
+  // it. Built from byBlock, the same view the badges read.
+  var notesPanel = document.getElementById("notes-panel");
+  var notesToggle = document.getElementById("notes-toggle");
+  function renderNotesPanel(){
+    if(!notesPanel || notesPanel.hidden) return;
+    var list = document.getElementById("notes-list");
+    list.textContent = "";
+    var shown = 0, hiddenN = 0;
+    function entry(note, quote, orphan, go){
+      var li = document.createElement("li");
+      var b = document.createElement("button"); b.type = "button"; b.className = "entry" + (orphan ? " orphan" : "");
+      var e = note.event || note;
+      var t = document.createElement("span"); t.className = "type"; t.textContent = labelOf[e.type] || String(e.type||"").replace("_"," ");
+      b.appendChild(t);
+      var flags = [];
+      if(orphan) flags.push(["orphan","no longer anchors"]);
+      if(note.stale) flags.push(["stale","stale"]);
+      if(note.status && note.status !== "outstanding") flags.push([note.status, note.status === "addressed" ? "to re-check" : note.status]);
+      if(note.unclaimed) flags.push(["unclaimed","unclaimed"]);
+      flags.forEach(function(f){ var x = document.createElement("span"); x.className = "flag " + f[0]; x.textContent = f[1]; b.appendChild(x); });
+      if(e.text){ var tx = document.createElement("span"); tx.className = "text"; tx.textContent = e.text; b.appendChild(tx); }
+      var q = document.createElement("span"); q.className = "quote"; q.textContent = quote || ""; b.appendChild(q);
+      b.onclick = go;
+      li.appendChild(b); list.appendChild(li);
+      shown++;
+    }
+    data.doc.blocks.forEach(function(blk){
+      var notes = byBlock[blk.id];
+      if(!notes) return;
+      if(!passes(blk.id)){ hiddenN += notes.length; return; }
+      notes.forEach(function(n){ entry(n, blk.quote, false, function(){ goTo(blk.id); }); });
+    });
+    var orphans = (res.states||[]).filter(function(st){ return st.orphaned; });
+    if(orphans.length){
+      var h = document.createElement("li"); var h3 = document.createElement("h3"); h3.textContent = "No longer anchored"; h.appendChild(h3); list.appendChild(h);
+      orphans.forEach(function(st){
+        (st.history||[]).forEach(function(n){
+          entry(n, n.event && n.event.quote, true, function(){ var o = document.querySelector(".orphans"); if(o) o.scrollIntoView({block:"start", behavior:"smooth"}); });
+        });
+      });
+    }
+    document.getElementById("notes-n").textContent = shown ? String(shown) : "none yet";
+    var hint = document.getElementById("notes-hidden");
+    hint.hidden = !hiddenN;
+    hint.textContent = hiddenN + (hiddenN === 1 ? " note is" : " notes are") + " on blocks the current filter hides.";
+  }
+  function showNotesPanel(on){
+    if(!notesPanel) return;
+    notesPanel.hidden = !on;
+    // Under the sticky header, however many rows it wrapped to.
+    notesPanel.style.top = document.querySelector("header").getBoundingClientRect().bottom + "px";
+    notesToggle.setAttribute("aria-expanded", on ? "true" : "false");
+    try{ localStorage.setItem("marginalia.notes", on ? "open" : "closed"); }catch(e){}
+    renderNotesPanel();
+  }
+  if(notesToggle){
+    notesToggle.onclick = function(){ showNotesPanel(notesPanel.hidden); };
+    document.getElementById("notes-close").onclick = function(){ showNotesPanel(false); notesToggle.focus(); };
+    notesPanel.addEventListener("keydown", function(e){
+      if(e.key === "Escape"){ e.preventDefault(); showNotesPanel(false); notesToggle.focus(); }
+    });
   }
   function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
   // The badge says how much was said about a block; its colour says what was
@@ -1252,6 +1344,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return true;
   }
   function updateFilterLabel(){
+    renderNotesPanel();
     var sum = document.querySelector("#filter summary");
     if(!sum) return;
     var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
@@ -1795,6 +1888,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   count();
   progress();
+  try{ if(localStorage.getItem("marginalia.notes") === "open") showNotesPanel(true); }catch(e){}
   // Folding is a tree's business, but filtering is every document's, and both
   // resolve here — so this runs for a markdown page too.
   applyFolds();
