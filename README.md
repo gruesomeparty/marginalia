@@ -964,8 +964,10 @@ speculation — and share mode already covers the case it would serve.
 Marginalia improves itself. On an unsupported format or an unknown flag, the
 binary's error message points at the `request-feature` skill, so an agent that
 hits a wall files it. Agents capture freely as `agent-feedback` issues;
-`approved-for-agent` is the gate that turns one into work; `/marginalia:implement-approved`
-drains the approved queue into a pull request. The guardrail is that an issue
+a triage workflow labels, prioritises and sizes every new issue and leaves the
+implementer's plan in a hidden comment in it; `approved-for-agent` is the gate
+that turns one into work; `/marginalia:implement-approved` drains the approved
+queue into a pull request, highest priority first. The guardrail is that an issue
 quotes document **structure**, never **content** — no secrets, no private text.
 
 ---
