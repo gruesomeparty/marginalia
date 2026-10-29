@@ -319,6 +319,10 @@ users are agents, not humans.
   no `review_done`), `done`, `replied` (a `reply`/`addressed` after the last
   `review_done`) — and counts from `feedback.Materialize`, never a second
   tally. Tabs are a query string; `/api/reviews` is the same rows as JSON.
+  A row leads with its status and outstanding count, metadata after
+  (issue #134), and rows group under Today / Earlier by last activity in UTC
+  — headings only when both groups hold a row (`Inbox.Now` pins the clock in
+  tests). Grouping is presentation only; `Host.rows()` is unchanged.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
