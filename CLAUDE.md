@@ -593,6 +593,24 @@ hand; the queue is ordered by triage's priority and skips `hold`. It is armed
 by credentials, not by editing the file: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
 
+The review loop is `skills/review-pr/SKILL.md`, run by
+`.github/workflows/review-prs.yml` on every PR — Berkay's, an agent's, the work
+loop's, a fork's — so every one carries exactly one of `review:pass`,
+`review:concerns`, `review:blocking` and one comment, edited in place when the
+head moves. It is triage's split again: the agent reads the PR as git objects
+from a default-branch checkout (the PR's code is never checked out or run),
+writes `review/<n>.json`, and a job with no agent applies it through
+`scripts/apply-review.sh` (tested in `internal/pipeline`), which derives the
+label from the findings' severities, refuses a verdict for a commit other than
+the one fetched, and makes visible text inert (no mentions, links or comment
+markers). **No `pull_request_target`**: a fork's PR gets no secrets on
+`pull_request`, so the two-hourly sweep reviews it from the default branch, and
+finds any unreviewed head by the `sha:` in its own comment's hidden block.
+Drafts and bots are skipped. It never approves, requests changes or blocks a
+merge into `main`; `automerge-check.sh` refuses a `review:blocking` PR into a
+feature branch, and the work loop's preflight answers a blocking or concerns
+review on its open PR before it stops.
+
 Dependency updates are the one exception to the human gate on `main`, at
 Berkay's request: Renovate (`renovate.json`) owns every ecosystem —
 github-actions, gomod, the root `Dockerfile`, the Cloudflare template's npm —
