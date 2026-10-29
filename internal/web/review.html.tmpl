@@ -57,7 +57,18 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 .progress .bar{display:block;width:6rem;height:.4rem;background:var(--rule);border-radius:var(--r-pill);overflow:hidden}
 .progress .fill{display:block;height:100%;width:0;background:var(--accent);border-radius:var(--r-pill);transition:width .2s ease}
 .progress .of{white-space:nowrap}
-@media (max-width:640px){.progress .bar{width:3rem}}
+.progress .short{display:none}
+/* A phone has one header row (issue 131): the title takes what is left, the
+   progress reads as a fraction, and the menus show their short labels. */
+@media (max-width:640px){
+  header{flex-wrap:nowrap;gap:.5rem;padding:.5rem .75rem}
+  header strong{flex:1}
+  .progress .bar{width:2.5rem}
+  .progress .of{display:none}
+  .progress .short{display:inline;white-space:nowrap}
+  .display summary,.filter summary{font-size:0;padding:.35rem .55rem}
+  .display summary::before,.filter summary::before{content:attr(data-short);font-size:var(--fs-base)}
+}
 /* The sheet Done opens (issue 129). review_done is the agent's signal to go, so
    it is sent from a summary the reviewer has read — what they said, what is
    still unanswered, an optional word overall — and never from one stray
@@ -245,7 +256,15 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
    statement inside a diagram, where the margin belongs to the source. */
 .block[data-count]:not([data-count="0"])::before,pre .block[data-count]:not([data-count="0"])::after{content:attr(data-count);min-width:1.3rem;height:1.3rem;line-height:1.3rem;text-align:center;background:var(--badge,var(--marker));color:var(--badge-fg,var(--on-marker));border-radius:var(--r-round);font-size:var(--fs-xs);font-family:var(--sans)}
 .block[data-count]:not([data-count="0"])::before{position:absolute;left:-2.4rem;top:.3rem}
+/* On a phone the gutter is narrower, so the badge moves in with it rather
+   than hanging off the left edge (issue 131). */
+@media (max-width:640px){.block:not(li)[data-count]:not([data-count="0"])::before{left:-1.75rem}}
 .composer{margin:.4rem 0 .8rem;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-lg);padding:.8rem;box-shadow:var(--shadow);font-family:var(--sans);font-size:var(--fs-md)}
+.composer .about{display:none}
+@media (max-width:640px){
+  .composer{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;max-height:70vh;overflow:auto;border-radius:var(--r-lg) var(--r-lg) 0 0;border-bottom:0;box-shadow:var(--e-2),0 0 0 100vmax color-mix(in srgb,var(--fg) 30%,transparent)}
+  .composer .about{display:block;color:var(--muted);font-size:var(--fs-sm);font-style:italic;border-left:2px solid var(--rule);padding-left:.5rem;margin-bottom:.6rem;max-height:4.8em;overflow:hidden}
+}
 /* Two kinds of thing to say (issue 133): actions you write — a comment, an
    edit, a question — and verdicts you tap. The verdicts sit apart as one
    compact control, coloured by what they mean but always labelled, so
@@ -368,10 +387,11 @@ header #fold+button{margin-left:.5rem}
   <span class="progress" id="progress" hidden>
     <span class="bar"><span class="fill" id="progfill"></span></span>
     <span class="of" id="progtext"></span>
+    <span class="short" id="progshort" aria-hidden="true"></span>
   </span>
   <span class="actions">
     <details class="filter" id="filter">
-      <summary>Show all</summary>
+      <summary data-short="All">Show all</summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Which blocks to show">
           <span class="opts" id="filters">
@@ -382,7 +402,7 @@ header #fold+button{margin-left:.5rem}
       </div>
     </details>
     <details class="display" id="display">
-      <summary>Display</summary>
+      <summary data-short="Aa">Display</summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Colour theme">
           <span>Theme</span>
@@ -631,6 +651,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return anchor;
   }
   function attach(el, box){
+    if(box.classList.contains("composer")) phoneSheet(el, box);
     // A statement of a drawn diagram: its notes belong under the whole
     // figure, where they are visible in both the picture and the source.
     var fig = el.closest("figure.diagram");
@@ -650,6 +671,38 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(el.tagName !== "LI"){ el.after(box); return; }
     var nested = nestedList(el);
     if(nested) el.insertBefore(box, nested); else el.appendChild(box);
+  }
+  // On a phone the composer is a bottom sheet (issue 131): opened inline,
+  // the keyboard would cover the very block being commented on. The sheet
+  // quotes the block instead, sits above the on-screen keyboard (the visual
+  // viewport is what the keyboard shrinks), and a tap outside it closes it.
+  // Desktop never sees any of this: the quote is hidden there and the sheet
+  // is only a sheet under the phone media query.
+  var phone = window.matchMedia ? window.matchMedia("(max-width:640px)") : {matches:false};
+  function phoneSheet(el, box){
+    if(!box.querySelector(".quoted")){
+      var about = document.createElement("div"); about.className = "about";
+      about.textContent = (blockOf[el.dataset.block]||{}).quote || el.dataset.quote || el.dataset.block;
+      box.insertBefore(about, box.firstChild);
+    }
+    if(!phone.matches) return;
+    lift();
+    document.addEventListener("click", function outside(e){
+      if(!box.isConnected){ document.removeEventListener("click", outside, true); return; }
+      if(box.contains(e.target)) return;
+      e.preventDefault(); e.stopPropagation();
+      document.removeEventListener("click", outside, true);
+      closeComposer();
+    }, true);
+  }
+  function lift(){
+    var c = document.querySelector(".composer"), vv = window.visualViewport;
+    if(!c || !vv || !phone.matches) return;
+    c.style.bottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + "px";
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", lift);
+    window.visualViewport.addEventListener("scroll", lift);
   }
   // Several statements of one diagram share the space below it, so each box
   // says which statement it is about.
@@ -1217,6 +1270,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var secs = sectionProgress();
     if(secs) text += " \u00b7 " + secs.done + " of " + secs.total + " sections";
     document.getElementById("progtext").textContent = text;
+    document.getElementById("progshort").textContent = done + "/" + total;
     el.title = text + (requireVerdict ? " — this review asks for a verdict on every one" : "");
   }
 
@@ -1239,6 +1293,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
     var hiddenN = data.doc.blocks.filter(function(b){ return !b.inline && !passes(b.id); }).length;
     sum.textContent = labels[filterMode] + (filterMode !== "all" ? " (" + hiddenN + " hidden)" : "");
+    sum.dataset.short = filterMode !== "all" ? hiddenN + " hidden" : "All";
   }
   (function(){
     var box = document.getElementById("filters");
