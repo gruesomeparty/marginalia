@@ -570,6 +570,15 @@ the PR's state. `.github/workflows/implement-approved.yml` runs it on
 `workflow_dispatch` only; the cron is commented out because arming it grants an
 agent write access on a timer.
 
+Dependency updates are the one exception to the human gate on `main`, at
+Berkay's request: Dependabot owns every ecosystem (github-actions, gomod, the
+Cloudflare template's npm; Renovate was configured but never installed, and is
+gone), and `deps-automerge.yml` squash-merges its PR on green CI through
+`scripts/deps-automerge-check.sh` — opened by `dependabot[bot]`, from its own
+`dependabot/*` branch, every commit its own, CI green on the current head,
+majors included. Anything else a person or an agent opens still waits for
+review; widening that gate is widening the exception.
+
 ## Build order (PRD §9)
 
 M1 server mode for markdown (`serve` + JSONL + `review_done` + skill doc +
