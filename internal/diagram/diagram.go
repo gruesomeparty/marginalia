@@ -60,7 +60,7 @@ func Find(explicit string) *Renderer {
 			return r
 		}
 		// An explicit path that is not on PATH but is executable as given.
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() { //nolint:gosec // the renderer is whatever the user named in --mmdc or MARGINALIA_MMDC
 			r.Bin = candidate
 			return r
 		}
@@ -126,11 +126,11 @@ func (r *Renderer) store(key, svg string) {
 	if r.Cache == "" {
 		return
 	}
-	if err := os.MkdirAll(r.Cache, 0o755); err != nil {
+	if err := os.MkdirAll(r.Cache, 0o700); err != nil {
 		return
 	}
 	tmp := filepath.Join(r.Cache, key+".tmp")
-	if err := os.WriteFile(tmp, []byte(svg), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(svg), 0o600); err != nil {
 		return
 	}
 	if err := os.Rename(tmp, filepath.Join(r.Cache, key+".svg")); err != nil {
@@ -149,7 +149,7 @@ func (r *Renderer) render(src string) (string, error) {
 	defer func() { _ = os.RemoveAll(dir) }()
 	in := filepath.Join(dir, "diagram.mmd")
 	out := filepath.Join(dir, "diagram.svg")
-	if err := os.WriteFile(in, []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(in, []byte(src), 0o600); err != nil {
 		return "", err
 	}
 	timeout := r.Timeout
@@ -159,7 +159,7 @@ func (r *Renderer) render(src string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	args := append([]string{"-i", in, "-o", out, "-b", "transparent"}, r.Args...)
-	cmd := exec.CommandContext(ctx, r.Bin, args...)
+	cmd := exec.CommandContext(ctx, r.Bin, args...) //nolint:gosec // mmdc is the binary the user named; its arguments are our temp paths plus MARGINALIA_MMDC_ARGS
 	stderr := &strings.Builder{}
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {

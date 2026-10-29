@@ -194,7 +194,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	stopped := make(chan struct{})
 	defer close(stopped)
 	drained := make(chan error, 1)
-	go func() {
+	go func() { //nolint:gosec // the drain runs after ctx is done, so it needs a context of its own
 		select {
 		case <-ctx.Done():
 		case <-stopped:
