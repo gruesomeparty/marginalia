@@ -65,7 +65,33 @@ func TestDoneOpensASheetAndCancelWritesNothing(t *testing.T) {
 	}
 	r.still(t, 1)
 
-	do(t, ctx, chromedp.Click(chromedp.CSS("#sheet-cancel")))
+	// A click in the sheet's own padding is not a click on the backdrop.
+	inPadding := get(t, ctx, chromedp.Evaluate[bool](`(function(){
+		var s = document.getElementById("sheet"), r = s.getBoundingClientRect();
+		var o = {bubbles: true, clientX: r.left + 4, clientY: r.top + 4};
+		s.dispatchEvent(new MouseEvent("mousedown", o));
+		s.dispatchEvent(new MouseEvent("click", o));
+		return s.open;
+	})()`))
+	if !inPadding {
+		t.Fatal("a click inside the sheet's padding closed it")
+	}
+	outsideCloses := get(t, ctx, chromedp.Evaluate[bool](`(function(){
+		var s = document.getElementById("sheet"), r = s.getBoundingClientRect();
+		var o = {bubbles: true, clientX: r.left - 10, clientY: r.top - 10};
+		s.dispatchEvent(new MouseEvent("mousedown", o));
+		s.dispatchEvent(new MouseEvent("click", o));
+		return !s.open;
+	})()`))
+	if !outsideCloses {
+		t.Fatal("a click on the backdrop left the sheet open")
+	}
+	r.still(t, 1)
+	do(t, ctx,
+		chromedp.Click(chromedp.CSS("#done")),
+		chromedp.WaitVisible(chromedp.CSS("#sheet")),
+		chromedp.Click(chromedp.CSS("#sheet-cancel")),
+	)
 	if sheetOpen(t, ctx) {
 		t.Fatal("Cancel left the sheet open")
 	}

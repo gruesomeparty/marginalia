@@ -1690,8 +1690,20 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(!sheetSubmit.disabled) sheetSubmit.focus();
   };
   document.getElementById("sheet-cancel").onclick = closeSheet;
-  // Clicking the backdrop is Cancel too; the click lands on the dialog itself.
-  sheet.addEventListener("click", function(e){ if(e.target === sheet) closeSheet(); });
+  // Clicking the backdrop is Cancel too. A backdrop click lands on the dialog
+  // element itself, but so does one in the sheet's own padding, so only a
+  // press that starts and ends outside the sheet's box counts: a click near
+  // its edge, or a drag-select out of the note, must not throw it away.
+  function outside(e){
+    var r = sheet.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  }
+  var pressedOutside = false;
+  sheet.addEventListener("mousedown", function(e){ pressedOutside = e.target === sheet && outside(e); });
+  sheet.addEventListener("click", function(e){
+    if(e.target === sheet && pressedOutside && outside(e)) closeSheet();
+    pressedOutside = false;
+  });
   // In the note, Enter is a newline; Cmd/Ctrl+Enter submits, as in a composer.
   sheetNote.addEventListener("keydown", function(e){
     if(e.key === "Enter" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); document.getElementById("sheet-form").requestSubmit(sheetSubmit); }
