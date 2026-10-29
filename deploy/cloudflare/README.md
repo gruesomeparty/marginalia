@@ -17,7 +17,7 @@ What the files do:
 
 | File | Purpose |
 |---|---|
-| `wrangler.jsonc` | One Worker, one Container class, `max_instances: 1`, no `workers.dev` or preview URL |
+| `wrangler.jsonc` | One Worker, one Container class under the `durable_object` scheduling policy, no `workers.dev` or preview URL |
 | `Dockerfile` | `FROM ghcr.io/gruesomeparty/marginalia:<version>`. Each release moves the tag. |
 | `src/index.ts` | Forwards every request to the single container and hands it every `MARGINALIA_*` setting. Refuses with a 500 when the public URL or an R2 store is missing, and answers an `/mcp` request with no valid credential itself, an anonymous `/healthz` from the container's state, and any page request Access did not let through, so a stranger cannot wake (and bill) the container. |
 | `settings.example.env` | Every setting, documented. Copy it to `settings.env`, which git ignores. |
@@ -136,7 +136,9 @@ inbox. Point an agent at it with the token, for example in Claude Code's
   large store, so the Worker allows two minutes for it. If you would rather
   never wait, raise `sleepAfter` in `src/index.ts`, and pay for the hours.
 - **One instance, always.** The host is its store's single writer: it loads
-  everything at startup and keeps it in memory. `max_instances` stays `1`.
+  everything at startup and keeps it in memory. The Worker only ever asks
+  for one Durable Object (`getContainer` with no name), so there is one
+  container; a test fails if that changes.
   Never point a second deployment at the same bucket and prefix.
 - **Changing a setting.** Edit `settings.env` and deploy again. The binary
   reads its settings once, when it starts. So the Worker remembers a hash of
@@ -147,7 +149,14 @@ inbox. Point an agent at it with the token, for example in Claude Code's
   the container to sleep. The file is applied additively, so removing a
   setting takes `npx wrangler secret delete <NAME>`, and then a deploy.
 - **Upgrading.** Check out the next release tag and run `npm ci`, then deploy
-  with the same command. The new `Dockerfile` names the new image.
+  with the same command. The new `Dockerfile` names the new image, and the
+  running container is replaced on the first request after the deploy, the
+  same way as for a changed setting.
+- **An application created with the `default` scheduling policy.** Earlier
+  versions of this template used it, and a policy cannot be changed. If a
+  deploy says the application already exists with another policy, delete
+  the old container application in the dashboard and deploy again. State is
+  in R2, so nothing is lost.
 - **Logs.** `npx wrangler tail` streams the Worker's logs. The container's
   own output, where the host says what it loaded and what it refused, is
   under *Containers* in the dashboard. If the Worker answers `the host did

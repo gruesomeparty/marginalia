@@ -461,11 +461,20 @@ users are agents, not humans.
   values). The first request after a deploy that changed them restarts the
   container: SIGTERM, a drain, then a fresh start. Without this, a rotated
   token would wait for a sleep that a waiting agent postpones
-  indefinitely. The
+  indefinitely. The container runs under the `durable_object` scheduling
+  policy (Cloudflare refuses `default` on some accounts, and a policy is
+  immutable once created), so the Durable Object names the image and the
+  instance size when it starts it. `@cloudflare/containers` passes neither,
+  so `Marginalia` hands the library a proxy of `ctx.container` whose
+  `start()` adds them; the image reference is part of the settings hash, so
+  a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
   hence the rebuild. `deploy_template_test.go` pins that tag to
-  `.release-please-manifest.json`, pins `max_instances: 1`, and pins no
+  `.release-please-manifest.json`, pins the `durable_object` scheduling
+  policy and a single unnamed `getContainer` (that policy has no
+  `max_instances`; one Durable Object is what keeps the host its store's
+  single writer), and pins no
   `account_id`/`routes`/`vars` and no `workers_dev` or preview URL. It also
   checks that every name in `settings.example.env` is one the binary reads.
   CI's `cloudflare-template` job typechecks the Worker and runs a dry-run

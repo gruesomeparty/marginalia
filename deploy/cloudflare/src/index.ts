@@ -18,6 +18,11 @@ const STOP_GRACE_MS = 15_000;
 // was started with — a hash, never the values.
 const STARTED_WITH = "started-with";
 
+// The image wrangler.jsonc names, and the instance it runs on: 1/4 vCPU and
+// 1 GiB, since every review is loaded into memory at start.
+const IMAGE = "marginalia";
+const INSTANCE = "basic";
+
 export class Marginalia extends Container<Env> {
 	defaultPort = 8080;
 	// Asleep after this long with no request in flight. A waiting agent's
@@ -28,8 +33,33 @@ export class Marginalia extends Container<Env> {
 	pingEndpoint = "localhost/healthz";
 	envVars = settings(this.env);
 
-	private readonly wanted = fingerprint(this.envVars);
+	private readonly wanted: Promise<string>;
 	private starting?: Promise<void>;
+
+	constructor(ctx: DurableObjectState<{}>, env: Env) {
+		super(ctx, env);
+		// Under the durable_object scheduling policy the container is
+		// started with an image and an instance size, and the library only
+		// passes env, entrypoint, internet access and labels. So it is handed
+		// a container whose start() adds the two.
+		const container = ctx.container;
+		if (container) {
+			const managed = new Proxy(container, {
+				get(target, key) {
+					if (key === "start") {
+						return (options: Omit<ContainerStartupOptions, "image" | "containerSnapshot">) =>
+							target.start({ ...options, image: target.images[IMAGE], instance: INSTANCE });
+					}
+					const value: unknown = Reflect.get(target, key);
+					return typeof value === "function" ? value.bind(target) : value;
+				},
+			});
+			Reflect.set(this, "container", managed);
+		}
+		// A new release is a new image, which a running container keeps until
+		// it is restarted: it counts as a changed setting.
+		this.wanted = fingerprint({ ...this.envVars, image: container?.images[IMAGE] ?? "" });
+	}
 
 	override async fetch(request: Request): Promise<Response> {
 		if (this.starting || !this.ctx.container?.running || (await this.outdated())) {

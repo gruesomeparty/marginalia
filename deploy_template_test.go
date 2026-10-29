@@ -89,8 +89,22 @@ func TestTemplateStaysGenericAndSingleInstance(t *testing.T) {
 		t.Fatalf("wrangler.jsonc declares %d containers, want 1", len(containers))
 	}
 	c, _ := containers[0].(map[string]any)
-	if n, ok := c["max_instances"].(float64); !ok || n != 1 {
-		t.Errorf("wrangler.jsonc: max_instances = %v, want 1 — the host is its store's single writer", c["max_instances"])
+	// The Durable Object starts the container with an image and an instance
+	// size, so the policy has to be the one that lets it.
+	if p := c["scheduling_policy"]; p != "durable_object" {
+		t.Errorf("wrangler.jsonc: scheduling_policy = %v, want durable_object — src/index.ts starts the container itself", p)
+	}
+	// Under that policy there is no max_instances: there is one container
+	// because the Worker only ever names one Durable Object. The host is its
+	// store's single writer, so a second name would be a second writer.
+	worker := readFile(t, filepath.Join(templateDir, "src", "index.ts"))
+	if n := strings.Count(worker, "getContainer("); n != 1 || !strings.Contains(worker, "getContainer(env.MARGINALIA)") {
+		t.Errorf("src/index.ts: want exactly one getContainer(env.MARGINALIA), with no name — the singleton; found %d getContainer calls", n)
+	}
+	for _, other := range []string{"idFromName", "newUniqueId", "idFromString", "getRandom", "getContainer(env.MARGINALIA,"} {
+		if strings.Contains(worker, other) {
+			t.Errorf("src/index.ts uses %s: every Durable Object is a container, and the host must run once", other)
+		}
 	}
 }
 
