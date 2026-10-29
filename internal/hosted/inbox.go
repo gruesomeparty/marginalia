@@ -46,6 +46,13 @@ func (h *Host) row(r *Review) web.InboxRow {
 		ID: r.Meta.ID, URL: h.URL(r.Meta.ID), Title: r.Meta.Title, Agent: r.Meta.Agent,
 		Docs: len(r.Meta.Docs), Revision: r.Meta.Revision, Published: published, LastActivity: last,
 	}
+	row.Names = append([]string(nil), r.Meta.Docs...)
+	switch {
+	case r.Meta.Review != "":
+		row.Framing = r.Meta.Review
+	case r.Meta.Config != "":
+		row.Framing = web.FramingCustom
+	}
 	if row.Title == "" && len(r.Meta.Docs) > 0 {
 		row.Title = r.Meta.Docs[0]
 	}
@@ -114,21 +121,36 @@ func (h *Host) row(r *Review) web.InboxRow {
 	return row
 }
 
-// handleRoot is the inbox.
+// handleRoot is the inbox. The tab counts are taken after the other
+// filters, so a search says how many of its matches each tab holds.
 func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
-	tab := r.URL.Query().Get("tab")
-	in := web.Inbox{Tab: tab}
+	f := web.ParseInboxFilter(r.URL.Query())
+	in := web.Inbox{Tab: f.Tab, Filter: f}
+	framings, agents := map[string]bool{}, map[string]bool{}
 	for _, row := range h.rows() {
+		if k := web.FramingKey(row.Framing); !framings[k] {
+			framings[k] = true
+			in.Framings = append(in.Framings, k)
+		}
+		if row.Agent != "" && !agents[row.Agent] {
+			agents[row.Agent] = true
+			in.Agents = append(in.Agents, row.Agent)
+		}
+		if !f.Match(row) {
+			continue
+		}
 		in.All++
 		if row.Status == web.StatusDone {
 			in.Done++
 		} else {
 			in.NeedsMe++
 		}
-		if web.InTab(row.Status, tab) {
+		if web.InTab(row.Status, f.Tab) {
 			in.Rows = append(in.Rows, row)
 		}
 	}
+	sort.Strings(in.Framings)
+	sort.Strings(in.Agents)
 	// Render into a buffer first, as the review page does: half an inbox
 	// under a 200 is worse than an honest 500.
 	var buf bytes.Buffer
@@ -140,12 +162,13 @@ func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(buf.Bytes())
 }
 
-// handleReviews is the inbox as JSON: the same rows, the same statuses.
+// handleReviews is the inbox as JSON: the same rows, the same statuses, the
+// same filters.
 func (h *Host) handleReviews(w http.ResponseWriter, r *http.Request) {
-	tab := r.URL.Query().Get("tab")
+	f := web.ParseInboxFilter(r.URL.Query())
 	rows := []web.InboxRow{}
 	for _, row := range h.rows() {
-		if tab == "" || web.InTab(row.Status, tab) {
+		if (f.Tab == "" || web.InTab(row.Status, f.Tab)) && f.Match(row) {
 			rows = append(rows, row)
 		}
 	}

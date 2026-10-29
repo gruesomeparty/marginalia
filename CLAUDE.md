@@ -383,6 +383,13 @@ users are agents, not humans.
   (issue #134), and rows group under Today / Earlier by last activity in UTC
   — headings only when both groups hold a row (`Inbox.Now` pins the clock in
   tests). Grouping is presentation only; `Host.rows()` is unchanged.
+  Filters and grouping live in the query string (`web.InboxFilter`: `q`
+  searches title, agent, framing and document names; `framing`, `agent`;
+  `group=day|status|framing|agent|none`), so a filtered inbox is a link and
+  the form works with no script (a few lines only submit it when a menu
+  changes). Tab counts are taken after the filters, `/api/reviews` accepts
+  the same parameters, and a row's `framing` is its preset, `custom` for an
+  inline config alone, or empty for the default.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
