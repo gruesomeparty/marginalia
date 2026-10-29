@@ -58,17 +58,34 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 .progress .fill{display:block;height:100%;width:0;background:var(--accent);border-radius:var(--r-pill);transition:width .2s ease}
 .progress .of{white-space:nowrap}
 @media (max-width:640px){.progress .bar{width:3rem}}
-/* What Done is still waiting for, and the way to get there. Refusing the
-   button without saying what is missing is how a reviewer learns the rule by
-   being told no. */
-.outstanding{margin:1rem auto;max-width:72ch;padding:.8rem 1rem;background:var(--card);border:1px solid var(--bad);border-radius:var(--r-lg);font-family:var(--sans);font-size:var(--fs-base)}
-.outstanding h2{font-size:var(--fs-md);margin:0 0 .2rem}
-.outstanding p{color:var(--muted);margin:0 0 .6rem}
-.outstanding .list{display:flex;flex-direction:column;gap:.25rem;margin-bottom:.6rem;max-height:14rem;overflow:auto}
-.outstanding .list button{font:inherit;font-size:var(--fs-sm);text-align:left;padding:.3rem .5rem;border:1px solid var(--rule);border-radius:var(--r-tab);background:transparent;color:var(--fg);cursor:pointer}
-.outstanding .list button:hover{border-color:var(--accent);color:var(--accent)}
-.outstanding .list .id{font-family:var(--mono);color:var(--muted);margin-right:.5rem}
-.outstanding>button{font:inherit;padding:.3rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+/* The sheet Done opens (issue 129). review_done is the agent's signal to go, so
+   it is sent from a summary the reviewer has read — what they said, what is
+   still unanswered, an optional word overall — and never from one stray
+   click. A modal <dialog> brings the focus trap, Esc and the backdrop with it,
+   so none of that is script. */
+.sheet{width:min(36rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);padding:var(--sp-5) var(--sp-5) var(--sp-4);background:var(--card);color:var(--fg);border:1px solid var(--rule);border-radius:var(--r-lg);box-shadow:var(--e-2);font-family:var(--sans);font-size:var(--fs-base);line-height:var(--lh-ui)}
+.sheet::backdrop{background:var(--fg);opacity:.35}
+.sheet h2{font-size:var(--fs-lg);margin:0 0 var(--sp-3)}
+.sheet p{margin:0 0 var(--sp-3)}
+.sheet .said{display:flex;flex-wrap:wrap;gap:var(--sp-2);list-style:none;margin:0 0 var(--sp-4);padding:0}
+.sheet .said li{padding:var(--sp-1) var(--sp-3);border:1px solid var(--rule);border-radius:var(--r-pill);font-size:var(--fs-sm)}
+.sheet .left{color:var(--muted)}
+.sheet .left.must{color:var(--bad)}
+.sheet details{margin:0 0 var(--sp-4)}
+.sheet summary{cursor:pointer;color:var(--muted);font-size:var(--fs-sm)}
+.sheet label{display:block;margin:0 0 var(--sp-2)}
+.sheet label .hint{color:var(--muted);font-size:var(--fs-sm)}
+.sheet textarea{width:100%;min-height:4rem;font:inherit;padding:var(--sp-3);border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
+.sheet .refused{color:var(--bad)}
+.sheet .row{display:flex;justify-content:flex-end;gap:var(--sp-3);margin-top:var(--sp-4)}
+.sheet .row button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
+.sheet .row button.secondary{background:transparent;color:var(--fg);border-color:var(--rule)}
+.sheet .row button:disabled{opacity:.5;cursor:not-allowed}
+/* The blocks still wanting something, each one a way to go there. */
+.picklist{display:flex;flex-direction:column;gap:.25rem;margin-top:var(--sp-2);max-height:14rem;overflow:auto}
+.picklist button{font:inherit;font-size:var(--fs-sm);text-align:left;padding:.3rem .5rem;border:1px solid var(--rule);border-radius:var(--r-tab);background:transparent;color:var(--fg);cursor:pointer}
+.picklist button:hover{border-color:var(--accent);color:var(--accent)}
+.picklist .id{font-family:var(--mono);color:var(--muted);margin-right:.5rem}
 /* A diff. The file line is the anchor a note about "this whole file" lands
    on; each hunk is its own block under it, which is how a reviewer talks
    about a change. Colour says added or removed and the marker column says it
@@ -415,12 +432,24 @@ header #fold+button{margin-left:.5rem}
   <span>This document changed on disk.</span>
   <button type="button" id="reload">Reload</button>
 </div>
-<div class="outstanding" id="outstanding" hidden>
-  <h2 id="outstanding-title"></h2>
-  <p>This review asks for a verdict on every block. These are still waiting — click one to go there.</p>
-  <div class="list" id="outstanding-list"></div>
-  <button type="button" class="secondary" id="outstanding-close">Dismiss</button>
-</div>
+<dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+  <form method="dialog" id="sheet-form">
+    <h2 id="sheet-title">{{if .ShowNav}}Finish this file{{else}}Finish your review{{end}}</h2>
+    <ul class="said" id="sheet-said" aria-label="What you said"></ul>
+    <p class="left" id="sheet-left"></p>
+    <details id="sheet-open" hidden>
+      <summary id="sheet-open-label">Show them</summary>
+      <div class="picklist" id="outstanding-list"></div>
+    </details>
+    <label for="sheet-note">Anything to say overall? <span class="hint">optional</span></label>
+    <textarea id="sheet-note" rows="3"></textarea>
+    <p class="refused" id="sheet-refused" role="alert" hidden></p>
+    <div class="row">
+      <button type="button" class="secondary" id="sheet-cancel">Cancel</button>
+      <button type="submit" id="sheet-submit">{{if .Static}}Mark done{{else if .ShowNav}}Mark this file done{{else}}Submit review{{end}}</button>
+    </div>
+  </form>
+</dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 window.__MARGINALIA__ = {{.DataJSON}};
@@ -1223,6 +1252,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   document.addEventListener("keydown", function(e){
     if(e.metaKey || e.ctrlKey || e.altKey || typing(e)) return;
+    if(sheet.open) return;
     if(e.key === "?" && keyFree("?")){ e.preventDefault(); keyHelp(); return; }
     // A focused block has its own handler, and a configured action there beats
     // navigation. It calls doNav itself for what is left over.
@@ -1234,12 +1264,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
   });
 
   // --- what Done is waiting for -------------------------------------------
-  function showOutstanding(){
-    var left = outstandingBlocks();
-    var panel = document.getElementById("outstanding");
-    if(!left.length){ panel.hidden = true; return false; }
-    document.getElementById("outstanding-title").textContent =
-      left.length + (left.length === 1 ? " block still wants a verdict" : " blocks still want a verdict");
+  // Each unanswered block, as a way to go there. Picking one closes the sheet:
+  // the reviewer is going back to work, not finishing.
+  function fillOutstanding(left){
     var list = document.getElementById("outstanding-list");
     list.textContent = "";
     left.forEach(function(b){
@@ -1249,6 +1276,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       btn.appendChild(id);
       btn.appendChild(document.createTextNode(b.quote || b.text || ""));
       btn.addEventListener("click", function(){
+        closeSheet();
         // Jumping to a block the current filter hides would scroll to nothing,
         // so drop back to showing everything first.
         if(!passes(b.id)){
@@ -1262,14 +1290,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       });
       list.appendChild(btn);
     });
-    panel.hidden = false;
-    panel.scrollIntoView({block:"nearest", behavior:"smooth"});
-    return true;
   }
-  (function(){
-    var close = document.getElementById("outstanding-close");
-    if(close) close.onclick = function(){ document.getElementById("outstanding").hidden = true; };
-  })();
 
   // Hovering a note lights the sentence it is about, so a paragraph with
   // three notes is readable rather than a guessing game.
@@ -1606,34 +1627,108 @@ window.__MARGINALIA__ = {{.DataJSON}};
     badge.textContent = String((parseInt(badge.textContent, 10) || 0) + 1);
     badge.hidden = false;
   }
-  document.getElementById("done").onclick=function(){
-    // Say what is missing before asking the server to refuse. Learning the
-    // rule by being told no, with a number and no names, is how a reviewer
-    // ends up hunting badges down a sixty-block page.
-    if(requireVerdict && showOutstanding()){
-      toast("Some blocks still want a verdict.");
-      return;
+  // Done opens the sheet; only Submit writes. Cancel, Esc or the backdrop
+  // leave the log exactly as it was.
+  var sheet = document.getElementById("sheet");
+  var sheetSubmit = document.getElementById("sheet-submit");
+  var sheetNote = document.getElementById("sheet-note");
+  function closeSheet(){ if(sheet.open) sheet.close(); }
+  // What the reviewer said, by type, from the same notes the page shows.
+  // Protocol events are not something the reviewer "said": a reply is an
+  // answer in a thread, a confirm is a verdict on the agent's claim.
+  function saidCounts(){
+    var counts = {}, order = [];
+    Object.keys(byBlock).forEach(function(id){
+      (byBlock[id] || []).forEach(function(n){
+        var t = n.event && n.event.type;
+        if(!t || t === "reply" || t === "addressed" || t === "confirm" || t === "reopen" || t === "review_done") return;
+        if(!counts[t]){ counts[t] = 0; order.push(t); }
+        counts[t]++;
+      });
+    });
+    return order.map(function(t){ return {type:t, n:counts[t]}; });
+  }
+  function fillSheet(){
+    var said = document.getElementById("sheet-said");
+    said.textContent = "";
+    var counts = saidCounts();
+    if(!counts.length){
+      var none = document.createElement("li"); none.textContent = "No notes yet";
+      said.appendChild(none);
     }
-    document.getElementById("outstanding").hidden = true;
+    counts.forEach(function(c){
+      var li = document.createElement("li");
+      li.textContent = c.n + " · " + (labelOf[c.type] || c.type.replace("_", " "));
+      said.appendChild(li);
+    });
+    var left = outstandingBlocks();
+    var total = data.doc.blocks.filter(commentable).length;
+    var line = document.getElementById("sheet-left");
+    var open = document.getElementById("sheet-open");
+    var must = requireVerdict && left.length > 0;
+    line.classList.toggle("must", must);
+    if(!left.length){
+      line.textContent = total ? "Every block has an answer." : "";
+    } else if(must){
+      line.textContent = (left.length === 1 ? "1 block still wants" : left.length + " blocks still want") +
+        " a verdict. This review asks for one on every block, so it cannot be submitted yet.";
+    } else {
+      line.textContent = left.length + " of " + total + (total === 1 ? " block has" : " blocks have") +
+        " no note. That is fine if you had nothing to say about them.";
+    }
+    open.hidden = !left.length;
+    open.open = must;
+    document.getElementById("sheet-open-label").textContent = must ? "Go to one" : "Show them";
+    fillOutstanding(left);
+    sheetSubmit.disabled = must;
+    document.getElementById("sheet-refused").hidden = true;
+  }
+  document.getElementById("done").onclick = function(){
+    fillSheet();
+    sheet.showModal();
+    // Enter on the default button submits; the note stays one Tab away.
+    if(!sheetSubmit.disabled) sheetSubmit.focus();
+  };
+  document.getElementById("sheet-cancel").onclick = closeSheet;
+  // Clicking the backdrop is Cancel too; the click lands on the dialog itself.
+  sheet.addEventListener("click", function(e){ if(e.target === sheet) closeSheet(); });
+  // In the note, Enter is a newline; Cmd/Ctrl+Enter submits, as in a composer.
+  sheetNote.addEventListener("keydown", function(e){
+    if(e.key === "Enter" && (e.metaKey || e.ctrlKey)){ e.preventDefault(); document.getElementById("sheet-form").requestSubmit(sheetSubmit); }
+  });
+  document.getElementById("sheet-form").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(sheetSubmit.disabled) return;
+    // The overall note rides on review_done's own text: it is the reviewer's
+    // last word and the agent reads it with the signal, not as a note on
+    // some block it is not about.
+    var note = sheetNote.value.trim();
     if(data.static){
-      keep({doc:data.doc.path,block:"",quote:"",hash:"",type:"review_done",text:"",author:author});
+      keep({doc:data.doc.path,block:"",quote:"",hash:"",type:"review_done",text:note,author:author});
+      closeSheet();
       revealShare();
       toast("Marked done — now send it back with Export.");
       return;
     }
-    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:"",author:author})})
-      .then(function(res){ if(!res.ok) return res.text().then(function(t){
-          // The page renders the rule; the server enforces it. If they ever
-          // disagree the server is right, so show its refusal and the list.
-          if(res.status === 409) showOutstanding();
-          throw new Error(t.trim());
-        });
+    sheetSubmit.disabled = true;
+    fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({doc:data.doc.path,type:"review_done",text:note,author:author})})
+      .then(function(res){ if(!res.ok) return res.text().then(function(t){ throw new Error(t.trim() || ("HTTP " + res.status)); });
+        closeSheet();
+        sheetNote.value = "";
         var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
         if(t) t.hidden = false;
         refreshSetCount();
-        toast(inSet ? "This file is marked done." : "Review marked done — you can close this tab."); })
-      .catch(function(err){ toast(err.message || "Failed"); });
-  };
+        toast(inSet ? "This file is marked done." : "Review submitted — you can close this tab."); })
+      .catch(function(err){
+        // The page renders the rule; the server enforces it. If they ever
+        // disagree the server is right, so its refusal is shown in the sheet,
+        // which stays open with the note intact.
+        var refused = document.getElementById("sheet-refused");
+        refused.textContent = err.message || "Failed";
+        refused.hidden = false;
+      })
+      .then(function(){ sheetSubmit.disabled = requireVerdict && outstandingBlocks().length > 0; });
+  });
   // --watch: the server re-parses when the file changes, so the page checks
   // whether the render it is showing has been outrun. It never reloads under
   // the reviewer's hands — a re-render that discards a half-typed comment is

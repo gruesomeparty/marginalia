@@ -56,7 +56,9 @@ text, stale where a block changed and orphaned where it is gone, exactly as
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
 2. Give the human that URL and say what you want looked at.
-3. `await_review_done {session_id}` — blocks until they press Done. A timeout
+3. `await_review_done {session_id}` — blocks until they submit the Done sheet.
+   The `review_done` event's `text` is their overall note, if they wrote one,
+   so read it before acting on the per-block notes. A timeout
    is not a failure: it returns `done: false`, so tell the human you are still
    waiting and call again rather than treating it as an error.
 4. `review_status {session_id}` — per-block state, what went stale, and the

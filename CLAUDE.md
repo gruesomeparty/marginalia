@@ -537,8 +537,12 @@ instead of silently misanchoring. A note about one sentence adds `sub`
 action the requesting agent configured (`blocker`, `nit`, …) — an action with
 nothing to fill in is one tap, and one that declares `fields` carries them in
 the event's `fields` map. A **Done**
-button appends a `review_done` event — the agent's signal to proceed;
-`require_verdict` withholds it until every commentable block is answered.
+button opens a summary sheet (issue #129: counts by type, what is unanswered,
+an optional overall note) and only its **Submit** appends a `review_done`
+event — the agent's signal to proceed, so one stray click must not send it.
+The overall note is that event's `text`, not a new type and not a note on
+some block. `require_verdict` withholds Submit until every commentable block
+is answered.
 
 ## Agent feedback loop (PRD §8)
 

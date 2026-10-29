@@ -387,8 +387,13 @@ You get a page. Click a block, pick a verdict, done.
   how many blocks are out of view, so a filter is never a silent lie. An inline
   block — a list item, a diagram statement — dims instead of hiding, because
   removing a bullet renumbers the list around it.
-- **Done tells you what is missing.** With `require_verdict`, it names the
-  blocks still waiting and takes you to any of them, instead of only refusing.
+- **Done is a summary, not a click.** It opens a sheet that shows what you
+  said (counts by type), how many blocks you left unanswered, and a box for an
+  optional overall note. Nothing is written until you press **Submit**. Cancel
+  or Esc leaves the log untouched. With `require_verdict` the sheet lists the
+  blocks still waiting, takes you to any of them, and will not submit until
+  they are answered. The overall note becomes the `text` of the `review_done`
+  event, so the agent reads it alongside the signal to go.
 - **Your display is yours.** The **Display** menu picks System / Light / Dark
   and turns code ligatures off. Those choices live in your browser, never on
   the agent's disk. `--theme` picks the palette it arrives in: `default`,
