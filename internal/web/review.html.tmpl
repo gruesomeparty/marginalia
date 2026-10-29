@@ -300,16 +300,18 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .existing .verdict .ask{color:var(--muted);font-size:var(--fs-sm)}
 /* A thread: the answers to one note, indented under it. One level deep, so
    the rule is a rule and not the first step of a tree. */
-.existing .thread{margin:.35rem 0 0 .2rem;border-left:1px solid var(--rule);padding-left:.6rem}
+.existing .thread,.sidenote .thread{margin:.35rem 0 0 .2rem;border-left:1px solid var(--rule);padding-left:.6rem}
 .existing .reply{margin:.25rem 0}
 .existing .reply .who{font-weight:600;color:var(--muted);font-size:var(--fs-sm);margin-right:.35rem}
-.existing .replybtn{font:inherit;font-size:var(--fs-sm);margin-top:.3rem;padding:.1rem .5rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--muted);cursor:pointer}
-.existing .replybtn:hover{color:var(--fg);border-color:var(--accent)}
-.existing .replybox{margin-top:.4rem}
-.existing .replybox textarea{width:100%;min-height:2.6rem;font:inherit;font-size:var(--fs-base);padding:.4rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
-.existing .replybox .row{display:flex;gap:.4rem;margin-top:.35rem}
-.existing .replybox button{font:inherit;font-size:var(--fs-sm);padding:.25rem .7rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
-.existing .replybox .send{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.sidenote .reply{margin:.25rem 0}
+.sidenote .reply .who{display:inline;text-transform:none;letter-spacing:normal;font-weight:600;margin-right:.35rem}
+.existing .replybtn,.sidenote .replybtn{font:inherit;font-size:var(--fs-sm);margin-top:.3rem;padding:.1rem .5rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--muted);cursor:pointer}
+.existing .replybtn:hover,.sidenote .replybtn:hover{color:var(--fg);border-color:var(--accent)}
+.existing .replybox,.sidenote .replybox{margin-top:.4rem}
+.existing .replybox textarea,.sidenote .replybox textarea{width:100%;min-height:2.6rem;font:inherit;font-size:var(--fs-base);padding:.4rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
+.existing .replybox .row,.sidenote .replybox .row{display:flex;gap:.4rem;margin-top:.35rem}
+.existing .replybox button,.sidenote .replybox button{font:inherit;font-size:var(--fs-sm);padding:.25rem .7rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
+.existing .replybox .send,.sidenote .replybox .send{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 /* A block waiting on the reviewer wears a ring, so the second round is a
    scan rather than a re-read. Settled blocks recede. */
 .block[data-status="addressed"][data-count]:not([data-count="0"])::before,pre .block[data-status="addressed"][data-count]:not([data-count="0"])::after{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--accent)}
@@ -512,6 +514,18 @@ window.__MARGINALIA__ = {{.DataJSON}};
   var res = data.resolution || {states:[]};
   var byBlock = {};
   (res.states||[]).forEach(function(st){ if(!st.orphaned) byBlock[st.block] = st.history || []; });
+  // A reply to one of the requester's notes answers the agent's question, so
+  // it is shown under that question and nowhere else: it is not the block's
+  // state, and like any reply it must not move a badge or the header count.
+  var answersOf = {};
+  Object.keys(byBlock).forEach(function(k){
+    byBlock[k] = byBlock[k].filter(function(n){
+      if(!n.answers) return true;
+      (answersOf[n.answers] = answersOf[n.answers] || []).push(n);
+      return false;
+    });
+    if(!byBlock[k].length) delete byBlock[k];
+  });
   var unanchored = res.orphaned || 0;
 
   function staleCount(){
@@ -1459,7 +1473,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       el.title = "read-only in this review";
       el.removeAttribute("tabindex"); el.removeAttribute("role");
       el.addEventListener("click", function(e){
-        if(e.target.closest(".composer,.existing,.caret")) return;
+        if(e.target.closest(".composer,.existing,.sidenote,.caret")) return;
         toast("This block is read-only in this review.");
       });
       return;
@@ -1467,7 +1481,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     // Blocks nest — a list item sits inside its list, a sub-item inside it —
     // so only the innermost block under the pointer answers.
     el.addEventListener("click", function(e){
-      if(e.target.closest(".composer,.existing,.caret")) return;
+      if(e.target.closest(".composer,.existing,.sidenote,.caret")) return;
       if(e.target.closest(".block") !== el) return;
       // Finishing a drag-select is not a click on the block. Without this,
       // selecting a sentence would open a composer about the paragraph and
@@ -1553,6 +1567,66 @@ window.__MARGINALIA__ = {{.DataJSON}};
     foldBtn.textContent = collapse ? "Expand all" : "Collapse all";
     applyFolds();
   };
+  // A requester note is a question the agent asked, so it is answered where
+  // it is asked (issue #90): the reply names the note by its id, and the
+  // agent reads the answer back tied to the question rather than guessing
+  // which of a block's notes a block comment was about.
+  function answerable(el, note, box){
+    if(!note.id) return;
+    var thread=document.createElement("div"); thread.className="thread";
+    function draw(){
+      thread.textContent="";
+      (answersOf[note.id]||[]).forEach(function(a){
+        var line=document.createElement("div"); line.className="reply";
+        var who=document.createElement("span"); who.className="who"; who.textContent=a.event.author||"reviewer";
+        var body=document.createElement("span"); body.textContent=a.event.text||"";
+        line.appendChild(who); line.appendChild(body); thread.appendChild(line);
+      });
+      thread.hidden = !thread.childElementCount;
+    }
+    draw();
+    var btn=document.createElement("button");
+    btn.type="button"; btn.className="replybtn"; btn.textContent="Answer";
+    btn.setAttribute("aria-expanded","false");
+    btn.addEventListener("click", function(ev){
+      ev.stopPropagation();
+      var open = box.querySelector(":scope > .replybox");
+      if(open){ open.remove(); btn.setAttribute("aria-expanded","false"); return; }
+      var rb=document.createElement("div"); rb.className="replybox";
+      var ta=document.createElement("textarea"); ta.placeholder="Your answer\u2026";
+      var row=document.createElement("div"); row.className="row";
+      var send=document.createElement("button"); send.type="button"; send.className="send"; send.textContent="Answer";
+      var cancel=document.createElement("button"); cancel.type="button"; cancel.textContent="Cancel";
+      function close(){ rb.remove(); btn.setAttribute("aria-expanded","false"); }
+      function submit(){
+        var text=ta.value.trim();
+        if(!text){ ta.focus(); return; }
+        var blk=blockOf[note.block]||{};
+        var ev={doc:data.doc.path,block:note.block,quote:blk.quote||"",hash:blk.hash||"",type:"reply",text:text,reply_to:note.id,author:author};
+        function landed(saved){
+          (answersOf[note.id]=answersOf[note.id]||[]).push({event:saved,id:saved.id,answers:note.id});
+          close(); draw(); toast("Answer saved");
+        }
+        if(data.static){ landed(keep(ev)); refreshShare(); return; }
+        fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+          .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
+          .then(landed)
+          .catch(function(err){ toast("Answer failed: "+err.message); });
+      }
+      send.onclick=submit; cancel.onclick=close;
+      ta.addEventListener("keydown", function(e){
+        if(e.key==="Escape"){ e.preventDefault(); close(); return; }
+        if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); submit(); }
+      });
+      row.appendChild(send); row.appendChild(cancel);
+      rb.appendChild(ta); rb.appendChild(row);
+      box.appendChild(rb);
+      btn.setAttribute("aria-expanded","true");
+      ta.focus();
+    });
+    box.appendChild(thread);
+    box.appendChild(btn);
+  }
   // The requester's guidance, rendered where it applies. A note whose block
   // is gone is not dropped: it moves to the banner, because a question the
   // agent asked is worth more than tidy markup.
@@ -1567,6 +1641,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       who.className = "who"; who.textContent = "note from the requester";
       box.appendChild(who);
       box.appendChild(document.createTextNode(note.text));
+      answerable(el, note, box);
       if(el.tagName === "LI" || el.closest("pre")) attach(el, box); else el.before(box);
     });
     if(!stray.length) return;

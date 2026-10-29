@@ -1,6 +1,10 @@
 package feedback
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gruesomeparty/marginalia/internal/review"
+)
 
 func note(block, hash, typ, text, ts string) Event {
 	return Event{Block: block, Quote: "quote of " + block, Hash: hash, Type: typ, Text: text, Ts: ts}
@@ -160,5 +164,23 @@ func TestSuggestionsEmptyLog(t *testing.T) {
 	ready, needs := Materialize(nil, blocksFrom(map[string]string{"1/1": "a"}, []string{"1/1"})).Suggestions()
 	if len(ready) != 0 || len(needs) != 0 {
 		t.Errorf("empty log = %+v / %+v", ready, needs)
+	}
+}
+
+// An answer to a requester note is not dangling: its question lives in the
+// review config, so it stands as a note of its own that says what it answers,
+// and it is counted as a reply, not as something the reviewer raised.
+func TestReplyToARequesterNoteIsAnAnswerNotDangling(t *testing.T) {
+	events := []Event{{Block: "1/2", Hash: "h", Type: TypeReply, Text: "Yes.", ReplyTo: review.RequesterPrefix + "cap"}}
+	res := Materialize(events, []Block{{ID: "1/2", Hash: "h"}})
+	if len(res.States) != 1 {
+		t.Fatalf("states = %+v", res.States)
+	}
+	n := res.States[0].Current
+	if n.Dangling || n.Answers != "req:cap" {
+		t.Errorf("note = %+v, want an answer to req:cap", n)
+	}
+	if res.Comments != 0 || res.Replies != 1 || res.Outstanding != 1 {
+		t.Errorf("comments=%d replies=%d outstanding=%d, want 0/1/1", res.Comments, res.Replies, res.Outstanding)
 	}
 }

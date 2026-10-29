@@ -478,15 +478,18 @@ skip:
   - "3"                  # generated appendix: folded, and refused if posted to
 
 notes:                   # your questions, rendered beside the block
-  - doc: spec.md         # which document — required in a set, optional for one
+  - id: batch-cap         # optional; what the reviewer's answer names
+    doc: spec.md         # which document — required in a set, optional for one
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 ```
 
 The instructions render as a banner above the document, so the framing survives
 the switch from chat to browser. A note renders beside its block, labelled as
-coming from the requester; answering it is an ordinary feedback event, so
-nothing needs a second channel.
+coming from the requester, with an **Answer** button. The answer is a `reply`
+event whose `reply_to` is the note's id — `req:batch-cap`, or `req:` plus a hash
+of the document, block and text when you gave no `id` — so it comes back tied to
+the question even when one block carries several.
 
 Give each note a `doc` when the review serves a set — block ids are
 per-document, so `1/2` exists in every markdown file and an unnamed note would

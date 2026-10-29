@@ -11,6 +11,8 @@
 package review
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -67,10 +69,42 @@ type Config struct {
 // review set, to a document. Doc matters more than it looks: block ids are
 // per-document, so `1/2` exists in every markdown file served, and a note
 // without a document would follow that id into documents it was never about.
+//
+// ID is what a reviewer's reply names in `reply_to`, so an answer is tied to
+// the question it answers rather than to whichever block it sat beside —
+// which is ambiguous the moment a block carries two notes (issue #90). A
+// config may name it (`id: retry-policy`); otherwise it is derived from the
+// document, block and text. Either way Validate stores it with the
+// RequesterPrefix, which no log id can carry, so the two kinds of id never
+// collide. Derived from the text rather than the note's position on purpose:
+// editing a question orphans its answers, which is honest, whereas inserting
+// a note above it would otherwise hand them to a different question.
 type Note struct {
+	ID    string `yaml:"id,omitempty" json:"id,omitempty"`
 	Doc   string `yaml:"doc,omitempty" json:"doc,omitempty"`
 	Block string `yaml:"block" json:"block"`
 	Text  string `yaml:"text" json:"text"`
+}
+
+// RequesterPrefix starts every requester note's id. A log event's id is bare
+// hex, so a reply_to with this prefix names a note in the config, not the log.
+const RequesterPrefix = "req:"
+
+var noteID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+// Key is the note's id with its prefix — the one Validate stored, or, for a
+// config built in code and never validated, the one it would have.
+func (n Note) Key() string {
+	if n.ID != "" {
+		return n.ID
+	}
+	return RequesterPrefix + derivedNoteID(n)
+}
+
+// derivedNoteID names a note that did not name itself.
+func derivedNoteID(n Note) string {
+	sum := sha256.Sum256([]byte(n.Doc + "\x00" + n.Block + "\x00" + n.Text))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 // Action is one thing the reviewer can say about a block. Type is written to
@@ -258,6 +292,7 @@ func (c *Config) validate() error {
 			}
 		}
 	}
+	seenNote := map[string]bool{}
 	for i := range c.Notes {
 		n := &c.Notes[i]
 		n.Doc = strings.TrimSpace(n.Doc)
@@ -269,6 +304,19 @@ func (c *Config) validate() error {
 		if n.Text == "" {
 			return fmt.Errorf("notes: the note on %s is empty", n.Block)
 		}
+		// Validate runs again on a layered config, so an id it already
+		// stored keeps its prefix rather than gaining a second one.
+		id := strings.TrimPrefix(strings.TrimSpace(n.ID), RequesterPrefix)
+		if id == "" {
+			id = derivedNoteID(*n)
+		} else if !noteID.MatchString(id) {
+			return fmt.Errorf("notes: id %q on %s must be letters, digits, '.', '_' or '-'", id, n.Block)
+		}
+		n.ID = RequesterPrefix + id
+		if seenNote[n.ID] {
+			return fmt.Errorf("notes: id %q is used by two notes (the second is on %s)", id, n.Block)
+		}
+		seenNote[n.ID] = true
 	}
 	return nil
 }
@@ -346,10 +394,26 @@ func (c *Config) NotesFor(block string, doc ...string) []Note {
 	var out []Note
 	for _, n := range c.Notes {
 		if n.Block == block && n.addresses(doc) {
+			n.ID = n.Key()
 			out = append(out, n)
 		}
 	}
 	return out
+}
+
+// Requester finds the requester note with this id, among those addressed to
+// the document — the reply gate's question when a reply names a note the log
+// does not hold.
+func (c *Config) Requester(id string, doc ...string) (Note, bool) {
+	if !strings.HasPrefix(id, RequesterPrefix) {
+		return Note{}, false
+	}
+	for _, n := range c.Notes {
+		if n.Key() == id && n.addresses(doc) {
+			return n, true
+		}
+	}
+	return Note{}, false
 }
 
 // Unanchored returns the notes addressed to this document whose block it does
@@ -361,6 +425,7 @@ func (c *Config) Unanchored(blocks map[string]bool, doc ...string) []Note {
 	var out []Note
 	for _, n := range c.Notes {
 		if n.Doc != "" && n.addresses(doc) && !blocks[n.Block] {
+			n.ID = n.Key()
 			out = append(out, n)
 		}
 	}
