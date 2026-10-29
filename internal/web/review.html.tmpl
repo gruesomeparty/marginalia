@@ -115,7 +115,7 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 main.tree.diff{max-width:none}
 /* A note about one sentence. The mark is the quote as it now reads — found
    again by the server, never an offset we hope still points somewhere. */
-.block mark.mg-sub{background:color-mix(in srgb,var(--marker) var(--tint),transparent);color:inherit;border-radius:var(--r-tab);padding:0 .05em;box-shadow:0 1px 0 var(--marker)}
+.block mark.mg-sub{background:color-mix(in srgb,var(--marker) var(--tint),transparent);color:inherit;border-radius:var(--r-tab);padding:0 .05em;box-shadow:0 1px 0 var(--marker-ink)}
 .block mark.mg-sub.on{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);box-shadow:0 1px 0 var(--accent)}
 .existing .item .quoted{margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--marker);color:var(--muted);font-style:italic}
 /* The offer to comment on a selection, floating where the selection is. It is
@@ -202,7 +202,7 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
    pointer wears the accent, and says so last so it wins on an answered shape.
    Both work by handing the shape a different value for the variables its own
    stylesheet already reads. */
-.diagram .pic [data-anchor][data-count]:not([data-count="0"]){--mg-line:var(--marker);--mg-node-stroke:var(--marker)}
+.diagram .pic [data-anchor][data-count]:not([data-count="0"]){--mg-line:var(--marker-ink);--mg-node-stroke:var(--marker-ink)}
 .diagram .pic [data-anchor][data-hover]{--mg-line:var(--accent);--mg-node-stroke:var(--accent);--mg-text:var(--accent)}
 /* Weight is the one thing still taken by force: mermaid sets it per edge class
    (.edge-thickness-normal) and per node rule, neither of which reads a

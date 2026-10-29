@@ -326,6 +326,11 @@ users are agents, not humans.
   defined, and a palette that omits a colour the others define. That last one
   is not hypothetical — `--marker` was defined for light and never redefined
   for dark, so every dark-mode badge wore the light palette's yellow.
+  `contrast_test.go` holds every palette in both modes to WCAG AA over the
+  pairs the pages actually draw (issue #156): 4.5:1 text, 3:1 for a line that
+  carries meaning, which is why `--marker` (a fill) has a `--marker-ink` for
+  strokes and underlines. A rule that puts a colour on a new background adds
+  its pair to that table.
 - The **inbox** (`web.RenderInbox`, `hosted/inbox.go`) is the hosted front
   page: one row per review from `Host.rows()`, built from the parsed revision
   and the in-memory log (zero store reads after startup, pinned by test),
