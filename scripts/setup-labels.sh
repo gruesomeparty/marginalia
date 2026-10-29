@@ -35,3 +35,7 @@ create review:concerns    "fbca04" "Adversarial review: a real problem to fix be
 create review:blocking    "b60205" "Adversarial review: breaks an invariant, a boundary or main"
 # Human-only.
 create hold               "000000" "Approved, but the work loop must wait"
+# Merge loop (scripts/merge-loop.sh is the only writer of the merge:* labels).
+create needs-human        "5319e7" "Merge loop: always ask the maintainer before merging"
+create merge:human        "1d76db" "Merge loop: waiting on the maintainer's review"
+create merge:changes      "e99695" "Merge loop: the maintainer asked for changes"

@@ -1,0 +1,108 @@
+# The merge loop: decides, for every open pull request into main, whether it
+# merges on its own, needs the maintainer, or is not ready — and for the ones
+# that need the maintainer, publishes the diff to a hosted Marginalia and
+# merges once the maintainer presses "Merge it" there (or approves on GitHub).
+#
+# Nothing here runs an agent, and nothing here checks out or runs a PR's code.
+# The decision is scripts/merge-gate.sh's and the reading of the maintainer's
+# review is scripts/merge-verdict.sh's, both tested in internal/pipeline; the
+# judgment they lean on is the adversarial review (review-prs.yml), through its
+# label and the commit its comment names. scripts/merge-loop.sh carries out
+# what they say. A merge always names the exact commit the gate saw.
+#
+# Triggers. CI or the review loop finishing on a PR (workflow_run runs the
+# default branch's copy of this file, so a PR cannot loosen the rules for its
+# own merge), an hourly sweep that also collects the maintainer's decisions,
+# and by hand. Not pull_request_review: that event runs the PR's copy.
+#
+# Repository variables:
+#   MERGE_LOOP_AUTO=true  merge low-risk PRs with no human. Off by default:
+#                         every PR then goes to the maintainer, with the reasons
+#                         it would otherwise have merged or not.
+#   MERGE_TRUSTED         more trusted authors, space-separated (the owner and
+#                         the pipeline's claude/* branches always are)
+#   IMPLEMENT_CHAIN=true  a merged pipeline PR dispatches the next work-loop run
+#
+# Secrets (all optional):
+#   MARGINALIA_URL, MARGINALIA_MCP_TOKEN  the hosted instance the maintainer
+#                         reviews in. Without them a PR that needs the
+#                         maintainer waits for a GitHub approval instead.
+#   MERGE_TOKEN           a token to merge with. A merge made with the workflow
+#                         token starts no push workflow, so the loop dispatches
+#                         release.yml itself; with this token it need not.
+name: Merge PRs
+on:
+  # The default branch's copy runs, and it never checks out the PR.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI, Review PRs]
+    types: [completed]
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+    inputs:
+      prs:
+        description: "PR numbers, space-separated (blank: every open PR into main)"
+        required: false
+        type: string
+      dry_run:
+        description: "Decide and print, change nothing"
+        required: false
+        type: boolean
+permissions: {}
+concurrency:
+  # One run at a time, so two runs cannot ask about, or merge, the same PR.
+  group: merge-prs
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Pick PRs
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          INPUT: ${{ inputs.prs }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_run ]; then
+            list="$(gh pr list --repo "$REPO" --state open --base main --head "$HEAD_BRANCH" --json number --jq '.[].number')"
+          elif [ -n "${INPUT:-}" ]; then
+            list="$(tr -cs '0-9' ' ' <<<"$INPUT")"
+          else
+            list="$(gh pr list --repo "$REPO" --state open --base main --limit 50 --json number,isDraft \
+              --jq '.[] | select(.isDraft | not) | .number')"
+          fi
+          echo "prs=$(xargs <<<"$list")" >>"$GITHUB_OUTPUT"
+      - name: Decide and act
+        if: steps.pick.outputs.prs != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.MERGE_TOKEN }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          MERGE_LOOP_AUTO: ${{ vars.MERGE_LOOP_AUTO }}
+          MERGE_TRUSTED: ${{ vars.MERGE_TRUSTED }}
+          IMPLEMENT_CHAIN: ${{ vars.IMPLEMENT_CHAIN }}
+          MARGINALIA_URL: ${{ secrets.MARGINALIA_URL }}
+          MARGINALIA_MCP_TOKEN: ${{ secrets.MARGINALIA_MCP_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          PRS: ${{ steps.pick.outputs.prs }}
+        run: |
+          set -euo pipefail
+          [ -n "${DRY_RUN:-}" ] || scripts/setup-labels.sh
+          # shellcheck disable=SC2086 # a list of numbers, split on purpose
+          scripts/merge-loop.sh $PRS

@@ -577,8 +577,8 @@ criterion (exit 3 when the queue holds nothing implementable, so a run stops and
 asks rather than guessing what "done" means). Rules the pipeline exists to keep:
 **one issue → one PR based on the issue's base → stop** (never a second open PR,
 never a stack on another `claude/*` branch — that is how work gets merged into a
-dead branch), never merge or approve, **no auto-merge to `main` without Berkay's
-review** — an issue labelled `base:feature/<name>` targets that integration
+dead branch), never merge or approve, **only the merge loop merges into
+`main`, and only what its gate allows** (below) — an issue labelled `base:feature/<name>` targets that integration
 branch instead, and `integration-automerge.yml` merges it there on green CI
 through `scripts/automerge-check.sh`, which refuses `main` outright (tested in
 `internal/pipeline`); the feature branch reaches `main` through one
@@ -610,6 +610,34 @@ Drafts and bots are skipped. It never approves, requests changes or blocks a
 merge into `main`; `automerge-check.sh` refuses a `review:blocking` PR into a
 feature branch, and the work loop's preflight answers a blocking or concerns
 review on its open PR before it stops.
+
+The last stage is the **merge loop** (`.github/workflows/merge-prs.yml`,
+`scripts/merge-loop.sh`), at Berkay's request: not every PR needs a human, and
+the loop decides which do. It runs no agent and never checks out a PR. For
+each open PR into `main`, `scripts/merge-gate.sh` (tested in
+`internal/pipeline`) answers `skip` (feature base, draft, `hold`, Renovate,
+release-please, other bots), `wait` (CI not green on the head, a conflict, no
+adversarial review *of the current head* — the review comment's `sha:` — or
+`review:blocking`), `merge` (the maintainer approved this exact head, or
+nothing asks for a human and `MERGE_LOOP_AUTO=true`), or `human`, listing
+every reason: `review:concerns`, an untrusted author or a fork, a sensitive
+path (workflows, scripts, skills, deploy, `go.mod`, CLAUDE/PRD, the storage,
+identity, MCP and review-protocol packages), over 400 lines or 20 files, a
+breaking change, `needs-human`, or auto-merge being off — which is the
+default, so out of the box every PR still waits for Berkay. A `human` PR's
+diff and a cover page are published to the hosted instance
+(`MARGINALIA_URL` + `MARGINALIA_MCP_TOKEN` secrets, `scripts/marginalia-call.sh`
+over stateless `/mcp`) with `.github/merge-review.yaml`, whose `merge_pr` and
+`request_changes` actions are the decision; `scripts/merge-verdict.sh` reads
+only a human's events since that revision was published, after `review_done`.
+A push republishes the same review (`review_id`), so notes re-anchor. Without
+the secrets, or if publishing fails, a GitHub approval of the head by the
+owner is the decision instead (it always counts). State is one sticky
+`<!-- agent:merge v1 sha: review: published: state: -->` comment of
+github-actions' own, and labels `merge:human`/`merge:changes`. A merge always
+passes `--match-head-commit`; made with the workflow token it starts no push
+workflow, so the loop dispatches `release.yml` (or merges with a
+`MERGE_TOKEN` secret instead).
 
 Dependency updates are the one exception to the human gate on `main`, at
 Berkay's request: Renovate (`renovate.json`) owns every ecosystem —
