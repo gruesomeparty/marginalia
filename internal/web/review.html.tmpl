@@ -57,7 +57,7 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
 .progress .bar{display:block;width:6rem;height:.4rem;background:var(--rule);border-radius:var(--r-pill);overflow:hidden}
 .progress .fill{display:block;height:100%;width:0;background:var(--accent);border-radius:var(--r-pill);transition:width .2s ease}
 .progress .of{white-space:nowrap}
-.progress .short{display:none}
+.progress .short,.display summary .short,.filter summary .short{display:none}
 /* A phone has one header row (issue 131): the title takes what is left, the
    progress reads as a fraction, and the menus show their short labels. */
 @media (max-width:640px){
@@ -66,8 +66,9 @@ header button.secondary{background:transparent;color:var(--fg);border-color:var(
   .progress .bar{width:2.5rem}
   .progress .of{display:none}
   .progress .short{display:inline;white-space:nowrap}
-  .display summary,.filter summary{font-size:0;padding:.35rem .55rem}
-  .display summary::before,.filter summary::before{content:attr(data-short);font-size:var(--fs-base)}
+  .display summary,.filter summary{padding:.35rem .55rem}
+  .display summary .long,.filter summary .long{display:none}
+  .display summary .short,.filter summary .short{display:inline}
 }
 /* The sheet Done opens (issue 129). review_done is the agent's signal to go, so
    it is sent from a summary the reviewer has read — what they said, what is
@@ -391,7 +392,7 @@ header #fold+button{margin-left:.5rem}
   </span>
   <span class="actions">
     <details class="filter" id="filter">
-      <summary data-short="All">Show all</summary>
+      <summary><span class="long">Show all</span><span class="short" aria-hidden="true">All</span></summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Which blocks to show">
           <span class="opts" id="filters">
@@ -402,7 +403,7 @@ header #fold+button{margin-left:.5rem}
       </div>
     </details>
     <details class="display" id="display">
-      <summary data-short="Aa">Display</summary>
+      <summary><span class="long">Display</span><span class="short" aria-hidden="true">Aa</span></summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Colour theme">
           <span>Theme</span>
@@ -1292,8 +1293,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(!sum) return;
     var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
     var hiddenN = data.doc.blocks.filter(function(b){ return !b.inline && !passes(b.id); }).length;
-    sum.textContent = labels[filterMode] + (filterMode !== "all" ? " (" + hiddenN + " hidden)" : "");
-    sum.dataset.short = filterMode !== "all" ? hiddenN + " hidden" : "All";
+    sum.querySelector(".long").textContent = labels[filterMode] + (filterMode !== "all" ? " (" + hiddenN + " hidden)" : "");
+    sum.querySelector(".short").textContent = filterMode !== "all" ? hiddenN + " hidden" : "All";
   }
   (function(){
     var box = document.getElementById("filters");
