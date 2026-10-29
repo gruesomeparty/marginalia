@@ -184,7 +184,8 @@ func TestQueueWorksHighestPriorityFirst(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "next: #9") {
 		t.Fatalf("exit=%d, want #9 next\n%s", code, out)
 	}
-	if !(strings.Index(out, "#9 ") < strings.Index(out, "#8 ") && strings.Index(out, "#8 ") < strings.Index(out, "#3 ")) {
+	p0, none, p3 := strings.Index(out, "#9 "), strings.Index(out, "#8 "), strings.Index(out, "#3 ")
+	if p0 > none || none > p3 {
 		t.Errorf("queue not ordered p0, unranked, p3:\n%s", out)
 	}
 }
