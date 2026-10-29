@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/gruesomeparty/marginalia/compare/v0.3.0...v0.3.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **ci:** keep the merge loop sweeping past a PR it cannot read ([#172](https://github.com/gruesomeparty/marginalia/issues/172)) ([6b9d92a](https://github.com/gruesomeparty/marginalia/commit/6b9d92ab12aa0f80a67e712c2d310c53fcac97f1))
+* **deploy:** make the Cloudflare template deployable and stop strangers waking the container ([#157](https://github.com/gruesomeparty/marginalia/issues/157)) ([437f85c](https://github.com/gruesomeparty/marginalia/commit/437f85c5fda16259546455e29a05040a1ec5c292))
+
 ## [0.3.0](https://github.com/gruesomeparty/marginalia/compare/v0.2.0...v0.3.0) (2026-10-29)
 
 
