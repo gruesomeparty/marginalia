@@ -1916,7 +1916,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   count();
   progress();
-  try{ if(localStorage.getItem("marginalia.notes") === "open") showNotesPanel(true); }catch(e){}
+  // On a phone the panel covers the page, so it opens only when asked.
+  var narrow = window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  try{ if(!narrow && localStorage.getItem("marginalia.notes") === "open") showNotesPanel(true); }catch(e){}
   // Folding is a tree's business, but filtering is every document's, and both
   // resolve here — so this runs for a markdown page too.
   applyFolds();
