@@ -140,6 +140,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          # This repository's own workflows start runs with the workflow
+          # token (a triage approval, a merge, the chain), and the action
+          # refuses a bot actor unless named. Only that one: an outside app
+          # stays refused, and the github-actions bot acts for no one else.
+          allowed_bots: github-actions[bot]
           prompt: |
             REPO: ${{ github.repository }}
             PR: ${{ matrix.pr }}
