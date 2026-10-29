@@ -276,10 +276,16 @@ front of the pages. It holds nothing account-specific. From a release tag,
 settings.env` brings up an instance. The hostname is the command-line
 argument, and the settings are a file on your machine that git ignores.
 
+**Deploying it to Kubernetes** is a Helm chart in this repository:
+[`deploy/helm/marginalia`](deploy/helm/marginalia/README.md) runs the same
+image as one pod with its store on a volume, behind whatever OIDC proxy the
+cluster already has, routed by Ingress or Gateway API.
+
 **Who is asking is decided on every request, before any handler runs.** A
 *human* reaches the pages through the edge, which puts a JWT on the request
 (Cloudflare Access: the `Cf-Access-Jwt-Assertion` header, or its
-`CF_Authorization` cookie); the host verifies the signature against the
+`CF_Authorization` cookie; an OIDC proxy: whichever header
+`--human-jwt-header` names); the host verifies the signature against the
 issuer's published keys (`--human-jwt-issuer`, `--human-jwt-audience`,
 `--human-jwks-url` — the last defaults to the Access certs URL, or to OpenID
 discovery for any other issuer), plus issuer, audience and validity, and the

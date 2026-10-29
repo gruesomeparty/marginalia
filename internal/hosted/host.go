@@ -50,6 +50,12 @@ type Options struct {
 	// DevIdentity is set: a page route with no way to tell who is asking
 	// would let anyone who reaches the port write the reviewer's verdicts.
 	HumanAuth *identity.Verifier
+	// HumanHeader and HumanCookie name where the human token arrives:
+	// empty means Cloudflare Access's (DefaultHumanHeader,
+	// DefaultHumanCookie), "-" as the cookie turns the cookie fallback off.
+	// Authorization is refused: it is the agent's.
+	HumanHeader string
+	HumanCookie string
 	// DevIdentity treats every page request as this human, for a laptop
 	// with no edge in front of it. The command allows it on loopback only.
 	DevIdentity string
@@ -136,6 +142,9 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	}
 	if opts.HumanAuth == nil && opts.DevIdentity == "" {
 		return nil, errors.New("hosted: no human identity: configure the edge's JWT (--human-jwt-issuer, --human-jwt-audience) or, on loopback only, --insecure-dev-identity <email>")
+	}
+	if err := checkHumanHeader(opts.HumanHeader); err != nil {
+		return nil, err
 	}
 	if opts.OAuth != nil && opts.OAuthIssuer != "" && opts.PublicURL == "" {
 		// The metadata names this resource by its public URL; a derived one

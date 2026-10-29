@@ -1,0 +1,42 @@
+{{- if .Values.httpRoute.enabled }}
+{{- $hostnames := .Values.httpRoute.hostnames | default (list (include "marginalia.host" .)) }}
+{{- $svc := include "marginalia.fullname" . }}
+{{- range $kind := list "pages" "public" }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ printf "%s-%s" $svc $kind }}
+  labels:
+    {{- include "marginalia.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $kind }}
+    {{- with $.Values.httpRoute.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $.Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml $.Values.httpRoute.parentRefs | nindent 4 }}
+  hostnames:
+    {{- toYaml $hostnames | nindent 4 }}
+  rules:
+    - matches:
+        {{- if eq $kind "pages" }}
+        - path:
+            type: PathPrefix
+            value: /
+        {{- else }}
+        {{- range (include "marginalia.publicPaths" $ | fromYamlArray) }}
+        - path:
+            type: {{ .type }}
+            value: {{ .path }}
+        {{- end }}
+        {{- end }}
+      backendRefs:
+        - name: {{ $svc }}
+          port: {{ $.Values.service.port }}
+{{- end }}
+{{- end }}

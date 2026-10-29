@@ -87,6 +87,30 @@ jobs:
           HOMEBREW_TAP_TOKEN: ''
       - name: Smoke-test the amd64 image
         run: ./scripts/image-smoke.sh
+  # deploy/helm/marginalia: the chart lints, renders each shape and refuses
+  # each setting the host would refuse (helm-check.sh), then installs into a
+  # kind cluster from an image built from this checkout (helm-smoke.sh). The
+  # tools come from `go install` at pinned versions rather than from more
+  # third-party actions.
+  helm-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+      - name: Install helm and kind
+        env:
+          HELM_VERSION: v3.19.0 # renovate: datasource=go depName=helm.sh/helm/v3
+          KIND_VERSION: v0.30.0 # renovate: datasource=go depName=sigs.k8s.io/kind
+        run: |
+          go install "helm.sh/helm/v3/cmd/helm@${HELM_VERSION}"
+          go install "sigs.k8s.io/kind@${KIND_VERSION}"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: ./scripts/helm-check.sh
+      - run: ./scripts/helm-smoke.sh
   # deploy/cloudflare checked as far as a deploy goes without an account: the
   # Worker typechecks against the runtime its compatibility date names, and
   # wrangler bundles it and validates the config. The image build is left out

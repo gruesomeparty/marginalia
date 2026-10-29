@@ -115,15 +115,15 @@ func TestHumanWithAValidTokenIsTheAuthorWhateverTheBodySays(t *testing.T) {
 	page := ts.URL + "/r/" + r.Meta.ID + "/"
 	token := e.mint(e.key, e.claims("berkay@example.com"))
 
-	if code, _ := do(t, "GET", page, nil, map[string]string{accessHeader: token}); code != 200 {
+	if code, _ := do(t, "GET", page, nil, map[string]string{DefaultHumanHeader: token}); code != 200 {
 		t.Fatalf("page with a valid token: %d", code)
 	}
 	// The cookie form works too.
-	if code, _ := do(t, "GET", page, nil, map[string]string{"Cookie": accessCookie + "=" + token}); code != 200 {
+	if code, _ := do(t, "GET", page, nil, map[string]string{"Cookie": DefaultHumanCookie + "=" + token}); code != 200 {
 		t.Fatalf("page with the cookie: %d", code)
 	}
 	body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "why?", Author: "mallory"})
-	code, out := do(t, "POST", page+"api/feedback", body, map[string]string{accessHeader: token})
+	code, out := do(t, "POST", page+"api/feedback", body, map[string]string{DefaultHumanHeader: token})
 	if code != http.StatusCreated {
 		t.Fatalf("POST with a valid token: %d %s", code, out)
 	}
@@ -140,11 +140,11 @@ func TestHumanWithAValidTokenIsTheAuthorWhateverTheBodySays(t *testing.T) {
 	}
 	// review_done through the page is the human's to write.
 	body, _ = json.Marshal(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone})
-	if code, out := do(t, "POST", page+"api/feedback", body, map[string]string{accessHeader: token}); code != http.StatusCreated {
+	if code, out := do(t, "POST", page+"api/feedback", body, map[string]string{DefaultHumanHeader: token}); code != http.StatusCreated {
 		t.Errorf("a human's review_done: %d %s", code, out)
 	}
 	// session_done too, under the same name.
-	if code, out := do(t, "POST", page+"api/session_done", []byte("{}"), map[string]string{accessHeader: token}); code != http.StatusCreated {
+	if code, out := do(t, "POST", page+"api/session_done", []byte("{}"), map[string]string{DefaultHumanHeader: token}); code != http.StatusCreated {
 		t.Errorf("a human's session_done: %d %s", code, out)
 	}
 	events, _ = r.Server.Entries()[0].Store.Load()
@@ -171,11 +171,11 @@ func TestPageRoutesRefuseBadOrMissingTokens(t *testing.T) {
 	wrongIss.Issuer = "https://other.cloudflareaccess.com"
 	cases := map[string]map[string]string{
 		"missing":          {},
-		"expired":          {accessHeader: e.mint(e.key, expired)},
-		"wrong audience":   {accessHeader: e.mint(e.key, wrongAud)},
-		"wrong issuer":     {accessHeader: e.mint(e.key, wrongIss)},
-		"another key":      {accessHeader: e.mint(otherKey, e.claims("x@example.com"))},
-		"garbage":          {accessHeader: "not.a.token"},
+		"expired":          {DefaultHumanHeader: e.mint(e.key, expired)},
+		"wrong audience":   {DefaultHumanHeader: e.mint(e.key, wrongAud)},
+		"wrong issuer":     {DefaultHumanHeader: e.mint(e.key, wrongIss)},
+		"another key":      {DefaultHumanHeader: e.mint(otherKey, e.claims("x@example.com"))},
+		"garbage":          {DefaultHumanHeader: "not.a.token"},
 		"agent credential": {"Authorization": "Bearer tok"},
 	}
 	comment, _ := json.Marshal(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "x", Author: "x"})
@@ -232,7 +232,7 @@ func TestAgentCredentialCannotWriteTheVerdict(t *testing.T) {
 	cs := connect(t, ts)
 	token := e.mint(e.key, e.claims("berkay@example.com"))
 	body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "question", Text: "why?"})
-	if code, _ := do(t, "POST", page+"api/feedback", body, map[string]string{accessHeader: token}); code != http.StatusCreated {
+	if code, _ := do(t, "POST", page+"api/feedback", body, map[string]string{DefaultHumanHeader: token}); code != http.StatusCreated {
 		t.Fatal(code)
 	}
 	var seen feedbackOut
@@ -267,6 +267,56 @@ func TestDevIdentityStandsInForTheEdge(t *testing.T) {
 func TestOpenNeedsAHumanIdentity(t *testing.T) {
 	_, err := Open(context.Background(), Options{Store: storage.NewMemory()})
 	if err == nil || !strings.Contains(err.Error(), "human identity") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// An OIDC proxy in front of an ingress forwards the reviewer's token under
+// a header of its own; once named, that header is the one read, and the
+// Cloudflare one is no longer a way in.
+func TestHumanHeaderAndCookieAreConfigurable(t *testing.T) {
+	e := newEdge(t)
+	h, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", Token: "tok", HumanAuth: e.verifier(), HumanHeader: "X-Auth-Request-Id-Token", HumanCookie: "-", Log: testWriter{t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(h.Handler())
+	t.Cleanup(ts.Close)
+	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	page := ts.URL + "/r/" + r.Meta.ID + "/"
+	token := e.mint(e.key, e.claims("reviewer@example.com"))
+
+	if code, out := do(t, "GET", page, nil, map[string]string{"X-Auth-Request-Id-Token": token}); code != 200 {
+		t.Fatalf("the configured header: %d %s", code, out)
+	}
+	for name, hdr := range map[string]map[string]string{
+		"the default header":   {DefaultHumanHeader: token},
+		"the default cookie":   {"Cookie": DefaultHumanCookie + "=" + token},
+		"a cookie, turned off": {"Cookie": "-=" + token},
+	} {
+		if code, _ := do(t, "GET", page, nil, hdr); code != http.StatusUnauthorized {
+			t.Errorf("%s: %d, want 401", name, code)
+		}
+	}
+
+	h2, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", Token: "tok", HumanAuth: e.verifier(), HumanCookie: "_session", Log: testWriter{t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts2 := httptest.NewServer(h2.Handler())
+	t.Cleanup(ts2.Close)
+	r2 := publish(t, h2, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	if code, _ := do(t, "GET", ts2.URL+"/r/"+r2.Meta.ID+"/", nil, map[string]string{"Cookie": "_session=" + token}); code != 200 {
+		t.Errorf("a configured cookie: %d", code)
+	}
+}
+
+// Authorization is the agent's header; a host told to read the human's
+// token from it would refuse every reviewer, so it does not start.
+func TestHumanHeaderCannotBeAuthorization(t *testing.T) {
+	e := newEdge(t)
+	_, err := Open(context.Background(), Options{Store: storage.NewMemory(), HumanAuth: e.verifier(), HumanHeader: "authorization"})
+	if err == nil || !strings.Contains(err.Error(), "Authorization") {
 		t.Fatalf("got %v", err)
 	}
 }

@@ -38,6 +38,8 @@ deploy command line, and the settings go in a file on your machine.
 | `MARGINALIA_HUMAN_JWT_ISSUER` | Issuer of the edge's JWT, e.g. `https://<team>.cloudflareaccess.com` |
 | `MARGINALIA_HUMAN_JWT_AUDIENCE` | Audience the edge's JWT must carry, e.g. the Access application's AUD tag |
 | `MARGINALIA_HUMAN_JWKS_URL` | Where the issuer publishes its keys; defaults to the Access certs URL, or OpenID discovery |
+| `MARGINALIA_HUMAN_JWT_HEADER` | Request header the edge forwards the reviewer's JWT in; default `Cf-Access-Jwt-Assertion`. Anything but `Authorization`, which is the agent's |
+| `MARGINALIA_HUMAN_JWT_COOKIE` | Cookie to read it from when the header is absent; default `CF_Authorization`, `-` for none |
 | `MARGINALIA_MCP_OAUTH_ISSUER` | OAuth authorization server for `/mcp` (the claude.ai connector) |
 | `MARGINALIA_MCP_OAUTH_AUDIENCE` | Audience its access tokens must carry; defaults to `<public-url>/mcp` |
 | `MARGINALIA_MCP_OAUTH_JWKS_URL` | Where it publishes its keys; defaults to OpenID discovery |
@@ -120,6 +122,18 @@ no volume, a `file:///tmp` store, secrets from the environment, non-root —
 it has to answer `/healthz` and take a `publish_document`
 (`scripts/image-smoke.sh`).
 
+### On Kubernetes, with a volume
+
+[`deploy/helm/marginalia`](../deploy/helm/marginalia/README.md) is a Helm
+chart for any cluster: one pod, a `file://` store on a PersistentVolumeClaim,
+an OIDC proxy of your choosing in front of the pages, and Ingress or Gateway
+API routes. It keeps the same points: exactly one replica, replaced with
+`Recreate` so two pods never hold the store at once; credentials from an
+existing Secret only; and `/mcp`, `/healthz` and
+`/.well-known/oauth-protected-resource` routed separately so the proxy's
+login never sits in front of an agent. CI installs it into a kind cluster
+(`scripts/helm-smoke.sh`).
+
 ## State in R2
 
 `--store r2://<bucket>/<prefix>` keeps every byte of review state in an R2
@@ -195,6 +209,11 @@ overview page. Those three values go into the container's secrets.
 Any other identity provider works the same way: set the issuer and audience
 to what it puts in its tokens, and the key-set URL if the issuer does not
 publish an OpenID configuration at `/.well-known/openid-configuration`.
+An OIDC proxy (oauth2-proxy, an ingress or gateway auth hook) forwards the
+token under a header of its own: name it with `MARGINALIA_HUMAN_JWT_HEADER`.
+It cannot be `Authorization` — a bearer on a page route is an agent's, and
+refused — so a proxy that only knows that header needs to copy the token
+elsewhere; the chart's README shows how for oauth2-proxy.
 
 Bypassing the edge on a laptop: `--insecure-dev-identity you@example.com`
 makes every page request that human. It refuses to start on anything but a
