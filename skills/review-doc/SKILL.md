@@ -110,6 +110,12 @@ This prints the URL and the feedback file path (`<path>.feedback.jsonl`). The
 server writes every comment to that file the instant it is saved — there is no
 export step.
 
+To wait for the human from a shell, add `--until-done --timeout 30m`: `serve`
+exits 0 once every served document is marked done, and 124 if the timeout
+passes first, with the log complete either way. To react while the review is
+still open, `GET /api/wait?since=<events>` long-polls and answers within a
+second of a saved note.
+
 Supported inputs and how their blocks are anchored:
 
 | Input | `block` looks like |
