@@ -52,6 +52,18 @@ func TestSQLInsertedStatementNeverMisanchors(t *testing.T) {
 	}
 }
 
+// A comment trailing a statement is shown with it and is part of its hash.
+func TestSQLTrailingComment(t *testing.T) {
+	a, _ := ParseBytes("m.sql", []byte("DROP TABLE x; -- after backfill\nSELECT 1;\n"))
+	b, _ := ParseBytes("m.sql", []byte("DROP TABLE x; -- before backfill\nSELECT 1;\n"))
+	if !strings.Contains(a.Blocks[0].HTML, "after backfill") || a.Blocks[0].Hash == b.Blocks[0].Hash {
+		t.Errorf("trailing comment not rendered or not hashed: %s", a.Blocks[0].HTML)
+	}
+	if a.Blocks[1].Hash != b.Blocks[1].Hash {
+		t.Error("the next statement's hash moved with the previous line's comment")
+	}
+}
+
 func TestSQLEmptyAndMalformedStillRender(t *testing.T) {
 	doc, err := ParseBytes("empty.sql", []byte("\n\n"))
 	if err != nil || len(doc.Blocks) != 1 || doc.Blocks[0].ID != "@empty" {

@@ -25,7 +25,7 @@ func parseSQL(path string, src []byte) (*Document, error) {
 			ID:   sqlID(i+1, s),
 			Kind: s.Kind,
 			Text: sqlText(s),
-			HTML: treeLine(s.Comment, sqlLang.HTML(s.Text), "", "decl"),
+			HTML: treeLine(s.Comment, sqlLang.HTML(s.Text), s.Trailing, "decl"),
 		})
 	}
 	// A page with no blocks has nothing to show or answer, so an empty file
@@ -48,9 +48,9 @@ func sqlID(ordinal int, s sqlstmt.Stmt) string {
 }
 
 // sqlText is what a statement's anchor quotes and hashes: the statement and
-// the comment that documents it.
+// the comments that document it, above and trailing.
 func sqlText(s sqlstmt.Stmt) string {
-	return strings.Join(nonEmpty(s.Comment, s.Text), " ")
+	return strings.Join(nonEmpty(s.Comment, s.Text, s.Trailing), " ")
 }
 
 // isSQLFence reports whether a fenced code block holds SQL.

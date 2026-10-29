@@ -112,7 +112,7 @@ func TestSplitBlockEdges(t *testing.T) {
 func TestSplitTrailingComment(t *testing.T) {
 	src := "SELECT 1; -- one\n-- about two\nSELECT 2;"
 	got := Split([]byte(src))
-	if len(got) != 2 || got[1].Comment != "about two" || src[got[0].Start:got[0].End] != "SELECT 1; -- one" {
+	if len(got) != 2 || got[1].Comment != "about two" || got[0].Trailing != "one" || src[got[0].Start:got[0].End] != "SELECT 1; -- one" {
 		t.Errorf("got %+v", got)
 	}
 }

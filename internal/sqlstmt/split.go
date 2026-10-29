@@ -27,6 +27,9 @@ type Stmt struct {
 	Object  string // what it acts on, as written without quotes; may be empty
 	Text    string // the statement, trimmed, without its leading comments
 	Comment string // the comments directly above it, markers stripped
+	// Trailing is a comment on the line the statement ends on, markers
+	// stripped.
+	Trailing string
 	Line    int    // 1-based line the statement itself starts on
 	Start   int
 	End     int
@@ -71,6 +74,7 @@ func (s *scanner) run() []Stmt {
 				// of the next one's quote and hash.
 				if n := len(s.out); s.seg < 0 && n > 0 && !bytes.ContainsRune(src[s.out[n-1].End:i], '\n') {
 					s.out[n-1].End = end
+					s.out[n-1].Trailing = strings.TrimSpace(s.out[n-1].Trailing + " " + stripComment(string(src[i:end])))
 					i = end
 					continue
 				}
