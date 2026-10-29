@@ -30,14 +30,18 @@
    matters here: the palette blocks come after the default ones.
 
    Colour only. --on-accent and --on-marker are the text that goes *on* those
-   fills, which is why they are palette-defined rather than assumed white. */
-:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--card:#fff;--shadow:var(--e-1);--on-accent:#fff;--on-marker:#000;--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#8a8a84}
-:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}
-@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#7f7f79}}
+   fills, which is why they are palette-defined rather than assumed white.
+   --marker is a fill; --marker-ink is the same hue dark (or light) enough to
+   read as a line or underline against the page, 3:1. contrast_test.go holds
+   every palette to WCAG AA over the pairs the pages draw, and the catppuccin
+   light values are darkened from Latte where Latte falls short. */
+:root{--bg:#fbfbf9;--fg:#1a1a1a;--muted:#666;--rule:#e3e3dd;--accent:#3b5bdb;--marker:#e8b339;--marker-ink:#b38a2c;--card:#fff;--shadow:var(--e-1);--on-accent:#fff;--on-marker:#000;--ok:#2f7d32;--bad:#b3261e;--tok-kw:#a626a4;--tok-str:#3f7a3f;--tok-num:#8a5a00;--tok-com:#73736e}
+:root[data-mode="dark"]{--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--marker-ink:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#8c8c86}
+@media (prefers-color-scheme:dark){:root:not([data-mode="light"]){--bg:#1a1a1a;--fg:#e8e8e6;--muted:#9a9a94;--rule:#333;--accent:#8aa0ff;--marker:#d9a441;--marker-ink:#d9a441;--card:#242424;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#12142a;--on-marker:#1a1a1a;--ok:#7bc47f;--bad:#f2857c;--tok-kw:#c792ea;--tok-str:#a5d6a7;--tok-num:#ffcb6b;--tok-com:#8c8c86}}
 /* Catppuccin Latte / Mocha, as a named option beside the default. */
-:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#6c6f85;--rule:#ccd0da;--accent:#1e66f5;--marker:#df8e1d;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--on-accent:#eff1f5;--on-marker:#4c4f69;--ok:#40a02b;--bad:#d20f39;--tok-kw:#8839ef;--tok-str:#40a02b;--tok-num:#fe640b;--tok-com:#9ca0b0}
-:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
-@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
+:root[data-palette="catppuccin"]{--bg:#eff1f5;--fg:#4c4f69;--muted:#64677c;--rule:#ccd0da;--accent:#1c5ee1;--marker:#df8e1d;--marker-ink:#b77418;--card:#e6e9ef;--shadow:0 1px 3px rgba(76,79,105,.14);--on-accent:#eff1f5;--on-marker:#1e1e2e;--ok:#2f7620;--bad:#ce0f38;--tok-kw:#8538ea;--tok-str:#2f7620;--tok-num:#b24608;--tok-com:#656872}
+:root[data-palette="catppuccin"][data-mode="dark"]{--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--marker-ink:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}
+@media (prefers-color-scheme:dark){:root[data-palette="catppuccin"]:not([data-mode="light"]){--bg:#1e1e2e;--fg:#cdd6f4;--muted:#a6adc8;--rule:#313244;--accent:#89b4fa;--marker:#f9e2af;--marker-ink:#f9e2af;--card:#181825;--shadow:0 2px 10px rgba(0,0,0,.5);--on-accent:#1e1e2e;--on-marker:#1e1e2e;--ok:#a6e3a1;--bad:#f38ba8;--tok-kw:#cba6f7;--tok-str:#a6e3a1;--tok-num:#fab387;--tok-com:#7f849c}}
 /* Mono stack: prefer a programming font the reviewer may already have — no
    webfont may be fetched — and ligate =>, != and -> where one is present. */
 :root{--mono:"JetBrains Mono","Fira Code","Cascadia Code","Iosevka","Victor Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
