@@ -252,6 +252,12 @@ func TestMergeGateLetsDocsThrough(t *testing.T) {
 	if out := gate(t, in); out.Decision != "merge" {
 		t.Fatalf("got %+v, want merge", out)
 	}
+	// Only that one skill: a sibling whose name merely starts the same way is
+	// still a skill the loops may read.
+	prOf(in)["files"] = []map[string]any{{"path": "skills/review-doc-x/SKILL.md"}}
+	if out := gate(t, in); out.Decision != "human" {
+		t.Fatalf("sibling skill: got %+v, want human", out)
+	}
 }
 
 func TestMergeGateTrustsConfiguredAuthors(t *testing.T) {
