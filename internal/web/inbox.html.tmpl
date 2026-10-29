@@ -32,9 +32,17 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .review{display:block;padding:var(--sp-4) var(--sp-5);background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:var(--r-tab-lg);box-shadow:var(--shadow);color:inherit;text-decoration:none}
 .review:hover{border-color:var(--accent)}
 .review:focus-visible{outline:none;box-shadow:var(--ring)}
-.review .top{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4)}
-.review .title{font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
-.review .status{margin-left:auto;font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
+/* A row leads with what it needs from you (issue 134): status, then how many
+   notes are outstanding, then anything wrong. Who sent it and which revision
+   it is are there for when you go looking, so they come last and quieter. */
+.group{margin:0 0 var(--sp-6)}
+.group h2{font-size:var(--fs-sm);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 var(--sp-3)}
+.review .lead{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);font-size:var(--fs-sm)}
+.review .need{font-weight:600}
+.review .warn{color:var(--bad)}
+.review .when{margin-left:auto;color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
+.review .title{display:block;margin-top:var(--sp-2);font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
+.review .status{font-size:var(--fs-xs);font-weight:600;padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
 .review.s-awaiting{border-left-color:var(--marker)}
 .review.s-awaiting .status{background:var(--marker);color:var(--on-marker)}
 .review.s-in_progress{border-left-color:var(--accent)}
@@ -42,13 +50,10 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .review.s-replied .status{background:var(--accent);color:var(--on-accent)}
 .review.s-done{border-left-color:var(--ok)}
 .review.s-done .status{background:color-mix(in srgb,var(--ok) var(--tint-strong),transparent)}
-.review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);color:var(--muted);font-size:var(--fs-sm)}
-.review .counts{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);font-size:var(--fs-sm)}
-.review .counts .warn{color:var(--bad)}
+.review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-1);color:var(--muted);font-size:var(--fs-xs)}
 .empty{color:var(--muted);padding:var(--sp-6) 0;text-align:center}
 @media (max-width:40rem){
   main{margin:var(--sp-5) auto;padding:0 var(--sp-4)}
-  .review .status{margin-left:0}
 }
 @media (prefers-reduced-motion:no-preference){.review{transition:border-color .12s}}
 </style>
@@ -66,24 +71,27 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
       <li><a href="/?tab=all"{{if eq .Tab "all"}} aria-current="page"{{end}}>All<span class="n">{{.All}}</span></a></li>
     </ul>
   </nav>
-  {{if .Rows}}<ul class="list">{{range .Rows}}
-    <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
-      <span class="top"><span class="title">{{.Title}}</span><span class="status">{{.StatusLabel}}</span></span>
-      <span class="meta">
-        {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
-        <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
-        <span>last activity <time datetime="{{.WhenISO}}">{{.When}}</time></span>
-        <span>revision {{.Revision}}</span>
-        <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
-      </span>
-      {{if .HasCounts}}<span class="counts">
-        <span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>
-        {{if .Outstanding}}<span>{{.Outstanding}} outstanding</span>{{end}}
-        {{if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
-        {{if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
-      </span>{{end}}
-    </a></li>{{end}}
-  </ul>{{else}}<p class="empty">{{.Empty}}</p>{{end}}
+  {{if .Rows}}{{$grouped := .Grouped}}{{range .Groups}}
+  <section class="group" aria-label="{{.Label}}">
+    {{if $grouped}}<h2>{{.Label}}</h2>{{end}}
+    <ul class="list">{{range .Rows}}
+      <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
+        <span class="lead"><span class="status">{{.StatusLabel}}</span>
+          {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
+          {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
+          {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
+          <time class="when" datetime="{{.WhenISO}}" title="last activity">{{.When}}</time></span>
+        <span class="title">{{.Title}}</span>
+        <span class="meta">
+          {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
+          {{if .HasCounts}}<span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>{{end}}
+          <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
+          <span>revision {{.Revision}}</span>
+          <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
+        </span>
+      </a></li>{{end}}
+    </ul>
+  </section>{{end}}{{else}}<p class="empty">{{.Empty}}</p>{{end}}
 </main>
 </body>
 </html>

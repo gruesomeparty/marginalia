@@ -88,6 +88,9 @@ type Inbox struct {
 	Theme Theme
 	// Counts per tab, for the tab labels.
 	NeedsMe, Done, All int
+	// Now is what "today" is measured against; zero means the clock. Tests
+	// set it so a row stamped at 23:59 does not move groups mid-run.
+	Now time.Time
 }
 
 // inboxRow is a row as the template sees it: the row plus its display forms,
@@ -102,8 +105,19 @@ type inboxRow struct {
 	HasCounts bool
 }
 
+// inboxGroup is a run of rows under one heading: Today, then Earlier, by last
+// activity. The rows arrive newest first, so each group is contiguous.
+type inboxGroup struct {
+	Label string
+	Rows  []inboxRow
+}
+
 type inboxView struct {
-	Rows     []inboxRow
+	Rows   []inboxRow
+	Groups []inboxGroup
+	// Grouped is whether the headings show: only when both groups hold
+	// something, since "Today" over every row says nothing.
+	Grouped  bool
 	Tab      string
 	Theme    Theme
 	NeedsMe  int
@@ -133,7 +147,34 @@ func RenderInbox(w io.Writer, in Inbox) error {
 			HasCounts: r.Comments > 0 || r.Outstanding > 0 || r.Stale > 0 || r.Unclaimed > 0,
 		})
 	}
+	v.Groups = groupByDay(v.Rows, in.Now)
+	v.Grouped = len(v.Groups) > 1
 	return tmpl.ExecuteTemplate(w, "inbox.html.tmpl", v)
+}
+
+// groupByDay splits rows into Today and Earlier by last activity, in UTC,
+// the zone every stamp on the page is written in. An empty group is left out.
+func groupByDay(rows []inboxRow, now time.Time) []inboxGroup {
+	if now.IsZero() {
+		now = time.Now()
+	}
+	today := now.UTC().Format("2006-01-02")
+	var recent, earlier []inboxRow
+	for _, r := range rows {
+		if r.LastActivity.UTC().Format("2006-01-02") == today {
+			recent = append(recent, r)
+		} else {
+			earlier = append(earlier, r)
+		}
+	}
+	var out []inboxGroup
+	if len(recent) > 0 {
+		out = append(out, inboxGroup{Label: "Today", Rows: recent})
+	}
+	if len(earlier) > 0 {
+		out = append(out, inboxGroup{Label: "Earlier", Rows: earlier})
+	}
+	return out
 }
 
 // stamp is a time as the inbox shows it: the date, and the clock when it is
