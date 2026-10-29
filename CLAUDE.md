@@ -173,6 +173,15 @@ users are agents, not humans.
   unscoped note would be rendered beside the wrong block and reported as
   unanchored on every other page. A note naming a document the set does not
   serve is named at startup rather than dropped.
+- A requester note is answerable (issue #90): `Note.ID` is `req:<id>` from
+  the config or `req:` + a hash of doc/block/text (text, not position, so
+  inserting a note never hands its neighbour's answers to it). The page's
+  Answer button posts a `reply` with that `reply_to`; `Server.knows` accepts a
+  requester id addressed to the document, for `reply` only. Materialize turns
+  such a reply into a root note with `Answers` set instead of `Dangling`, so it
+  is outstanding work for the agent, counted in `Replies` and not `Comments`;
+  the page shows it under the sidenote and not in the block's notes. `import`
+  lets a `req:` reply through, since no log holds the question.
 - `internal/review/presets/*.yaml` are framings embedded in the binary
   (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
   than inventing one and the events compare across runs. `Config.Overlay`

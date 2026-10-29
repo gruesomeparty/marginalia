@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
@@ -320,8 +321,14 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 		if err := review.ValidateProtocol(e.Type, e.Text, e.ReplyTo); err != nil {
 			return http.StatusBadRequest, err
 		}
-		// The note being answered has to exist in *this* document's log.
-		// Rendering a reply box is not enforcing anything.
+		// A requester note is a question to answer, not a note in the
+		// revision loop: nobody addresses, confirms or reopens it.
+		if strings.HasPrefix(e.ReplyTo, review.RequesterPrefix) && e.Type != feedback.TypeReply {
+			return http.StatusBadRequest, fmt.Errorf("a requester note can be answered with a reply, not a %s", e.Type)
+		}
+		// The note being answered has to exist in *this* document's log, or
+		// be a requester note addressed to it. Rendering a reply box is not
+		// enforcing anything.
 		if !s.knows(target, e.ReplyTo) {
 			return http.StatusBadRequest, fmt.Errorf("unknown note %q — nothing in this document's log answers to it", e.ReplyTo)
 		}
@@ -377,8 +384,12 @@ func (s *Server) anchorSub(target *Entry, e *feedback.Event) (int, error) {
 	return http.StatusBadRequest, fmt.Errorf("unknown block %s", e.Block)
 }
 
-// knows reports whether a note with that id is in the document's log.
+// knows reports whether a note with that id is in the document's log, or is
+// one of the requester's notes addressed to this document (issue #90).
 func (s *Server) knows(target *Entry, id string) bool {
+	if _, ok := s.opts.Review.Requester(id, s.docOf(target).Path, target.Rel); ok {
+		return true
+	}
 	events, err := target.Store.Load()
 	if err != nil {
 		return false

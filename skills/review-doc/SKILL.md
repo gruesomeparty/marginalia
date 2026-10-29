@@ -260,15 +260,19 @@ The same file carries your own questions and the parts you are not asking about:
 
 ```yaml
 notes:
-  - doc: spec.md            # which document, when you serve a set
+  - id: batch-cap           # optional: the answer's reply_to is req:batch-cap
+    doc: spec.md            # which document, when you serve a set
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 skip:
   - "2"                  # folded on the page, and refused if anything posts to it
 ```
 
-A note renders beside that block, labelled as yours; the human's reply comes
-back as an ordinary event on the same block. **Name the document** when you
+A note renders beside that block, labelled as yours, and the human answers it
+in place: a `reply` event whose `reply_to` is `req:<id>`. Give each note an `id`
+so you can match answers to questions without computing anything; without one,
+the id is `req:` plus a hash of doc, block and text, and editing the text
+orphans earlier answers. **Name the document** when you
 serve more than one: block ids are per-document (`1/2` exists in every markdown
 file), so an unnamed note follows its id into every document that has one, and
 startup warns you if a note names a document the review does not serve. Prefer a note on the block over a
