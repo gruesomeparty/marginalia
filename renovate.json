@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":disableDependencyDashboard"],
+  "schedule": ["before 6am on monday"],
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": false,
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "go modules (non-major)"
+    },
+    {
+      "matchFileNames": ["deploy/cloudflare/**"],
+      "matchManagers": ["npm"],
+      "groupName": "cloudflare template",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "description": "release-please moves this tag with every release",
+      "matchFileNames": ["deploy/cloudflare/Dockerfile"],
+      "enabled": false
+    }
+  ]
+}
