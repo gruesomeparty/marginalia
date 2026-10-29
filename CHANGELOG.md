@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/gruesomeparty/marginalia/compare/v0.2.0...v0.3.0) (2026-10-29)
+
+
+### Features
+
+* **deploy:** a credential-free Cloudflare deployment template ([a732a2e](https://github.com/gruesomeparty/marginalia/commit/a732a2ea1fb98b9be1b0dc2698cb025cdec651ca))
+* **host:** read the public URL from MARGINALIA_PUBLIC_URL ([77ffbb2](https://github.com/gruesomeparty/marginalia/commit/77ffbb2905d4211b324214897489de3c4a9c6026))
+* **pipeline:** a triage loop, an armed work loop, and agent notes in hidden comments ([d75b493](https://github.com/gruesomeparty/marginalia/commit/d75b493eaec6977846de34a42d896ea59d7357ba))
+
+
+### Bug Fixes
+
+* **deploy:** restart the container when a deploy changes its settings ([10191db](https://github.com/gruesomeparty/marginalia/commit/10191dba208e42e76b8e5e36435cda705c534e12))
+
 ## [0.2.0](https://github.com/gruesomeparty/marginalia/compare/v0.1.2...v0.2.0) (2026-10-14)
 
 
