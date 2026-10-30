@@ -516,6 +516,7 @@ and a tab left open across a restart must not be able to invent vocabulary.
 | `.md`, `.markdown` | `section/ordinal` — `5.3/2`; a list item adds its position — `5.3/2.1`, nested `5.3/2.1.3` |
 | `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
+| an OpenAPI or Swagger spec in any of those | an operation by method and path — `GET /orders/{id}`, below it `GET /orders/{id}.responses["200"]`; a path item by its path; a component by kind and name — `components/schemas/Order`; the rest as above |
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | what the statement connects — `client-->api`, `payments/worker-->queue`; a message `C->A` (repeats `C->A#2`), a transition `Pending-->Paid`, a relationship `CUSTOMER--ORDER`; in a fence, under the fence's own ID — `1/3/client-->api` |
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
@@ -934,7 +935,7 @@ links to where it is tracked.
 
 | Gap | Detail |
 |---|---|
-| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs, SQL and HCL have landed. Still missing: OpenAPI anchored by operation rather than as a generic tree, and source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
+| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs, SQL, HCL and OpenAPI have landed. Still missing: source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
 | **Only some mermaid types decompose** | Flowchart, sequence, state and ER diagrams anchor per statement, and only a flowchart's picture is clickable. Other types stay reviewable as a single source block. |
 | **The page's JavaScript is barely tested** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | `internal/browsertest` drives the page in headless Chrome for the composer, one-tap actions, replies and diagram clicks. Keyboard movement, folding, share-mode storage and `--watch` reloads are still verified by hand; each PR that touches the page adds its case. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
