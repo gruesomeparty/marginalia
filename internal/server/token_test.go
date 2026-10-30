@@ -128,3 +128,22 @@ func TestNoTokenIsUnchanged(t *testing.T) {
 		t.Fatalf("logged %+v", events)
 	}
 }
+
+// The cookie's name carries the port and nothing that would make it
+// invalid: reached over IPv6, the host is full of colons and brackets.
+func TestTokenCookieWorksOverIPv6(t *testing.T) {
+	s, _ := newTokenServer(t)
+	h := s.Handler()
+	onHost := func(host string) func(*http.Request) { return func(r *http.Request) { r.Host = host } }
+	for host, want := range map[string]string{"[::1]:8787": "marginalia_token_8787", "[fd7a:115c::1]:9000": "marginalia_token_9000", "example": "marginalia_token_80"} {
+		rr := hit(h, "GET", "/?token=s3cret", "", onHost(host))
+		cookies := rr.Result().Cookies()
+		if len(cookies) != 1 || cookies[0].Name != want {
+			t.Fatalf("%s: cookies %+v, want one named %s", host, cookies, want)
+		}
+		withCookie := func(r *http.Request) { r.Host = host; r.AddCookie(cookies[0]) }
+		if rr := hit(h, "GET", "/", "", withCookie); rr.Code != http.StatusOK {
+			t.Errorf("%s: GET / with the cookie: %d", host, rr.Code)
+		}
+	}
+}

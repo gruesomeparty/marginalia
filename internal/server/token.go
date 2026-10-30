@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,16 +14,19 @@ import (
 // has shown it once, so a phone opens the URL with ?token= a single time and
 // then browses normally. Cookies ignore the port, so the name carries it:
 // two `serve`s on one host must not overwrite each other's.
+// Only the port's digits go in, since a cookie name may not hold the
+// colons and brackets of an IPv6 host.
 func tokenCookie(r *http.Request) string {
-	_, port, _ := strings.Cut(r.Host, ":")
-	return "marginalia_token_" + or(port, "80")
-}
-
-func or(s, fallback string) string {
-	if s == "" {
-		return fallback
+	port := "80"
+	if _, p, err := net.SplitHostPort(r.Host); err == nil && p != "" {
+		port = p
 	}
-	return s
+	return "marginalia_token_" + strings.Map(func(c rune) rune {
+		if c >= '0' && c <= '9' {
+			return c
+		}
+		return -1
+	}, port)
 }
 
 // gate refuses every request that does not carry Options.Token (issue #54):
