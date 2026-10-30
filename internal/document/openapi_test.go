@@ -94,6 +94,10 @@ func TestOpenAPIMalformedAndPlain(t *testing.T) {
 	for _, want := range []string{"$.paths[0]", "$.components"} {
 		block(t, doc, want)
 	}
+	doc, _ = ParseBytes("api.yaml", []byte("openapi: 3.0.0\ncomponents:\n  schemas:\n    - a\n"))
+	for _, want := range []string{"components/schemas[0]"} {
+		block(t, doc, want)
+	}
 	plain, _ := ParseBytes("c.yaml", []byte("paths:\n  /a:\n    get: {}\n"))
 	block(t, plain, `$.paths["/a"].get`)
 }

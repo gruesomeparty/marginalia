@@ -70,7 +70,11 @@ func addPathItem(tb *treeBuilder, item dataNode, parent string, index int) {
 // prefix plus its name: `components/schemas/Order`, `definitions/Order`.
 func addNamed(tb *treeBuilder, group dataNode, prefix, parent string, level int) {
 	for k, def := range group.Children {
-		did := tb.add(dataLine(def, prefix+"/"+def.Key, parent, dataLabel(def, k), level))
+		id := prefix + "/" + def.Key
+		if !def.Keyed {
+			id = dataPath(prefix, def, k) // a group written as a list
+		}
+		did := tb.add(dataLine(def, id, parent, dataLabel(def, k), level))
 		addDataChildren(tb, def, did, level+1)
 	}
 }
