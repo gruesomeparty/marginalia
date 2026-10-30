@@ -59,6 +59,10 @@ type Options struct {
 	// DevIdentity treats every page request as this human, for a laptop
 	// with no edge in front of it. The command allows it on loopback only.
 	DevIdentity string
+	// Reviewers, when set, are the only humans page routes admit, by the
+	// name their identity resolves to (an email at the edge). Empty admits
+	// every human the edge verified, as before the list existed.
+	Reviewers []string
 	// OAuth verifies access tokens on /mcp issued by OAuthIssuer, the
 	// authorization server named in the protected-resource metadata; the
 	// token's aud must be OAuthAudience, which defaults to the public /mcp
@@ -485,6 +489,7 @@ func (h *Host) routes() {
 		mux.Handle(metadataPath, meta)
 		mux.Handle(metadataPath+mcpPath, meta)
 	}
+	mux.Handle("GET "+agentWaitPrefix+"{id}/wait", h.agentWait())
 	mux.Handle("/r/{id}", h.requireHuman(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The page's URLs are relative to its mount, so it has to be
 		// opened with the trailing slash.

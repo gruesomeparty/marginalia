@@ -181,11 +181,10 @@ func TestParsePrelude(t *testing.T) {
 	}
 }
 
-// Anything that is not a flowchart is not an error — the caller keeps it as
+// A type the parser does not take apart is not an error — the caller keeps it as
 // the source block it already had.
 func TestParseUnsupported(t *testing.T) {
 	for _, src := range []string{
-		"sequenceDiagram\n  Alice->>Bob: Hi\n",
 		"classDiagram\n  Animal <|-- Duck\n",
 		"",
 		"%% just a comment\n",

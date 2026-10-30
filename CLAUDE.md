@@ -136,9 +136,22 @@ users are agents, not humans.
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
   `MetaData.Keys()`. Mermaid is parsed by `internal/mermaid` — line-based,
   bracket-aware and equally tolerant, returning statements with the byte range
-  they occupy so a fence can be annotated in place. `internal/diagram` draws the
+  they occupy so a fence can be annotated in place. Flowcharts, and since
+  issue #153 sequence, state and ER diagrams (`kinds.go`): a message is
+  `from->to` (repeats numbered by the id assigner, so pair + ordinal), a
+  transition `from-->to`, a relationship `A--B`; groups, composite states and
+  entities are containers. Only a flowchart is split at `;`. Their pictures
+  are stamped by `internal/diagram/kinds.go` (issue #153), from what mermaid
+  11 names in them: a participant, state or entity by name; a message,
+  note, group, transition or relationship by its ordinal — and only when the
+  drawing holds exactly as many as the source, since a miscount means the
+  pairing would guess (groups in the order they close, since mermaid draws a
+  loop at its `end`, inner first). Transitions go unstamped once a composite state is
+  involved (mermaid numbers those edges its own way), and ER attributes stay
+  source-only. A message line gets a wide invisible `line.mg-hit`. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
-  (scripts, handlers, external refs, `@import` — the page runs no code it did
+  (scripts, handlers, external refs, `@import`, and the `@font-face` webfonts
+  mermaid-cli 12 embeds, issue #87 — the page runs no code it did
   not write), stamps the page's block ids onto the shapes as `data-anchor`, and
   caches by source hash in the user cache dir, never beside the document. That
   reverses the earlier "no picture" decision *on the rendering route only*: an
@@ -476,6 +489,11 @@ users are agents, not humans.
   or the `CF_Authorization` cookie — verified by `identity.Verifier` against
   the issuer's JWKS with go-jose (cached, refreshed on an unknown `kid`,
   rate-limited; asymmetric algorithms only), plus `iss`, `aud`, `exp`, `nbf`;
+  a resolved human must also be on `Options.Reviewers` (`--reviewers`,
+  `MARGINALIA_REVIEWERS`) when that list is set, else 403 — the edge
+  deciding who may log in is not this host deciding who may review, and the
+  list is where multiple reviewers start; `Identity` carries `Provider` and
+  `Subject` beside `Name` so a later login provider has a stable id;
   an agent is the `/mcp` bearer (`mcpserver.StaticTokenVerifier` behind
   go-sdk's `RequireBearerToken`, whose `TokenInfo` reaches tool handlers as
   `req.Extra.TokenInfo`) or an OAuth access token (`hosted/oauth.go`:
@@ -488,7 +506,12 @@ users are agents, not humans.
   the static token keeps working beside it; `docs/hosting.md` is the
   operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
-  no tool that writes anything but `reply` and `addressed`; `review_done`,
+  no tool that writes anything but `reply` and `addressed`; the one other
+  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/oauth.go`), the
+  review server's long-poll behind the `/mcp` bearer check — a route of its
+  own beside `/mcp`, not an exception in `requireHuman`, serving nothing else,
+  answered 401 by the Worker (and listed in Access's Bypass) like `/mcp`;
+  `review_done`,
   `confirm` and `reopen` are human-only by construction. `author` is the
   resolved identity, never the body's claim (`server.Options.AuthorOf`).
   `--insecure-dev-identity` is the laptop escape hatch and is loopback-only.
@@ -735,6 +758,11 @@ issues are implemented in project sessions for now, so every trigger starts a
 run whose job is skipped, while triage, review and merge keep running. It is
 also armed by credentials: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
+`scripts/pick-model.sh` (tested in `internal/pipeline`) picks each run's
+model from the work: triage Haiku; review Sonnet, Opus for a PR over 300
+lines or touching storage, identity, MCP, hosted, review protocol, server,
+deploy or PRD; the work loop Opus, Sonnet for a `size:s` issue. A
+`model:opus|sonnet|haiku` label on the PR or issue wins.
 
 The review loop is `skills/review-pr/SKILL.md`, run by
 `.github/workflows/review-prs.yml` on every PR — Berkay's, an agent's, the work
@@ -746,7 +774,12 @@ writes `review/<n>.json`, and a job with no agent applies it through
 `scripts/apply-review.sh` (tested in `internal/pipeline`), which derives the
 label from the findings' severities, refuses a verdict for a commit other than
 the one fetched, and makes visible text inert (no mentions, links or comment
-markers). **No `pull_request_target`**: a fork's PR gets no secrets on
+markers). The verdict also names the change's Cynefin domain (`clear`,
+`complicated`, `complex`, `chaotic`) with reasons, recorded as `domain:` in
+the comment's hidden block ahead of the agent's notes; a missing or unreasoned
+low call is recorded as `complex`. The merge loop reads the first `domain:`
+line of that block.
+**No `pull_request_target`**: a fork's PR gets no secrets on
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
 Drafts and bots are skipped. It never approves, requests changes or blocks a
@@ -766,7 +799,10 @@ nothing asks for a human and `MERGE_LOOP_AUTO=true`), or `human`, listing
 every reason: `review:concerns`, an untrusted author or a fork, a sensitive
 path (workflows, scripts, the loop skills, deploy, `go.mod`, PRD — not
 CLAUDE.md or `skills/review-doc`, which nearly every PR updates — the storage,
-identity, MCP and review-protocol packages), over 400 lines or 20 files, a
+identity, MCP and review-protocol packages), a review whose domain is
+`complex`, `chaotic` or missing (the domain only ever adds a reason), Go code
+changed with no test changed, over 1,500 lines of code (tests, testdata and
+docs not counted, from the REST file listing's per-file counts) or 40 files, a
 breaking change, `needs-human`, or auto-merge being off — which is the
 default, so out of the box every PR still waits for Berkay. A `human` PR's
 diff and a cover page are published to the hosted instance

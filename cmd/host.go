@@ -35,6 +35,7 @@ const (
 	OAuthIssuerEnv  = "MARGINALIA_MCP_OAUTH_ISSUER"
 	OAuthAudEnv     = "MARGINALIA_MCP_OAUTH_AUDIENCE"
 	OAuthJWKSEnv    = "MARGINALIA_MCP_OAUTH_JWKS_URL"
+	ReviewersEnv    = "MARGINALIA_REVIEWERS"
 	devIdentityFlag = "insecure-dev-identity"
 )
 
@@ -52,6 +53,7 @@ func newHostCmd() *cobra.Command {
 		humanHeader string
 		humanCookie string
 		devIdentity string
+		reviewers   []string
 		agentName   string
 		oauthIssuer string
 		oauthAud    string
@@ -145,7 +147,7 @@ whose email becomes the author of what they write; and an agent, holding
 			h, err := hosted.Open(ctx, hosted.Options{
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
-				HumanAuth: humanAuth, DevIdentity: devIdentity,
+				HumanAuth: humanAuth, DevIdentity: devIdentity, Reviewers: reviewersFrom(reviewers, os.Getenv(ReviewersEnv)),
 				HumanHeader: firstOf(humanHeader, os.Getenv(HumanHeaderEnv)),
 				HumanCookie: firstOf(humanCookie, os.Getenv(HumanCookieEnv)),
 				OAuth:       oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
@@ -174,6 +176,7 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&humanHeader, "human-jwt-header", "", "request header the edge forwards the human's JWT in, e.g. X-Auth-Request-Id-Token behind an OIDC proxy (default: "+hosted.DefaultHumanHeader+") ($"+HumanHeaderEnv+")")
 	cmd.Flags().StringVar(&humanCookie, "human-jwt-cookie", "", "cookie a browser carries that JWT in when the header is absent; - for none (default: "+hosted.DefaultHumanCookie+") ($"+HumanCookieEnv+")")
 	cmd.Flags().StringVar(&devIdentity, devIdentityFlag, "", "treat every page request as this human; loopback only, for trying it out with no edge")
+	cmd.Flags().StringSliceVar(&reviewers, "reviewers", nil, "the only humans page routes admit, comma-separated, by the name their login resolves to (an email at the edge); default: everyone the edge lets in ($"+ReviewersEnv+")")
 	cmd.Flags().StringVar(&agentName, "agent-name", "", "identity agents holding the static token write under (default: "+mcpserver.DefaultAgentName+") ($"+AgentNameEnv+")")
 	cmd.Flags().StringVar(&oauthIssuer, "mcp-oauth-issuer", "", "OAuth authorization server whose access tokens /mcp accepts, e.g. for the claude.ai connector ($"+OAuthIssuerEnv+")")
 	cmd.Flags().StringVar(&oauthAud, "mcp-oauth-audience", "", "audience those tokens must carry (default: <public-url>/mcp) ($"+OAuthAudEnv+")")
@@ -324,4 +327,21 @@ func firstOf(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// reviewersFrom is the reviewer list: the flag when given, else the
+// comma-separated environment variable, blanks dropped either way so a
+// trailing comma does not admit a nameless human.
+func reviewersFrom(flag []string, env string) []string {
+	list := flag
+	if len(list) == 0 && env != "" {
+		list = strings.Split(env, ",")
+	}
+	var out []string
+	for _, r := range list {
+		if r = strings.TrimSpace(r); r != "" {
+			out = append(out, r)
+		}
+	}
+	return out
 }

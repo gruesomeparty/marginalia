@@ -64,12 +64,12 @@ func TestUntaggedFenceUnchanged(t *testing.T) {
 // two features meet, so it is worth pinning: a diagram must not be
 // highlighted into an opaque block, and code must not be anchored per line.
 func TestMermaidAndHighlightedFencesTogether(t *testing.T) {
-	src := "# T\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\n```go\nconst n = 1\n```\n\n```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n"
+	src := "# T\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\n```go\nconst n = 1\n```\n\n```mermaid\nclassDiagram\n  A <|-- B\n```\n"
 	doc, err := ParseBytes("doc.md", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The diagram's edge is its own block; the Go fence and the sequence
+	// The diagram's edge is its own block; the Go fence and the class
 	// diagram are single blocks.
 	if got := strings.Join(ids(doc), ","); got != "1/1,1/2,1/2/a-->b,1/3,1/4" {
 		t.Fatalf("blocks = %s", got)
@@ -93,7 +93,7 @@ func TestMermaidAndHighlightedFencesTogether(t *testing.T) {
 	if seq.HasChildren || strings.Contains(seq.HTML, "tok") {
 		t.Errorf("unparsed diagram = %+v", seq)
 	}
-	if !strings.Contains(seq.HTML, "A-&gt;&gt;B: hi") {
+	if !strings.Contains(seq.HTML, "A &lt;|-- B") {
 		t.Errorf("unparsed diagram lost its source:\n%s", seq.HTML)
 	}
 }

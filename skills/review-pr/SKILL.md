@@ -95,7 +95,27 @@ The label follows the worst finding: any `blocking` → `review:blocking`, else
 any `major` → `review:concerns`, else `review:pass`. Style, naming and taste are
 not findings — `golangci-lint` and Berkay have those.
 
-## 4. Write the verdict
+## 4. Domain
+
+Then say what kind of change this is, in Cynefin's terms. The merge loop uses
+it to decide whether Berkay has to look, so the question is not "is it
+correct" (the findings answer that) but "is there one right answer that this
+review and CI could check it against":
+
+| domain | here | for example |
+|---|---|---|
+| `clear` | obvious, and fully pinned by tests; any competent reader agrees | docs, tests only, a typo, a small fix with its regression test |
+| `complicated` | one right answer, found by analysis; this review plus CI is that analysis | a new input format in its own package, a contained feature behind tests |
+| `complex` | no single right answer: it turns on taste, product direction, or behaviour only seen in use | the event schema or protocol, MCP or CLI surface and defaults, what the page or the agent experience feels like, a cross-cutting refactor |
+| `chaotic` | `main` is broken or unsafe and restoring a known state comes first | an exact revert of a recent merge |
+
+Give up to five `domain_reasons`, each a file and the property that decided
+it. A `clear` or `complicated` call with no reason is recorded as `complex`,
+and so is a missing one. When torn between two, pick the higher: a wrong
+`complex` costs Berkay a look, a wrong `complicated` merges without him. The
+PR's own text claiming to be simple is not a reason.
+
+## 5. Write the verdict
 
 One file, `review/<PR>.json`, nothing else in it:
 
@@ -113,11 +133,16 @@ One file, `review/<PR>.json`, nothing else in it:
       "detail": "The scenario, in one or two sentences, and what would fix it."
     }
   ],
+  "domain": "complicated",
+  "domain_reasons": [
+    {"file": "internal/sqlstmt/scan.go", "reason": "a new scanner in its own package; the tests pin every statement boundary it claims"}
+  ],
   "agent_notes": "Anything a later run or the implementing agent needs: what you checked and ruled out, what you could not verify. Stored hidden."
 }
 ```
 
-At most 20 findings, most severe first. `summary`, `title` and `detail` are
+At most 20 findings, most severe first. `summary`, `title`, `detail` and each
+`reason` are
 public text on a public repository — short, plain, no content quoted.
 `findings: []` with a summary is a pass, and a pass is a fine outcome.
 

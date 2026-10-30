@@ -29,7 +29,7 @@ import (
 // in anchor.go until it passes. Keep the old fixture beside it if you still
 // support that version.
 const (
-	fixtureSVG    = "testdata/flowchart-mermaid-cli-11.17.0.svg"
+	fixtureSVG    = "testdata/flowchart-mermaid-cli-12.0.0.svg"
 	fixtureSource = "testdata/flowchart.mmd"
 )
 
@@ -144,7 +144,7 @@ func TestRealMermaidOutputIsSanitizedAndThemed(t *testing.T) {
 	if !strings.HasPrefix(svg, "<svg") {
 		t.Error("the XML prolog survived")
 	}
-	for _, bad := range []string{"<script", " onclick", "@import"} {
+	for _, bad := range []string{"<script", " onclick", "@import", "@font-face", "scripts.sil.org"} {
 		if strings.Contains(svg, bad) {
 			t.Errorf("sanitize left %q in real output", bad)
 		}
@@ -167,7 +167,7 @@ func TestRealMermaidOutputIsSanitizedAndThemed(t *testing.T) {
 	// flowchart never draws (icons, images). We have no variable for those, so
 	// they keep mermaid's own colours rather than being half-recoloured — and
 	// they paint nothing here.
-	if !strings.Contains(svg, `.icon-shape .icon{fill:#9370DB;`) {
+	if !strings.Contains(svg, `.icon-shape .icon{fill:#`) {
 		t.Error("a rule we have no role for was rewritten anyway")
 	}
 }

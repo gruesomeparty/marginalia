@@ -336,19 +336,57 @@ func TestDiagramShapeClickLandsOnItsStatement(t *testing.T) {
 	}
 }
 
+// A sequence diagram's message is a one-pixel line with no name of its own
+// (#153): clicking it still lands the note on the message the source wrote.
+func TestSequenceMessageClickLandsOnItsStatement(t *testing.T) {
+	src, mmdc := standInFor(t, "sequence")
+	r := serve(t, "seq.md", "# Seq\n\n```mermaid\n"+string(src)+"```\n",
+		session.Options{Diagrams: "auto", MMDC: mmdc})
+	ctx := browser(t)
+
+	var target string
+	for _, b := range r.Doc.Blocks {
+		if strings.HasSuffix(b.ID, "/A->DB") {
+			target = b.ID
+		}
+	}
+	if target == "" {
+		t.Fatal("sequence.mmd no longer sends A->>DB")
+	}
+	hit := chromedp.CSS(`.diagram .pic line.mg-hit[data-anchor="` + target + `"]`)
+	do(t, ctx,
+		chromedp.Navigate(r.URL),
+		chromedp.WaitVisible(chromedp.CSS(".diagram .pic svg")),
+		chromedp.Click(hit),
+		chromedp.WaitVisible(chromedp.CSS(".composer textarea")),
+		chromedp.SendKeys(chromedp.CSS(".composer textarea"), "Which query?"),
+		chromedp.Click(chromedp.CSS(".composer .save")),
+		chromedp.WaitNotPresent(chromedp.CSS(".composer")),
+	)
+	if ev := r.events(t, 1)[0]; ev.Block != target {
+		t.Errorf("saved on %q, want %s", ev.Block, target)
+	}
+}
+
 // standInMMDC returns flowchart.mmd and an mmdc stand-in that hands back the
 // real render committed in internal/diagram/testdata, so a page under test
 // draws exactly what mermaid draws, without Node on the runner.
 func standInMMDC(t *testing.T) (src []byte, mmdc string) {
 	t.Helper()
+	return standInFor(t, "flowchart")
+}
+
+// standInFor is standInMMDC for any diagram in internal/diagram/testdata.
+func standInFor(t *testing.T, name string) (src []byte, mmdc string) {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("the mmdc stand-in is a shell script")
 	}
-	src, err := os.ReadFile("../diagram/testdata/flowchart.mmd")
+	src, err := os.ReadFile("../diagram/testdata/" + name + ".mmd")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixtures, _ := filepath.Glob("../diagram/testdata/flowchart-mermaid-cli-*.svg")
+	fixtures, _ := filepath.Glob("../diagram/testdata/" + name + "-mermaid-cli-*.svg")
 	if len(fixtures) != 1 {
 		t.Fatalf("want exactly one mermaid-cli fixture, found %v", fixtures)
 	}
