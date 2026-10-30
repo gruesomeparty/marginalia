@@ -151,10 +151,17 @@ users are agents, not humans.
   `from->to` (repeats numbered by the id assigner, so pair + ordinal), a
   transition `from-->to`, a relationship `A--B`; groups, composite states and
   entities are containers. Only a flowchart is split at `;`. Their pictures
-  are drawn but not yet stamped; the flowchart matchers find nothing in them,
-  checked against real renders. `internal/diagram` draws the
+  are stamped by `internal/diagram/kinds.go` (issue #153), from what mermaid
+  11 names in them: a participant, state or entity by name; a message,
+  note, group, transition or relationship by its ordinal — and only when the
+  drawing holds exactly as many as the source, since a miscount means the
+  pairing would guess (groups in the order they close, since mermaid draws a
+  loop at its `end`, inner first). Transitions go unstamped once a composite state is
+  involved (mermaid numbers those edges its own way), and ER attributes stay
+  source-only. A message line gets a wide invisible `line.mg-hit`. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
-  (scripts, handlers, external refs, `@import` — the page runs no code it did
+  (scripts, handlers, external refs, `@import`, and the `@font-face` webfonts
+  mermaid-cli 12 embeds, issue #87 — the page runs no code it did
   not write), stamps the page's block ids onto the shapes as `data-anchor`, and
   caches by source hash in the user cache dir, never beside the document. That
   reverses the earlier "no picture" decision *on the rendering route only*: an
@@ -492,6 +499,11 @@ users are agents, not humans.
   or the `CF_Authorization` cookie — verified by `identity.Verifier` against
   the issuer's JWKS with go-jose (cached, refreshed on an unknown `kid`,
   rate-limited; asymmetric algorithms only), plus `iss`, `aud`, `exp`, `nbf`;
+  a resolved human must also be on `Options.Reviewers` (`--reviewers`,
+  `MARGINALIA_REVIEWERS`) when that list is set, else 403 — the edge
+  deciding who may log in is not this host deciding who may review, and the
+  list is where multiple reviewers start; `Identity` carries `Provider` and
+  `Subject` beside `Name` so a later login provider has a stable id;
   an agent is the `/mcp` bearer (`mcpserver.StaticTokenVerifier` behind
   go-sdk's `RequireBearerToken`, whose `TokenInfo` reaches tool handlers as
   `req.Extra.TokenInfo`) or an OAuth access token (`hosted/oauth.go`:
@@ -504,7 +516,12 @@ users are agents, not humans.
   the static token keeps working beside it; `docs/hosting.md` is the
   operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
-  no tool that writes anything but `reply` and `addressed`; `review_done`,
+  no tool that writes anything but `reply` and `addressed`; the one other
+  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/oauth.go`), the
+  review server's long-poll behind the `/mcp` bearer check — a route of its
+  own beside `/mcp`, not an exception in `requireHuman`, serving nothing else,
+  answered 401 by the Worker (and listed in Access's Bypass) like `/mcp`;
+  `review_done`,
   `confirm` and `reopen` are human-only by construction. `author` is the
   resolved identity, never the body's claim (`server.Options.AuthorOf`).
   `--insecure-dev-identity` is the laptop escape hatch and is loopback-only.

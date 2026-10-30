@@ -108,6 +108,35 @@ func TestTemplateStaysGenericAndSingleInstance(t *testing.T) {
 	}
 }
 
+// An agent's wait path is public in Access, so the Worker has to answer a
+// request with no bearer (or a wrong static token) itself, before the one
+// place the container is touched: forwarding. The checks are on the source
+// because the Worker has no runtime in this repo's tests.
+func TestWorkerRefusesAnAnonymousAgentWaitAtTheEdge(t *testing.T) {
+	worker := readFile(t, filepath.Join(templateDir, "src", "index.ts"))
+	if !strings.Contains(worker, `/^\/agent\/r\/[^/]+\/wait\/?$/`) {
+		t.Fatal("src/index.ts no longer recognises /agent/r/{id}/wait")
+	}
+	refuse := worker[strings.Index(worker, "async function refuse("):]
+	refuse = refuse[:strings.Index(refuse, "\n}\n")]
+	// The wait path takes the /mcp branch: the page-route (Access JWT) check
+	// must not be the one that applies to it, and the bearer check must be.
+	if !strings.Contains(refuse, `path !== "/mcp" && !path.startsWith("/mcp/") && !agentWait`) {
+		t.Error("refuse(): the agent wait path is not routed through the bearer check")
+	}
+	for _, want := range []string{"await same(bearer, vars.MARGINALIA_MCP_TOKEN)", "status: 401", `path.startsWith("/agent/") && !agentWait`} {
+		if !strings.Contains(refuse, want) {
+			t.Errorf("refuse() lost %q", want)
+		}
+	}
+	// No other agent path is forwarded, and nothing reaches the container
+	// before refuse has answered.
+	fetch := worker[strings.Index(worker, "export default"):]
+	if strings.Index(fetch, "await refuse(") > strings.Index(fetch, "container.fetch(") || strings.Count(fetch, "container.fetch(") != 1 {
+		t.Error("src/index.ts forwards a request before refuse() has seen it")
+	}
+}
+
 // Every MARGINALIA_* name in the settings file, set or commented out, is one
 // the binary reads somewhere.
 func TestTemplateSettingsAreReadByTheBinary(t *testing.T) {

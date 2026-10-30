@@ -1,0 +1,6 @@
+stateDiagram-v2
+  [*] --> Pending
+  Pending --> Paid : charge
+  Paid : money received
+  Paid --> Shipped
+  Shipped --> [*]

@@ -38,6 +38,7 @@ deploy command line, and the settings go in a file on your machine.
 | `MARGINALIA_HUMAN_JWT_ISSUER` | Issuer of the edge's JWT, e.g. `https://<team>.cloudflareaccess.com` |
 | `MARGINALIA_HUMAN_JWT_AUDIENCE` | Audience the edge's JWT must carry, e.g. the Access application's AUD tag |
 | `MARGINALIA_HUMAN_JWKS_URL` | Where the issuer publishes its keys; defaults to the Access certs URL, or OpenID discovery |
+| `MARGINALIA_REVIEWERS` | Optional: the only humans the pages admit, comma-separated, by the name their login resolves to (the email Access puts in its token). Anyone else gets a 403 even with a valid token. Unset admits everyone the edge lets in |
 | `MARGINALIA_MCP_OAUTH_ISSUER` | OAuth authorization server for `/mcp` (the claude.ai connector) |
 | `MARGINALIA_MCP_OAUTH_AUDIENCE` | Audience its access tokens must carry; defaults to `<public-url>/mcp` |
 | `MARGINALIA_MCP_OAUTH_JWKS_URL` | Where it publishes its keys; defaults to OpenID discovery |
@@ -165,10 +166,17 @@ overview page. Those three values go into the container's secrets.
    Access then authenticates every browser request and forwards it with a
    `Cf-Access-Jwt-Assertion` header (and sets a `CF_Authorization` cookie).
 2. Put a second self-hosted application, with a single **Bypass** policy
-   that includes *Everyone*, on three paths of the same hostname:
+   that includes *Everyone*, on four paths of the same hostname:
    - `/mcp`
+   - `/agent`
    - `/.well-known/oauth-protected-resource`
    - `/healthz`
+
+   `/agent/r/<id>/wait?since=N` is the long-poll for an agent with a shell and
+   the bearer (static or OAuth) rather than an MCP client: it answers when the
+   reviewer saves a note, and serves nothing else. The Cloudflare template's
+   Worker answers it with a 401, without waking the container, when the
+   bearer is missing or wrong.
 
    Without it, Access answers an agent's `/mcp` request with a redirect to a
    login page. The claude.ai connector then never sees the 401 that tells it

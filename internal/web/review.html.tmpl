@@ -225,7 +225,7 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
    variable, and a highlight two pixels wide is not one. */
 .diagram .pic g[data-anchor][data-hover] rect,.diagram .pic g[data-anchor][data-hover] polygon,.diagram .pic g[data-anchor][data-hover] circle{stroke-width:2.5px!important}
 .diagram .pic g[data-anchor][data-count]:not([data-count="0"]) rect,.diagram .pic g[data-anchor][data-count]:not([data-count="0"]) polygon,.diagram .pic g[data-anchor][data-count]:not([data-count="0"]) circle{stroke-width:3px!important}
-.diagram .pic path[data-anchor]:not(.mg-hit)[data-hover],.diagram .pic path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke-width:3px!important}
+.diagram .pic path[data-anchor]:not(.mg-hit)[data-hover],.diagram .pic path[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]),.diagram .pic line[data-anchor]:not(.mg-hit)[data-hover],.diagram .pic line[data-anchor]:not(.mg-hit)[data-count]:not([data-count="0"]){stroke-width:3px!important}
 /* The requester's own note about a block — the agent asking, not the human
    answering, so it reads differently from a feedback item. */
 .sidenote{margin:.4rem 0 .3rem;padding:.4rem .7rem;border-left:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) var(--tint-weak),transparent);border-radius:var(--r-tab);font-family:var(--sans);font-size:var(--fs-base);white-space:pre-wrap}
@@ -1820,7 +1820,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var stops = [];
       Array.prototype.forEach.call(fig.querySelectorAll(".src .block[data-block]"), function(span){
         var id = span.dataset.block, sel = '[data-anchor="' + id.replace(/"/g, '\\"') + '"]';
-        var shape = pic.querySelector("g" + sel) || pic.querySelector("path" + sel + ":not(.mg-hit)");
+        var shape = pic.querySelector("g" + sel) || pic.querySelector("path" + sel + ":not(.mg-hit)") || pic.querySelector("line" + sel + ":not(.mg-hit)");
         if(!shape) return;
         shape.setAttribute("tabindex", stops.length ? "-1" : "0");
         shape.setAttribute("role", "button");
