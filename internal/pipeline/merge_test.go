@@ -67,7 +67,7 @@ func lowRisk() map[string]any {
 				{"__typename": "CheckRun", "name": "review (170)", "status": "COMPLETED", "conclusion": "SKIPPED"},
 			},
 		},
-		"owner": "gruesomeparty", "trusted": "", "review_sha": gateHead, "approved_sha": "", "auto": "true",
+		"owner": "gruesomeparty", "trusted": "", "review_sha": gateHead, "domain": "complicated", "approved_sha": "", "auto": "true",
 	}
 }
 
@@ -205,14 +205,21 @@ func TestMergeGateAsksTheMaintainer(t *testing.T) {
 		"deploy": {func(in map[string]any) {
 			prOf(in)["files"] = []map[string]any{{"path": "deploy/cloudflare/src/index.ts"}}
 		}, "deploy/"},
-		"lines": {func(in map[string]any) { prOf(in)["additions"] = 390; prOf(in)["deletions"] = 20 }, "410 lines"},
+		"lines":      {func(in map[string]any) { prOf(in)["additions"] = 1490; prOf(in)["deletions"] = 20 }, "1510 lines of code"},
+		"complex":    {func(in map[string]any) { in["domain"] = "complex" }, "calls the change complex"},
+		"chaotic":    {func(in map[string]any) { in["domain"] = "chaotic" }, "calls the change chaotic"},
+		"no domain":  {func(in map[string]any) { delete(in, "domain") }, "names no domain"},
+		"odd domain": {func(in map[string]any) { in["domain"] = "simple" }, "names no domain"},
+		"untested go": {func(in map[string]any) {
+			prOf(in)["files"] = []map[string]any{{"path": "internal/server/feedback.go"}, {"path": "internal/server/testdata/a.json"}}
+		}, "Go code without changing a test"},
 		"files": {func(in map[string]any) {
 			var fs []map[string]any
-			for i := range 21 {
+			for i := range 41 {
 				fs = append(fs, map[string]any{"path": "internal/web/f" + string(rune('a'+i)) + ".go"})
 			}
 			prOf(in)["files"] = fs
-		}, "21 files"},
+		}, "41 files"},
 		"breaking title": {func(in map[string]any) { prOf(in)["title"] = "feat(server)!: drop /api/v0" }, "breaking"},
 		"breaking body":  {func(in map[string]any) { prOf(in)["body"] = "x\n\nBREAKING CHANGE: the flag is gone" }, "breaking"},
 		"needs-human":    {func(in map[string]any) { prOf(in)["labels"] = labels("review:pass", "needs-human") }, "needs-human"},
@@ -388,6 +395,44 @@ func TestMergeReviewConfigLoads(t *testing.T) {
 	}
 }
 
+// Tests, testdata and docs do not count toward the size ceiling: a
+// well-tested change must not read as a riskier one. Without per-file counts
+// every line counts.
+func TestMergeGateCountsCodeNotTests(t *testing.T) {
+	in := lowRisk()
+	prOf(in)["additions"], prOf(in)["deletions"] = 2900, 100
+	prOf(in)["files"] = []map[string]any{
+		{"path": "internal/sqlstmt/scan.go", "additions": 1400, "deletions": 50},
+		{"path": "internal/sqlstmt/scan_test.go", "additions": 900, "deletions": 0},
+		{"path": "internal/sqlstmt/testdata/big.sql", "additions": 400, "deletions": 0},
+		{"path": "internal/browsertest/sql_test.go", "additions": 100, "deletions": 0},
+		{"path": "docs/sql.md", "additions": 100, "deletions": 50},
+	}
+	if out := gate(t, in); out.Decision != "merge" {
+		t.Fatalf("1450 lines of code and the rest tests: got %+v, want merge", out)
+	}
+	prOf(in)["files"].([]map[string]any)[0]["additions"] = 1500
+	if out := gate(t, in); out.Decision != "human" || !strings.Contains(strings.Join(out.Reasons, " "), "1550 lines of code") {
+		t.Fatalf("1550 lines of code: got %+v, want human", out)
+	}
+	delete(prOf(in)["files"].([]map[string]any)[1], "additions")
+	if out := gate(t, in); out.Decision != "human" || !strings.Contains(strings.Join(out.Reasons, " "), "3000 lines of code") {
+		t.Fatalf("a file without counts: got %+v, want every line counted", out)
+	}
+}
+
+// A clear or complicated call removes no other reason to ask.
+func TestMergeGateDomainNeverLowersAFloor(t *testing.T) {
+	for _, d := range []string{"clear", "complicated"} {
+		in := lowRisk()
+		in["domain"] = d
+		prOf(in)["files"] = []map[string]any{{"path": "scripts/merge-gate.sh"}}
+		if out := gate(t, in); out.Decision != "human" {
+			t.Fatalf("%s on a sensitive path: got %+v, want human", d, out)
+		}
+	}
+}
+
 // A file moved out of a sensitive directory still touched it: the gate reads
 // the old path the REST listing gives, not only the new one.
 func TestMergeGateCountsTheOldPathOfARename(t *testing.T) {
@@ -476,7 +521,7 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 		write(fmt.Sprintf("files-%d.json", n), []map[string]any{{"filename": "internal/web/review.html.tmpl"}})
 	}
 	// Both PRs carry a review of their head, in this workflow's own comment.
-	review := `[{"id": 9, "user": {"login": "github-actions[bot]"}, "body": "<!-- agent:review v1\nsha: ` + gateHead + `\n-->"}]`
+	review := `[{"id": 9, "user": {"login": "github-actions[bot]"}, "body": "<!-- agent:review v1\nsha: ` + gateHead + `\ndomain: complicated\nnotes: x\ndomain: complex\n-->"}]`
 	gh := strings.Replace(fakeGH, `*) echo '[]' ;;`, `*) echo '`+review+`' ;;`, 1)
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(gh), 0o700); err != nil {
 		t.Fatal(err)

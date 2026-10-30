@@ -736,7 +736,12 @@ writes `review/<n>.json`, and a job with no agent applies it through
 `scripts/apply-review.sh` (tested in `internal/pipeline`), which derives the
 label from the findings' severities, refuses a verdict for a commit other than
 the one fetched, and makes visible text inert (no mentions, links or comment
-markers). **No `pull_request_target`**: a fork's PR gets no secrets on
+markers). The verdict also names the change's Cynefin domain (`clear`,
+`complicated`, `complex`, `chaotic`) with reasons, recorded as `domain:` in
+the comment's hidden block ahead of the agent's notes; a missing or unreasoned
+low call is recorded as `complex`. The merge loop reads the first `domain:`
+line of that block.
+**No `pull_request_target`**: a fork's PR gets no secrets on
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
 Drafts and bots are skipped. It never approves, requests changes or blocks a
@@ -756,7 +761,10 @@ nothing asks for a human and `MERGE_LOOP_AUTO=true`), or `human`, listing
 every reason: `review:concerns`, an untrusted author or a fork, a sensitive
 path (workflows, scripts, the loop skills, deploy, `go.mod`, PRD — not
 CLAUDE.md or `skills/review-doc`, which nearly every PR updates — the storage,
-identity, MCP and review-protocol packages), over 400 lines or 20 files, a
+identity, MCP and review-protocol packages), a review whose domain is
+`complex`, `chaotic` or missing (the domain only ever adds a reason), Go code
+changed with no test changed, over 1,500 lines of code (tests, testdata and
+docs not counted, from the REST file listing's per-file counts) or 40 files, a
 breaking change, `needs-human`, or auto-merge being off — which is the
 default, so out of the box every PR still waits for Berkay. A `human` PR's
 diff and a cover page are published to the hosted instance

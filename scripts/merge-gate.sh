@@ -7,17 +7,21 @@
 #         --arg owner gruesomeparty --arg trusted "$MERGE_TRUSTED" \
 #         --arg review_sha "$SHA_THE_REVIEW_COMMENT_NAMES" \
 #         --arg approved_sha "$SHA_THE_MAINTAINER_APPROVED" \
+#         --arg domain "$DOMAIN_THAT_REVIEW_NAMES" \
 #         --arg auto "$MERGE_LOOP_AUTO" \
 #         '{pr: $pr, owner: $owner, trusted: $trusted, review_sha: $review_sha,
-#           approved_sha: $approved_sha, auto: $auto}' \
+#           domain: $domain, approved_sha: $approved_sha, auto: $auto}' \
 #     | scripts/merge-gate.sh
 #
 # Not every PR needs a human, and this script is what says which ones do. It
 # is a script and not a prompt because the repository is public: the PR's
 # title, body and diff were written by whoever opened it, and nothing in them
 # may be able to merge it. The judgment it leans on is the adversarial review
-# (review-prs.yml), and only through the label scripts/apply-review.sh set and
-# the commit that review names.
+# (review-prs.yml), and only through the label scripts/apply-review.sh set,
+# the commit that review names, and the Cynefin domain it recorded for the
+# change. The domain can only add a reason to ask: clear and complicated
+# changes have one right answer that the review and CI can check, complex ones
+# do not, and the floors below hold whatever the review called it.
 #
 # Decisions, in the order they are checked:
 #
@@ -33,9 +37,12 @@
 #          MERGE_LOOP_AUTO is true
 #   human  everything else, with every reason listed: review:concerns, an
 #          author who is neither the owner, a trusted login nor the pipeline,
-#          a fork, a path that changes how the project is built, released,
-#          deployed or trusted, a large diff, a breaking change, the
-#          needs-human label, or auto-merge being off
+#          a fork, a review that calls the change complex or chaotic or names
+#          no domain, a path that changes how the project is built, released,
+#          deployed or trusted, Go code changed with no test changed, more code
+#          than one review should vouch for (tests, testdata and docs are not
+#          counted: a well-tested change must not read as a riskier one), a
+#          breaking change, the needs-human label, or auto-merge being off
 #
 # Prints {number, head, decision, reasons} and exits 0; exit 2 on malformed
 # input.
@@ -66,9 +73,12 @@ jq '
       + "|internal/hosted/(identity|oauth|limits)\\.go$"
       + "|(PRD|SECURITY)\\.md$|LICENSE$|Dockerfile$|\\.goreleaser|renovate\\.json$"
       + "|\\.release-please|go\\.(mod|sum)$)");
-  # A diff this big is more than an adversarial pass should vouch for alone.
-  def max_lines: 400;
-  def max_files: 20;
+  # More code than an adversarial pass should vouch for alone. Tests, testdata
+  # and docs do not count toward it.
+  def max_code_lines: 1500;
+  def max_files: 40;
+  def not_code: test("(_test\\.go$|/testdata/|\\.md$|^docs/)");
+  def is_test: test("_test\\.go$");
   # Names that end up in a comment: a branch or path may hold anything a
   # filesystem allows, and none of it may become markup or a mention.
   def safe: tostring | gsub("[^A-Za-z0-9._/+-]"; "") | .[0:100];
@@ -111,16 +121,27 @@ jq '
      ]) as $wait
 
   | ((.approved_sha // "") != "" and .approved_sha == $head) as $approved
+  | ($pr.files // []) as $files
+  # Per-file counts come from the REST listing; without them every line counts.
+  | (if ($files | length) > 0 and ($files | all((.additions | type) == "number" and (.deletions | type) == "number"))
+     then [$files[] | select(.path | not_code | not) | .additions + .deletions] | add // 0
+     else ($pr.additions // 0) + ($pr.deletions // 0) end) as $code_lines
+  | ((.domain // "") | tostring) as $domain
 
   | ([ (if ($labels | index("review:concerns")) then "the adversarial review raised concerns" else empty end),
        (if $fork then "comes from a fork" else empty end),
+       (if $domain | IN("clear", "complicated") then empty
+        elif $domain | IN("complex", "chaotic") then "the adversarial review calls the change \($domain)"
+        else "the adversarial review names no domain for the change" end),
        (if ($trusted | index($author)) or $pipeline then empty
         else "\($author | safe) is not a trusted author" end),
        ([$pr.files // [] | .[] | .path, (.previous_filename // empty) | select(sensitive) | safe] | unique
          | if length > 0 then "touches \(.[0:5] | join(", "))\(if length > 5 then " and \(length - 5) more" else "" end)" else empty end),
-       ((($pr.additions // 0) + ($pr.deletions // 0)) as $n
-         | if $n > max_lines then "changes \($n) lines (over \(max_lines))" else empty end),
-       (($pr.files // [] | length) as $n
+       (if ([$files[] | .path | select(test("\\.go$") and (not_code | not))] | length) > 0
+           and ([$files[] | .path | select(is_test)] | length) == 0
+        then "changes Go code without changing a test" else empty end),
+       (if $code_lines > max_code_lines then "changes \($code_lines) lines of code (over \(max_code_lines), tests and docs not counted)" else empty end),
+       (($files | length) as $n
          | if $n > max_files then "changes \($n) files (over \(max_files))" else empty end),
        (if (($pr.title // "") | test("^[a-z]+(\\([^)]*\\))?!:"))
            or (($pr.body // "") | test("(?m)^BREAKING[ -]CHANGE:"))
