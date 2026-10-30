@@ -23,6 +23,7 @@ const (
 	FormatMermaid  = "mermaid"
 	FormatDiff     = "diff"
 	FormatSQL      = "sql"
+	FormatHCL      = "hcl"
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -48,6 +49,8 @@ func FormatFor(path string) string {
 		return FormatDiff
 	case ".sql":
 		return FormatSQL
+	case ".tf", ".tfvars", ".hcl":
+		return FormatHCL
 	}
 	return ""
 }
@@ -80,6 +83,8 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseMermaid(path, src)
 	case FormatDiff:
 		return parseDiff(path, src)
+	case FormatHCL:
+		return parseHCL(path, src)
 	case FormatSQL:
 		return parseSQL(path, src)
 	}

@@ -349,6 +349,15 @@ users are agents, not humans.
   or more statements anchors them inline under the fence's id the way a
   mermaid fence does (`inlineAnchor` is shared); a one-statement fence stays
   one highlighted block.
+- HCL (issue #151: `.tf`, `.tfvars`, `.hcl`) is read by `internal/hcl`, a
+  hand-written structural reader rather than hashicorp's `hclsyntax`, which
+  refuses a file with a syntax error and would be a heavy dependency. It
+  skips expressions through brackets, strings, `${…}` templates and
+  heredocs, never fails (an unreadable line is an `unknown` node), and is
+  fuzzed. Ids are the path the file already spells — type and labels dotted
+  (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
+  numbered by `treeBuilder` — and a block hashes its header only, as a proto
+  message does.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
