@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -349,6 +351,29 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 		meta.Theme = p.Theme
 	}
 	meta.Docs = nil
+	// A document this revision drops keeps its events in the wait's count;
+	// one it brings back is counted live again.
+	retired := maps.Clone(meta.Retired)
+	for _, d := range p.Docs {
+		delete(retired, d.Name)
+	}
+	for _, e := range prev.Server.Entries() {
+		if slices.ContainsFunc(p.Docs, func(d Document) bool { return d.Name == e.Rel }) {
+			continue
+		}
+		events, err := e.Store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+		}
+		if retired == nil {
+			retired = map[string]int{}
+		}
+		retired[e.Rel] = len(events)
+	}
+	if len(retired) == 0 {
+		retired = nil
+	}
+	meta.Retired = retired
 	return h.publish(ctx, meta, p)
 }
 

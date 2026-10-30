@@ -176,8 +176,9 @@ overview page. Those three values go into the container's secrets.
    the bearer (static or OAuth) rather than an MCP client: it answers when the
    review's logs hold more than `since` events or every document is marked
    done for the current revision, and serves nothing else. The count is the
-   logs' length, so a cursor holds across a republish and a restart of the
-   instance; a done from before the last republish answered the earlier
+   logs' length, every document the review has served included, so a cursor
+   holds across a republish (even one that drops a document) and a restart of
+   the instance; a done from before the last republish answered the earlier
    revision and does not end the wait. The Cloudflare template's
    Worker answers it with a 401, without waking the container, when the
    bearer is missing or wrong.

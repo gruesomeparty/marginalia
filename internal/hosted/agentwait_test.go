@@ -165,3 +165,41 @@ func TestAgentWaitSurvivesRepublishAndRestart(t *testing.T) {
 		t.Fatalf("this round's review_done: %s", out)
 	}
 }
+
+// A republish that drops a document keeps its events in the count: the
+// cursor an agent holds must never be above what the next note makes it.
+func TestAgentWaitCountsADroppedDocument(t *testing.T) {
+	e := newEdge(t)
+	h, ts := openWithEdge(t, e)
+	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)}, Document{Name: "notes.md", Content: []byte(specDoc)})
+	agent := map[string]string{"Authorization": "Bearer tok"}
+	human := map[string]string{accessHeader: e.mint(e.key, e.claims("berkay@example.com"))}
+	note := func(doc string) {
+		t.Helper()
+		body, _ := json.Marshal(feedback.Event{Doc: doc, Block: "1/2", Type: "comment", Text: "x"})
+		if code, out := do(t, "POST", ts.URL+"/r/"+r.Meta.ID+"/api/feedback", body, human); code != http.StatusCreated {
+			t.Fatalf("%s: %d %s", doc, code, out)
+		}
+	}
+	note("spec.md")
+	note("notes.md")
+	for i, docs := range [][]Document{
+		{{Name: "spec.md", Content: []byte(specDoc + "\nMore.\n")}},
+		{{Name: "spec.md", Content: []byte(specDoc)}, {Name: "notes.md", Content: []byte(specDoc)}}, // and back
+	} {
+		if _, err := h.Republish(context.Background(), r.Meta.ID, Publish{Docs: docs}); err != nil {
+			t.Fatal(err)
+		}
+		since := strconv.Itoa(2 + i)
+		got := make(chan string, 1)
+		go func() {
+			_, out := do(t, "GET", ts.URL+"/agent/r/"+r.Meta.ID+"/wait?since="+since+"&timeout=5", nil, agent)
+			got <- out
+		}()
+		time.Sleep(100 * time.Millisecond)
+		note("spec.md")
+		if out := <-got; !strings.Contains(out, `"events":`+strconv.Itoa(3+i)) || strings.Contains(out, "timed_out") {
+			t.Fatalf("revision %d: %s", i+2, out)
+		}
+	}
+}
