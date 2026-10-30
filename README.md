@@ -314,7 +314,7 @@ beside it. Steps in [docs/hosting.md](docs/hosting.md).
 | `review_status` | The log materialized against the document as it now reads: per-block state, what went stale, what is orphaned, and which `suggest_edit`s are safe to apply verbatim. |
 | `reply_to_note` | Answer one of the human's notes in place. |
 | `mark_addressed` | Record that you changed the document in answer to a note. |
-| `await_review_done` | Block until they finish. A timeout is not an error — it returns `done: false` so you can tell them you are still waiting. |
+| `await_review_done` | Wait until they finish or ask a question (`reason: "question"`, so you can answer before Done). Short by default (45s, under common client tool timeouts): call it in a loop with the returned cursor. A timeout is not an error — it returns `done: false`. |
 | `close_review` | Stop serving. Comments already saved stay on disk and stay readable. |
 
 Three things about it are deliberate:
@@ -519,6 +519,7 @@ and a tab left open across a restart must not be able to invent vocabulary.
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | what the statement connects — `client-->api`, `payments/worker-->queue`; a message `C->A` (repeats `C->A#2`), a transition `Pending-->Paid`, a relationship `CUSTOMER--ORDER`; in a fence, under the fence's own ID — `1/3/client-->api` |
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
+| `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -600,7 +601,7 @@ resolve.
 
 Fenced code blocks and `.proto` declarations are highlighted at render time, on
 the **server**: comments recede, strings and numbers stand out. Go, Rust,
-JS/TS, Python, shell, SQL, JSON, YAML, TOML, proto and HTTP are tokenized;
+JS/TS, Python, shell, SQL, HCL, JSON, YAML, TOML, proto and HTTP are tokenized;
 anything else renders as plain text rather than badly.
 
 No highlighter is fetched — the page has to survive a strict CSP. That is also
@@ -933,7 +934,7 @@ links to where it is tracked.
 
 | Gap | Detail |
 |---|---|
-| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs have landed. Still missing: OpenAPI anchored by operation rather than as a generic tree, HCL, SQL migrations, and source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
+| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs, SQL and HCL have landed. Still missing: OpenAPI anchored by operation rather than as a generic tree, and source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
 | **Only some mermaid types decompose** | Flowchart, sequence, state and ER diagrams anchor per statement, and only a flowchart's picture is clickable. Other types stay reviewable as a single source block. |
 | **The page's JavaScript is barely tested** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | `internal/browsertest` drives the page in headless Chrome for the composer, one-tap actions, replies and diagram clicks. Keyboard movement, folding, share-mode storage and `--watch` reloads are still verified by hand; each PR that touches the page adds its case. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
