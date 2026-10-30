@@ -149,7 +149,8 @@ users are agents, not humans.
   involved (mermaid numbers those edges its own way), and ER attributes stay
   source-only. A message line gets a wide invisible `line.mg-hit`. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
-  (scripts, handlers, external refs, `@import` — the page runs no code it did
+  (scripts, handlers, external refs, `@import`, and the `@font-face` webfonts
+  mermaid-cli 12 embeds, issue #87 — the page runs no code it did
   not write), stamps the page's block ids onto the shapes as `data-anchor`, and
   caches by source hash in the user cache dir, never beside the document. That
   reverses the earlier "no picture" decision *on the rendering route only*: an
@@ -730,6 +731,11 @@ issues are implemented in project sessions for now, so every trigger starts a
 run whose job is skipped, while triage, review and merge keep running. It is
 also armed by credentials: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
+`scripts/pick-model.sh` (tested in `internal/pipeline`) picks each run's
+model from the work: triage Haiku; review Sonnet, Opus for a PR over 300
+lines or touching storage, identity, MCP, hosted, review protocol, server,
+deploy or PRD; the work loop Opus, Sonnet for a `size:s` issue. A
+`model:opus|sonnet|haiku` label on the PR or issue wins.
 
 The review loop is `skills/review-pr/SKILL.md`, run by
 `.github/workflows/review-prs.yml` on every PR — Berkay's, an agent's, the work
