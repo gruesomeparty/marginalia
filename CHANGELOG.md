@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0](https://github.com/gruesomeparty/marginalia/compare/v0.3.1...v0.4.0) (2026-10-30)
+
+
+### Features
+
+* answer requester notes in place ([#159](https://github.com/gruesomeparty/marginalia/issues/159)) ([9191c63](https://github.com/gruesomeparty/marginalia/commit/9191c63495eef7bfe490541b2a2578b183e1be94))
+* filter and group the inbox ([#181](https://github.com/gruesomeparty/marginalia/issues/181)) ([3cd95f1](https://github.com/gruesomeparty/marginalia/commit/3cd95f178e76e961a63c7a76b497974273fe1199))
+* finish a review from a summary sheet ([#165](https://github.com/gruesomeparty/marginalia/issues/165)) ([2da42bb](https://github.com/gruesomeparty/marginalia/commit/2da42bbe8d5d5176e87aa87d6cfdb10d2bfaca02))
+* give verdicts their own place in the composer ([#169](https://github.com/gruesomeparty/marginalia/issues/169)) ([60e6aa4](https://github.com/gruesomeparty/marginalia/commit/60e6aa465d662f829542c7c04dcd37553230cc3b)), closes [#133](https://github.com/gruesomeparty/marginalia/issues/133)
+* lead inbox rows with what needs the reviewer ([#170](https://github.com/gruesomeparty/marginalia/issues/170)) ([85713d9](https://github.com/gruesomeparty/marginalia/commit/85713d9f1575309d6189e2888940d0d48cb4aaf3)), closes [#134](https://github.com/gruesomeparty/marginalia/issues/134)
+* link hosted review pages back to the inbox ([#180](https://github.com/gruesomeparty/marginalia/issues/180)) ([f41d5d2](https://github.com/gruesomeparty/marginalia/commit/f41d5d212e44bf1984b0ae5fe6801ee7afa669d8))
+* list every note in one panel ([#188](https://github.com/gruesomeparty/marginalia/issues/188)) ([c53fa01](https://github.com/gruesomeparty/marginalia/commit/c53fa0137a0748d0e1612e4e3cb890f13050c4e9))
+* make reviewing on a phone comfortable ([#187](https://github.com/gruesomeparty/marginalia/issues/187)) ([ace0bc9](https://github.com/gruesomeparty/marginalia/commit/ace0bc92fbdc5252bd4234f0cd0119489d5249d2))
+* reach drawn diagram shapes from the keyboard ([#184](https://github.com/gruesomeparty/marginalia/issues/184)) ([708725f](https://github.com/gruesomeparty/marginalia/commit/708725fab3e2eba1be37646683554829e8333f84)), closes [#154](https://github.com/gruesomeparty/marginalia/issues/154)
+* review SQL one statement at a time ([#189](https://github.com/gruesomeparty/marginalia/issues/189)) ([494bd0e](https://github.com/gruesomeparty/marginalia/commit/494bd0e53cde1ee6ca5fc4cd147d035fd8cb8e6e))
+* serve --until-done, --timeout and a long-poll endpoint ([#164](https://github.com/gruesomeparty/marginalia/issues/164)) ([dafc28f](https://github.com/gruesomeparty/marginalia/commit/dafc28f4734a4a017e893b821094059d8debd388))
+* show notes in a margin beside their block on wide screens ([#190](https://github.com/gruesomeparty/marginalia/issues/190)) ([9184abb](https://github.com/gruesomeparty/marginalia/commit/9184abbe9a41b25539b5824cfa7f0b053e10debf)), closes [#130](https://github.com/gruesomeparty/marginalia/issues/130)
+* show review progress by section ([#168](https://github.com/gruesomeparty/marginalia/issues/168)) ([6355456](https://github.com/gruesomeparty/marginalia/commit/63554566bfb10056946a7e5dba40c36f5b8aa970)), closes [#132](https://github.com/gruesomeparty/marginalia/issues/132)
+
+
+### Bug Fixes
+
+* **ci:** let PRs that only document through the merge gate ([#177](https://github.com/gruesomeparty/marginalia/issues/177)) ([9082e3d](https://github.com/gruesomeparty/marginalia/commit/9082e3d5c0c08442b0bd44e25e8d013921fa6179))
+
 ## [0.3.1](https://github.com/gruesomeparty/marginalia/compare/v0.3.0...v0.3.1) (2026-10-29)
 
 
