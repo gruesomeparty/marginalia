@@ -460,8 +460,10 @@ users are agents, not humans.
   which gives the header an **← Inbox** link and the `i` key — neither exists
   under `serve` or `export`, which have no inbox, `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
   `mcp --http`), `/healthz`, and `GET /mcp/reviews/{id}/wait`
-  (`hosted.AgentWaitPath`, issue #186): one review's `/api/wait`
-  (`server.WaitHandler`) for an agent with a shell, behind `/mcp`'s own
+  (`hosted.AgentWaitPath`, issue #186): a long-poll in `/api/wait`'s shape
+  for an agent with a shell, counted on the review's logs rather than one
+  server's counter (a republish or restart builds new servers, and a cursor
+  must survive both), behind `/mcp`'s own
   bearer check (`mcpserver.RequireAgent` via `Host.agentOnly`), and the only
   part of a review an agent credential reaches. It lives under `/mcp/`
   because the Worker already refuses that prefix at the edge without a valid
