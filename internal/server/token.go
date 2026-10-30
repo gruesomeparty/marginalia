@@ -3,14 +3,27 @@ package server
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"net/http"
 	"net/url"
 	"strings"
 )
 
-// tokenCookie carries the token after a browser has shown it once, so a
-// phone opens the URL with ?token= a single time and then browses normally.
-const tokenCookie = "marginalia_token"
+// tokenCookie names the cookie that stands in for the token after a browser
+// has shown it once, so a phone opens the URL with ?token= a single time and
+// then browses normally. Cookies ignore the port, so the name carries it:
+// two `serve`s on one host must not overwrite each other's.
+func tokenCookie(r *http.Request) string {
+	_, port, _ := strings.Cut(r.Host, ":")
+	return "marginalia_token_" + or(port, "80")
+}
+
+func or(s, fallback string) string {
+	if s == "" {
+		return fallback
+	}
+	return s
+}
 
 // gate refuses every request that does not carry Options.Token (issue #54):
 // as a bearer header, the cookie, or a one-time ?token= that sets the cookie
@@ -26,6 +39,12 @@ func (s *Server) gate(next http.Handler) http.Handler {
 		sum := sha256.Sum256([]byte(got))
 		return got != "" && subtle.ConstantTimeCompare(sum[:], want[:]) == 1
 	}
+	// The cookie holds a digest, not the token: every other service on this
+	// host sees it, and the token itself also opens the API as a bearer.
+	digest := hex.EncodeToString(want[:])
+	okCookie := func(got string) bool {
+		return subtle.ConstantTimeCompare([]byte(got), []byte(digest)) == 1
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if t := r.URL.Query().Get("token"); t != "" && r.Method == http.MethodGet {
 			if !ok(t) {
@@ -34,9 +53,13 @@ func (s *Server) gate(next http.Handler) http.Handler {
 			}
 			// Secure only over TLS: `serve` speaks plain HTTP, on loopback or
 			// inside a tailnet that encrypts underneath it.
+			// Lax, not Strict: the link usually arrives from a mail or chat
+			// web app, and a Strict cookie set on that cross-site navigation
+			// is withheld from the redirect it answers with. Lax still keeps
+			// it off a cross-site POST, which is the write that matters.
 			http.SetCookie(w, &http.Cookie{ //nolint:gosec // see above; HttpOnly and SameSite are set
-				Name: tokenCookie, Value: t, Path: "/",
-				HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
+				Name: tokenCookie(r), Value: digest, Path: "/",
+				HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil,
 			})
 			http.Redirect(w, r, withoutToken(r.URL), http.StatusSeeOther) //nolint:gosec // withoutToken keeps only this server's path and query
 
@@ -46,7 +69,7 @@ func (s *Server) gate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if c, err := r.Cookie(tokenCookie); err == nil && ok(c.Value) {
+		if c, err := r.Cookie(tokenCookie(r)); err == nil && okCookie(c.Value) {
 			next.ServeHTTP(w, r)
 			return
 		}

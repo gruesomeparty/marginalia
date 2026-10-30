@@ -106,7 +106,7 @@ users are agents, not humans.
   button; `session_done` writes one to every log with `text: "session"`.
 - `serve` has an opt-in token (issue #54, `internal/server/token.go`):
   `MARGINALIA_SERVE_TOKEN`, env only, makes `Handler()` refuse any request
-  without it (bearer header, or the HttpOnly cookie a one-time `?token=`
+  without it (bearer header, or the HttpOnly, SameSite=Lax cookie (a digest of the token, named per port) a one-time `?token=`
   sets before redirecting the token out of the URL; a refused page gets a
   one-field form), compared by digest in constant time, and pins every
   event's author to `--author` through `Options.AuthorOf`. No variable, no

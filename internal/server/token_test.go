@@ -81,8 +81,18 @@ func TestTokenGatesPageAndAPI(t *testing.T) {
 		t.Errorf("a backslash path redirected to %q", rr.Header().Get("Location"))
 	}
 	cookies := rr.Result().Cookies()
-	if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
+	if len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteLaxMode {
 		t.Fatalf("cookie %+v", cookies)
+	}
+	if strings.Contains(cookies[0].Value, "s3cret") {
+		t.Error("the cookie carries the token itself")
+	}
+	// The cookie is not a bearer, and the token is not a cookie.
+	if rr := hit(h, "GET", "/api/doc", "", func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+cookies[0].Value) }); rr.Code != http.StatusUnauthorized {
+		t.Errorf("the cookie's value as a bearer: %d", rr.Code)
+	}
+	if rr := hit(h, "GET", "/", "", func(r *http.Request) { r.Header.Set("Cookie", cookies[0].Name+"=s3cret") }); rr.Code != http.StatusUnauthorized {
+		t.Errorf("the raw token as the cookie: %d", rr.Code)
 	}
 	withCookie := func(r *http.Request) { r.AddCookie(cookies[0]) }
 	if rr := hit(h, "GET", "/", "", withCookie); rr.Code != 200 {
