@@ -174,7 +174,9 @@ overview page. Those three values go into the container's secrets.
 
    `/agent/r/<id>/wait?since=N` is the long-poll for an agent with a shell and
    the bearer (static or OAuth) rather than an MCP client: it answers when the
-   reviewer saves a note, and serves nothing else. The Cloudflare template's
+   review's logs hold more than `since` events or every document is marked
+   done, and serves nothing else. The count is the logs' length, so a cursor
+   holds across a republish and a restart of the instance. The Cloudflare template's
    Worker answers it with a 401, without waking the container, when the
    bearer is missing or wrong.
 
