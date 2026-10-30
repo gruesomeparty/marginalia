@@ -99,7 +99,11 @@ func Parse(src []byte) (*Diagram, error) {
 	})
 	// `graph TD; A-->B` is legal: the header's own line can carry statements.
 	for _, part := range parts[1:] {
-		p.statement(part, p.lines[i].num)
+		if p.flowchart() {
+			p.statement(part, p.lines[i].num)
+		} else {
+			p.other(part, p.lines[i].num)
+		}
 	}
 	for i++; i < len(p.lines); i++ {
 		ln := p.lines[i]
