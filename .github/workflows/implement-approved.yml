@@ -80,14 +80,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           ISSUE: ${{ inputs.issue || (github.event_name == 'issues' && github.event.issue.number) || '' }}
-        # Sonnet implements; Opus only when the named issue carries model:opus,
-        # a label only someone with triage rights can add.
         run: |
-          model=claude-sonnet-5-5
-          if [[ "$ISSUE" =~ ^[0-9]+$ ]]; then
-            labels="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '.labels[].name')"
-            if grep -qx 'model:opus' <<<"$labels"; then model=claude-opus-5-5; fi
-          fi
+          json='{}'
+          if [[ "$ISSUE" =~ ^[0-9]+$ ]]; then json="$(gh issue view "$ISSUE" --repo "$REPO" --json labels)"; fi
+          model="$(scripts/pick-model.sh implement <<<"$json")"
           echo "model=$model" >>"$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
         if: steps.creds.outputs.ready == 'true'

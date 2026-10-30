@@ -132,13 +132,8 @@ jobs:
           fi
           git fetch --no-tags origin "+refs/pull/$PR/head:refs/heads/pr-head" "+refs/heads/$base:refs/heads/pr-base"
           echo "sha=$(git rev-parse pr-head)" >>"$GITHUB_OUTPUT"
-          # Sonnet reviews; Opus only when someone with triage rights asks for
-          # it with the model:opus label (an author without them cannot).
-          model=claude-sonnet-5-5
-          labels="$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')"
-          if grep -qx 'model:opus' <<<"$labels"; then
-            model=claude-opus-5-5
-          fi
+          # Read from the default branch's script, never the PR's.
+          model="$(gh pr view "$PR" --repo "$REPO" --json labels,files | scripts/pick-model.sh review)"
           echo "model=$model" >>"$GITHUB_OUTPUT"
           mkdir -p review
       - uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
