@@ -99,8 +99,10 @@ for n in "$@"; do
 
   review_comment="$(own "$n" "<!-- agent:review v1" body)"
   review_sha="$(field sha "$review_comment")"
-  # The first domain line: it precedes the review's notes in that block.
-  domain="$(field domain "$review_comment")"
+  # Only a domain line ahead of the review's notes counts: the notes are
+  # written from the PR's own text, and a comment from before domains existed
+  # has none, so a line in its notes must not stand in for one.
+  domain="$(sed -n '/^notes: /q; s/^domain: //p' <<<"$review_comment" | head -n1)"
   marker="$(own "$n" "$merge_mark" body)"
   asked_sha="$(field sha "$marker")"
   review_id="$(field review "$marker")"
