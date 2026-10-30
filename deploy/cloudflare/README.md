@@ -65,6 +65,7 @@ type *self-hosted*:
    domain, which goes in `MARGINALIA_HUMAN_JWT_ISSUER`.
 2. **The agents' door.** Create a second application covering
    `review.example.com/mcp`,
+   `review.example.com/agent` (an agent's HTTP long-poll of one review),
    `review.example.com/.well-known/oauth-protected-resource` and
    `review.example.com/healthz`, with a single policy whose action is
    **Bypass** and which includes *Everyone*.

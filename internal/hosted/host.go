@@ -476,6 +476,7 @@ func (h *Host) routes() {
 		mux.Handle(metadataPath, meta)
 		mux.Handle(metadataPath+mcpPath, meta)
 	}
+	mux.Handle("GET "+agentWaitPrefix+"{id}/wait", h.agentWait())
 	mux.Handle("/r/{id}", h.requireHuman(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The page's URLs are relative to its mount, so it has to be
 		// opened with the trailing slash.

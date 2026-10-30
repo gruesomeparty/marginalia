@@ -202,7 +202,14 @@ async function refuse(
 			? undefined
 			: new Response("404 page not found\n", { status: 404 });
 	}
-	if (path !== "/mcp" && !path.startsWith("/mcp/")) {
+	// An agent's long-poll of one review: read-only, bearer-authenticated by
+	// the host, and public in Access like /mcp, so it is gated here the same way.
+	const agentWait = /^\/agent\/r\/[^/]+\/wait\/?$/.test(path);
+	if (path.startsWith("/agent/") && !agentWait) {
+		// The host serves no other agent path.
+		return new Response("404 page not found\n", { status: 404 });
+	}
+	if (path !== "/mcp" && !path.startsWith("/mcp/") && !agentWait) {
 		// Every other path is the reviewer's, and Access lets a request
 		// through only with its JWT attached. One without it means Access is
 		// missing or misconfigured: the host would refuse it anyway, so it is
@@ -225,7 +232,7 @@ async function refuse(
 	const challenge = oauth
 		? `Bearer resource_metadata="${vars.MARGINALIA_PUBLIC_URL.replace(/\/$/, "")}/.well-known/oauth-protected-resource/mcp"`
 		: 'Bearer realm="marginalia"';
-	return new Response("marginalia: /mcp needs `Authorization: Bearer <token>`\n", {
+	return new Response(`marginalia: ${agentWait ? "this path" : "/mcp"} needs \`Authorization: Bearer <token>\`\n`, {
 		status: 401,
 		headers: { "WWW-Authenticate": challenge },
 	});
