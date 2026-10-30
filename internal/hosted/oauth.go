@@ -116,3 +116,37 @@ func (h *Host) transport() http.Handler {
 	}
 	return mcpserver.TransportWith(h.mcp, verifier, opts)
 }
+
+// agentWaitPrefix is where an agent long-polls a review over plain HTTP. It is
+// a route of its own, beside /mcp and not under /r/, so the page routes stay
+// the human's by construction: nothing here serves a document, a note or a
+// write, and requireHuman has no exception to forget.
+const agentWaitPrefix = "/agent/r/"
+
+// agentWait is GET /agent/r/{id}/wait?since=N: the review server's own
+// long-poll, behind the same bearer check as /mcp. It reads the in-memory
+// change counter, so a wait costs the store nothing.
+func (h *Host) agentWait() http.Handler {
+	wait := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if !ValidID(id) {
+			http.NotFound(w, r)
+			return
+		}
+		rv := h.Review(id)
+		if rv == nil {
+			http.NotFound(w, r)
+			return
+		}
+		rv.Server.ServeWait(w, r)
+	})
+	verifier := h.agentVerifier()
+	if verifier == nil {
+		return wait
+	}
+	opts := &auth.RequireBearerTokenOptions{AllowMissingExpiration: true}
+	if h.oauthEnabled() {
+		opts.ResourceMetadataURL = h.metadataURL()
+	}
+	return auth.RequireBearerToken(verifier, opts)(wait)
+}

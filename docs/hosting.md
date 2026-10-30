@@ -165,10 +165,17 @@ overview page. Those three values go into the container's secrets.
    Access then authenticates every browser request and forwards it with a
    `Cf-Access-Jwt-Assertion` header (and sets a `CF_Authorization` cookie).
 2. Put a second self-hosted application, with a single **Bypass** policy
-   that includes *Everyone*, on three paths of the same hostname:
+   that includes *Everyone*, on four paths of the same hostname:
    - `/mcp`
+   - `/agent`
    - `/.well-known/oauth-protected-resource`
    - `/healthz`
+
+   `/agent/r/<id>/wait?since=N` is the long-poll for an agent with a shell and
+   the bearer (static or OAuth) rather than an MCP client: it answers when the
+   reviewer saves a note, and serves nothing else. The Cloudflare template's
+   Worker answers it with a 401, without waking the container, when the
+   bearer is missing or wrong.
 
    Without it, Access answers an agent's `/mcp` request with a redirect to a
    login page. The claude.ai connector then never sees the 401 that tells it

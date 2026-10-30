@@ -494,7 +494,12 @@ users are agents, not humans.
   the static token keeps working beside it; `docs/hosting.md` is the
   operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
-  no tool that writes anything but `reply` and `addressed`; `review_done`,
+  no tool that writes anything but `reply` and `addressed`; the one other
+  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/oauth.go`), the
+  review server's long-poll behind the `/mcp` bearer check — a route of its
+  own beside `/mcp`, not an exception in `requireHuman`, serving nothing else,
+  answered 401 by the Worker (and listed in Access's Bypass) like `/mcp`;
+  `review_done`,
   `confirm` and `reopen` are human-only by construction. `author` is the
   resolved identity, never the body's claim (`server.Options.AuthorOf`).
   `--insecure-dev-identity` is the laptop escape hatch and is loopback-only.
