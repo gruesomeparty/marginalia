@@ -3,10 +3,12 @@ package hosted
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
 // agentWaitMax caps one long-poll, as /api/wait does, below the idle
@@ -20,7 +22,7 @@ const agentWaitTick = 250 * time.Millisecond
 
 // handleAgentWait answers `?since=N[&timeout=SECONDS]` as soon as the
 // review's logs hold more than N events, or once every document carries a
-// review_done, or at the timeout (default 30s, at most 60s). Without since
+// review_done for the current revision, or at the timeout (default 30s, at most 60s). Without since
 // it answers at once, with the count to start from.
 //
 // It answers in the shape of the page's /api/wait, but counts the logs, not
@@ -57,11 +59,25 @@ func (h *Host) handleAgentWait(w http.ResponseWriter, r *http.Request) {
 	defer deadline.Stop()
 	tick := time.NewTicker(agentWaitTick)
 	defer tick.Stop()
+	var (
+		seen []storage.Token
+		n    uint64
+		done bool
+	)
 	for {
-		n, done, err := h.tally(id)
+		// Count again only when a log moved or a revision was published: a
+		// parked wait must not decode every log four times a second.
+		tokens, err := h.tokens(id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if seen == nil || !slices.Equal(tokens, seen) {
+			if n, done, err = h.tally(id); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			seen = tokens
 		}
 		if !parked || done || n > since {
 			agentAnswer(w, waitAnswer{Events: n, Done: done})
@@ -84,11 +100,30 @@ type waitAnswer struct {
 	TimedOut bool   `json:"timed_out,omitempty"`
 }
 
+// tokens is what a wait watches: the review's revision, then each log's
+// change token. All in memory, so a look costs no store read.
+func (h *Host) tokens(id string) ([]storage.Token, error) {
+	r, targets, err := h.targets(id, "")
+	if err != nil {
+		return nil, err
+	}
+	out := []storage.Token{storage.Token(strconv.Itoa(r.Meta.Revision))}
+	for _, t := range targets {
+		token, err := t.Store.Changed()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, token)
+	}
+	return out, nil
+}
+
 // tally counts a review's events across its documents, and whether every
-// document's log carries a review_done, from the same logs the hosted
-// tools read: in memory, so a look costs no store read.
+// document's log carries a review_done for the current revision: one written
+// after it was published (Meta.From), since the logs outlive a republish and
+// the last round's review_done must not end this round's wait.
 func (h *Host) tally(id string) (n uint64, done bool, err error) {
-	_, targets, err := h.targets(id, "")
+	r, targets, err := h.targets(id, "")
 	if err != nil {
 		return 0, false, err
 	}
@@ -99,8 +134,8 @@ func (h *Host) tally(id string) (n uint64, done bool, err error) {
 			return 0, false, err
 		}
 		finished := false
-		for _, e := range events {
-			finished = finished || e.Type == feedback.TypeReviewDone
+		for i, e := range events {
+			finished = finished || (e.Type == feedback.TypeReviewDone && i >= r.Meta.From[t.Name])
 		}
 		n += uint64(len(events))
 		done = done && finished

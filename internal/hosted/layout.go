@@ -107,6 +107,12 @@ type Meta struct {
 	// running total carried on the metadata, so the stored-bytes budget can
 	// be rebuilt at startup from the one listing it already does.
 	Bytes int64 `json:"bytes,omitempty"`
+	// From is each document's log length when this revision was published.
+	// The logs outlive a republish, so a review_done before that point
+	// answered an earlier revision, not this one. Absent on revision 1 and
+	// on metadata written before it existed, which reads as zero: every
+	// review_done counts, as it always did.
+	From map[string]int `json:"from,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

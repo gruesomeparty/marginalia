@@ -144,8 +144,24 @@ func TestAgentWaitSurvivesRepublishAndRestart(t *testing.T) {
 	}
 
 	note(ts, feedback.TypeReviewDone)
-	_, ts2 := open() // a restart: a new process over the same store
+	h2, ts2 := open() // a restart: a new process over the same store
 	if out := wait(ts2, "3"); !strings.Contains(out, `"events":3`) || !strings.Contains(out, `"done":true`) {
 		t.Fatalf("after a restart: %s", out)
+	}
+
+	// The next round: the last round's review_done does not end its wait.
+	if _, err := h2.Republish(context.Background(), r.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nMore again.\n")}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, ts3 := open() // the round's start is stored, so a restart keeps it
+	for _, ts := range []*httptest.Server{ts2, ts3} {
+		_, out := do(t, "GET", ts.URL+"/agent/r/"+r.Meta.ID+"/wait?since=3&timeout=1", nil, agent)
+		if !strings.Contains(out, `"done":false`) || !strings.Contains(out, "timed_out") {
+			t.Fatalf("a republish after review_done: %s", out)
+		}
+	}
+	note(ts3, feedback.TypeReviewDone)
+	if out := wait(ts3, "3"); !strings.Contains(out, `"events":4`) || !strings.Contains(out, `"done":true`) {
+		t.Fatalf("this round's review_done: %s", out)
 	}
 }
