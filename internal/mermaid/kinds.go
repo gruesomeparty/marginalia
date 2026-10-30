@@ -55,7 +55,10 @@ func (p *parser) close(s *Stmt) {
 var (
 	// A message's arrow: solid or dotted, with an arrowhead, a cross, an
 	// open end, or the two-way head; activation marks follow it.
-	seqArrow = regexp.MustCompile(`<<-{1,2}>>|-{1,2}(?:>>|>|x|\))`)
+	seqArrow = regexp.MustCompile(`<<-{1,2}>>|-{1,2}(?:>>|>|\))`)
+	// The cross head is tried only when no other arrow is there, since `-x`
+	// also spells the middle of a name like `web-xray`.
+	seqCross = regexp.MustCompile(`-{1,2}x`)
 	// Group keywords open a block that `end` closes; branches split one.
 	seqGroups     = words("loop alt opt par par_over critical break rect box")
 	seqBranches   = words("else and option")
@@ -109,7 +112,11 @@ func (p *parser) sequence(s *Stmt) {
 		if i := strings.Index(head, ":"); i >= 0 {
 			head = head[:i]
 		}
-		if m := seqArrow.FindStringIndex(head); m != nil {
+		m := seqArrow.FindStringIndex(head)
+		if m == nil {
+			m = seqCross.FindStringIndex(head)
+		}
+		if m != nil {
 			from := strings.TrimSpace(head[:m[0]])
 			to := strings.TrimLeft(strings.TrimSpace(head[m[1]:]), "+-")
 			if from != "" && to != "" {
