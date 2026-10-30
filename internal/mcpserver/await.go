@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
@@ -13,10 +14,12 @@ import (
 // on the disk backend the token is that same size+mtime stamp.
 const pollInterval = 500 * time.Millisecond
 
-// DefaultTimeout bounds a wait that nobody bounded. Long enough for a human to
-// read a page, short enough that an agent hearing nothing back learns that
-// rather than hanging.
-const DefaultTimeout = 5 * time.Minute
+// DefaultTimeout bounds a wait that nobody bounded. It sits under the 60s that
+// MCP clients commonly allow a tool call (claude.ai's connector among them,
+// issue #182): a wait the client abandons returns nothing at all, while one
+// that times out returns the cursor, so the agent loops on short waits rather
+// than holding one long one.
+const DefaultTimeout = 45 * time.Second
 
 // MaxTimeout is the ceiling, so a tool call cannot pin a turn open forever.
 const MaxTimeout = 30 * time.Minute
@@ -24,6 +27,13 @@ const MaxTimeout = 30 * time.Minute
 // Why the wait watches the logs rather than GET /api/revision: revision counts
 // document *re-parses* under --watch, which is a different fact entirely — it
 // moves when the author edits and stays put when the reviewer comments.
+//
+// The wait also returns, with reason "question", as soon as a question sits
+// past the cursor and nobody has replied to it yet: a reviewer who asks the
+// agent something mid-review should get an answer while they are still on
+// the page, not after Done (issue #182). Only a `question` wakes it — a
+// comment is the reviewer talking, a question is the reviewer waiting. Done
+// outranks it, so a finished review always reads as finished.
 //
 // WaitForDone is exported for the hosted tools, which wait on the same terms
 // over targets of their own.
@@ -47,6 +57,9 @@ func WaitForDone(ctx context.Context, docs []Target, cursor map[string]int, time
 		}
 		if done {
 			return true, "review_done", out, nil
+		}
+		if asked(out) {
+			return false, "question", out, nil
 		}
 		select {
 		case <-ctx.Done():
@@ -82,6 +95,27 @@ func readAll(docs []Target, cursor map[string]int) ([]DocEvents, bool, error) {
 		out = append(out, ev)
 	}
 	return out, all, nil
+}
+
+// asked reports whether any document has an unanswered question past its
+// cursor. A reply always follows its question, so if the question is past
+// the cursor its answer is too, and one already answered does not wake the
+// wait again.
+func asked(docs []DocEvents) bool {
+	for _, d := range docs {
+		answered := map[string]bool{}
+		for _, e := range d.Events {
+			if e.Type == feedback.TypeReply {
+				answered[e.ReplyTo] = true
+			}
+		}
+		for _, e := range d.Events {
+			if e.Type == feedback.TypeQuestion && !answered[e.ID] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // moved reports whether any log's change token differs from the last look,

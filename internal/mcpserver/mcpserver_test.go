@@ -210,6 +210,38 @@ func TestReviewRoundTrip(t *testing.T) {
 		t.Errorf("the timeout was not honoured: waited %s", elapsed)
 	}
 
+	// A question wakes the wait before Done (issue #182), so the agent can
+	// answer while the reviewer is still on the page. From the returned
+	// cursor the same question does not wake it twice.
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		post(t, started.URL, feedback.Event{Doc: doc, Block: "1/2", Type: feedback.TypeQuestion, Text: "why 500?", Author: "berkay"})
+	}()
+	var woke awaitOut
+	start = time.Now()
+	if err := call(t, cs, "await_review_done", map[string]any{
+		"session_id": started.SessionID, "timeout_seconds": 30,
+		"cursor": map[string]int{doc: seen.Docs[0].Cursor},
+	}, &woke); err != nil {
+		t.Fatal(err)
+	}
+	if woke.Done || woke.Reason != "question" || len(woke.Docs[0].Events) != 1 || woke.Docs[0].Events[0].Type != feedback.TypeQuestion {
+		t.Fatalf("a question did not wake the wait: %+v", woke)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Errorf("the question took %s to wake the wait", elapsed)
+	}
+	var quiet awaitOut
+	if err := call(t, cs, "await_review_done", map[string]any{
+		"session_id": started.SessionID, "timeout_seconds": 1,
+		"cursor": map[string]int{doc: woke.Docs[0].Cursor},
+	}, &quiet); err != nil {
+		t.Fatal(err)
+	}
+	if quiet.Reason != "timeout" {
+		t.Errorf("an answered cursor woke again: %+v", quiet)
+	}
+
 	post(t, started.URL, feedback.Event{Doc: doc, Type: feedback.TypeReviewDone, Author: "berkay"})
 	var finished awaitOut
 	start = time.Now()
@@ -240,7 +272,7 @@ func TestReviewRoundTrip(t *testing.T) {
 	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &afterwards); err != nil {
 		t.Fatal(err)
 	}
-	if afterwards.Docs[0].Comments != 1 || !afterwards.Docs[0].Done {
+	if afterwards.Docs[0].Comments != 2 || !afterwards.Docs[0].Done {
 		t.Errorf("disk-backed read lost the review: %+v", afterwards.Docs[0])
 	}
 }
