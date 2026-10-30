@@ -489,6 +489,11 @@ users are agents, not humans.
   or the `CF_Authorization` cookie — verified by `identity.Verifier` against
   the issuer's JWKS with go-jose (cached, refreshed on an unknown `kid`,
   rate-limited; asymmetric algorithms only), plus `iss`, `aud`, `exp`, `nbf`;
+  a resolved human must also be on `Options.Reviewers` (`--reviewers`,
+  `MARGINALIA_REVIEWERS`) when that list is set, else 403 — the edge
+  deciding who may log in is not this host deciding who may review, and the
+  list is where multiple reviewers start; `Identity` carries `Provider` and
+  `Subject` beside `Name` so a later login provider has a stable id;
   an agent is the `/mcp` bearer (`mcpserver.StaticTokenVerifier` behind
   go-sdk's `RequireBearerToken`, whose `TokenInfo` reaches tool handlers as
   `req.Extra.TokenInfo`) or an OAuth access token (`hosted/oauth.go`:

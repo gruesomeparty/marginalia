@@ -39,10 +39,20 @@ func (k Kind) String() string {
 }
 
 // Identity is a resolved caller. Name is what is written as an event's
-// author: the human's email, or the agent's configured name.
+// author: the human's email, or the agent's configured name. Provider and
+// Subject say who vouched for the caller and under which stable id, so two
+// logins can one day be told apart from two names: a name can change, a
+// subject at its provider does not.
 type Identity struct {
 	Kind Kind
 	Name string
+	// Provider is what authenticated the caller: "edge" for the JWT the
+	// edge put on a page request, "dev" for --insecure-dev-identity,
+	// "static" for the /mcp token, "oauth" for an access token.
+	Provider string
+	// Subject is the caller's id at Provider (a token's sub); empty when
+	// the provider has none, as for the static token.
+	Subject string
 }
 
 // ErrUnauthenticated is returned when a request carries no credential the

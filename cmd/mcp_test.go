@@ -275,3 +275,15 @@ func TestHostReadsThePublicURLFromTheEnvironment(t *testing.T) {
 		t.Fatalf("got %v, want the public URL accepted and the missing human identity named", err)
 	}
 }
+
+func TestReviewersFromPrefersTheFlagAndDropsBlanks(t *testing.T) {
+	if got := reviewersFrom(nil, "a@x, ,b@x,"); strings.Join(got, "|") != "a@x|b@x" {
+		t.Errorf("env: %q", got)
+	}
+	if got := reviewersFrom([]string{"c@x"}, "a@x"); strings.Join(got, "|") != "c@x" {
+		t.Errorf("flag over env: %q", got)
+	}
+	if got := reviewersFrom(nil, ""); got != nil {
+		t.Errorf("unset: %q", got)
+	}
+}

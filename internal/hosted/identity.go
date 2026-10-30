@@ -29,7 +29,7 @@ func (h *Host) human(r *http.Request) (identity.Identity, int, error) {
 		return identity.Identity{}, http.StatusForbidden, errors.New("an agent credential cannot open review pages — agents use /mcp")
 	}
 	if h.opts.DevIdentity != "" {
-		return identity.Identity{Kind: identity.Human, Name: h.opts.DevIdentity}, 0, nil
+		return h.admit(identity.Identity{Kind: identity.Human, Name: h.opts.DevIdentity, Provider: "dev"})
 	}
 	if h.opts.HumanAuth == nil {
 		return identity.Identity{}, http.StatusServiceUnavailable, errors.New("no human identity is configured on this host")
@@ -57,7 +57,25 @@ func (h *Host) human(r *http.Request) (identity.Identity, int, error) {
 	if name == "" {
 		return identity.Identity{}, http.StatusUnauthorized, errors.New("the access token names nobody: no email or sub claim")
 	}
-	return identity.Identity{Kind: identity.Human, Name: name}, 0, nil
+	return h.admit(identity.Identity{Kind: identity.Human, Name: name, Provider: "edge", Subject: claims.Subject})
+}
+
+// admit lets a verified human in when the host has no reviewer list, or
+// when they are on it. The edge deciding who may log in is not the same as
+// this host deciding who may review: one identity provider often fronts
+// many applications, and the list is where more than one reviewer starts.
+// Names compare without case, since an email's or a login's case is not
+// part of who it names.
+func (h *Host) admit(id identity.Identity) (identity.Identity, int, error) {
+	if len(h.opts.Reviewers) == 0 {
+		return id, 0, nil
+	}
+	for _, r := range h.opts.Reviewers {
+		if strings.EqualFold(strings.TrimSpace(r), id.Name) {
+			return id, 0, nil
+		}
+	}
+	return identity.Identity{}, http.StatusForbidden, errors.New(id.Name + " is signed in but is not a reviewer on this host")
 }
 
 // requireHuman gates a page route: the request proceeds with the reviewer's
