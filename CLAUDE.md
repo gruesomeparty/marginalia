@@ -711,6 +711,9 @@ issues are implemented in project sessions for now, so every trigger starts a
 run whose job is skipped, while triage, review and merge keep running. It is
 also armed by credentials: without a `CLAUDE_CODE_OAUTH_TOKEN` or
 `ANTHROPIC_API_KEY` secret every run (triage's too) skips with a notice.
+Each loop names its model: triage runs Haiku, review and the work loop
+Sonnet, and a `model:opus` label on the PR (or the issue a work run is
+handed) asks for Opus. Only someone with triage rights can add a label.
 
 The review loop is `skills/review-pr/SKILL.md`, run by
 `.github/workflows/review-prs.yml` on every PR — Berkay's, an agent's, the work

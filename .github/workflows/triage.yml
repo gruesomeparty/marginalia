@@ -151,7 +151,9 @@ jobs:
             goes in agent_notes, which is stored hidden; `question` is the only
             text a human sees, so keep it to one or two plain sentences and set
             it only when someone must answer something.
+          # Labelling is a classification job: Haiku is enough.
           claude_args: |
+            --model claude-haiku-5-5
             --allowedTools "Read,Glob,Grep,Write,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search issues:*)"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

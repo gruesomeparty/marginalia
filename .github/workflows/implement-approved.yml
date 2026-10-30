@@ -74,6 +74,21 @@ jobs:
           if [ -n "$OAUTH$KEY" ]; then echo "ready=true" >>"$GITHUB_OUTPUT"; else
             echo "::notice::No CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret; the work loop is disarmed"
           fi
+      - name: Pick the model
+        id: model
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ inputs.issue || (github.event_name == 'issues' && github.event.issue.number) || '' }}
+        # Sonnet implements; Opus only when the named issue carries model:opus,
+        # a label only someone with triage rights can add.
+        run: |
+          model=claude-sonnet-5-5
+          if [[ "$ISSUE" =~ ^[0-9]+$ ]] &&
+            gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '.labels[].name' | grep -qx 'model:opus'; then
+            model=claude-opus-5-5
+          fi
+          echo "model=$model" >>"$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1.0.264
         if: steps.creds.outputs.ready == 'true'
         with:
@@ -117,4 +132,5 @@ jobs:
             change that breaks one of the invariants there is wrong even if the
             issue asked for it, and saying so on the issue is the right outcome.
           claude_args: |
+            --model ${{ steps.model.outputs.model }}
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(go:*),Bash(gofmt:*),Bash(golangci-lint:*),Bash(git:*),Bash(gh:*),Bash(./scripts/approved-queue.sh)"
