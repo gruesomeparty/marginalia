@@ -338,6 +338,17 @@ users are agents, not humans.
   `git format-patch` preamble becomes an `@message` block — the commit message
   is part of what is signed off — and an empty patch gets an `@empty` block
   rather than rendering a blank page.
+- SQL (issue #152) is split by `internal/sqlstmt` — a scanner, not a
+  grammar, returning byte ranges like `internal/mermaid` — that ends a
+  statement at a semicolon outside strings (`E''` honours backslashes, plain
+  `''` does not), quoted identifiers, nested comments, dollar quotes and
+  BEGIN/CASE … END bodies (`BEGIN;` as a statement's first word is a
+  transaction). A `.sql` file is a flat tree with ids `<ordinal>:<kind>[:<object>]`
+  (`3:alter-table:orders`); ordinal first on purpose, so an inserted
+  statement orphans a note rather than inheriting it. A `sql` fence of two
+  or more statements anchors them inline under the fence's id the way a
+  mermaid fence does (`inlineAnchor` is shared); a one-statement fence stays
+  one highlighted block.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
