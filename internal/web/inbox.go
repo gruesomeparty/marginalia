@@ -3,6 +3,7 @@ package web
 import (
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -359,12 +360,20 @@ func groupBy(rows []inboxRow, key func(inboxRow) string, order []string) []inbox
 		by[k] = append(by[k], r)
 	}
 	if order != nil {
-		keys = keys[:0]
-		for _, k := range order {
-			if _, ok := by[k]; ok {
-				keys = append(keys, k)
-			}
+		// Listed keys first, in order; any key the list does not name keeps
+		// its place after them rather than vanishing from the page.
+		rank := map[string]int{}
+		for i, k := range order {
+			rank[k] = i
 		}
+		sort.SliceStable(keys, func(i, j int) bool {
+			ri, oki := rank[keys[i]]
+			rj, okj := rank[keys[j]]
+			if oki && okj {
+				return ri < rj
+			}
+			return oki && !okj
+		})
 	}
 	out := make([]inboxGroup, 0, len(keys))
 	for _, k := range keys {

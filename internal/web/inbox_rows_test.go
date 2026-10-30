@@ -149,3 +149,13 @@ func TestInboxKeepsAStaleChoice(t *testing.T) {
 		t.Errorf("empty filtered inbox reads as an empty instance")
 	}
 }
+
+// A status the order does not list still gets a group, after the listed ones.
+func TestGroupByKeepsAnUnlistedStatus(t *testing.T) {
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	rows := []inboxRow{{InboxRow: row("new", "archived", now, 0)}, {InboxRow: row("wait", StatusAwaiting, now, 0)}}
+	groups := groupBy(rows, func(r inboxRow) string { return r.Status }, statusOrder)
+	if len(groups) != 2 || groups[0].Label != StatusLabel(StatusAwaiting) || groups[1].Label != "archived" {
+		t.Errorf("groups = %+v", groups)
+	}
+}
