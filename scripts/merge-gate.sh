@@ -77,8 +77,8 @@ jq '
   # and docs do not count toward it.
   def max_code_lines: 1500;
   def max_files: 40;
-  def not_code: test("(_test\\.go$|/testdata/|^internal/browsertest/|\\.md$|^docs/)");
-  def is_test: test("(_test\\.go$|^internal/browsertest/)");
+  def not_code: test("(_test\\.go$|/testdata/|\\.md$|^docs/)");
+  def is_test: test("_test\\.go$");
   # Names that end up in a comment: a branch or path may hold anything a
   # filesystem allows, and none of it may become markup or a mention.
   def safe: tostring | gsub("[^A-Za-z0-9._/+-]"; "") | .[0:100];

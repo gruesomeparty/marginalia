@@ -395,8 +395,6 @@ func TestMergeReviewConfigLoads(t *testing.T) {
 	}
 }
 
-// A file moved out of a sensitive directory still touched it: the gate reads
-// the old path the REST listing gives, not only the new one.
 // Tests, testdata and docs do not count toward the size ceiling: a
 // well-tested change must not read as a riskier one. Without per-file counts
 // every line counts.
@@ -435,6 +433,8 @@ func TestMergeGateDomainNeverLowersAFloor(t *testing.T) {
 	}
 }
 
+// A file moved out of a sensitive directory still touched it: the gate reads
+// the old path the REST listing gives, not only the new one.
 func TestMergeGateCountsTheOldPathOfARename(t *testing.T) {
 	in := lowRisk()
 	prOf(in)["files"] = []map[string]any{{"path": "docs/ci.yml", "previous_filename": ".github/workflows/ci.yml"}}
