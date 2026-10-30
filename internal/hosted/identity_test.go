@@ -270,3 +270,50 @@ func TestOpenNeedsAHumanIdentity(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestReviewerListAdmitsOnlyThoseOnIt(t *testing.T) {
+	e := newEdge(t)
+	h, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", Token: "tok", HumanAuth: e.verifier(), Reviewers: []string{" Berkay@Example.com", "alice@example.com"}, Log: testWriter{t}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(h.Handler())
+	t.Cleanup(ts.Close)
+	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	page := ts.URL + "/r/" + r.Meta.ID + "/"
+
+	// On the list, whatever the case of the address.
+	if code, _ := do(t, "GET", page, nil, map[string]string{accessHeader: e.mint(e.key, e.claims("berkay@example.com"))}); code != 200 {
+		t.Errorf("a listed reviewer: %d", code)
+	}
+	// Verified by the edge, but not a reviewer here: the inbox and the
+	// pages are both closed to them.
+	stranger := map[string]string{accessHeader: e.mint(e.key, e.claims("mallory@example.com"))}
+	for _, u := range []string{ts.URL + "/", page} {
+		code, out := do(t, "GET", u, nil, stranger)
+		if code != http.StatusForbidden || !strings.Contains(out, "not a reviewer") {
+			t.Errorf("GET %s by a stranger: %d %s", u, code, out)
+		}
+	}
+	body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "x"})
+	if code, _ := do(t, "POST", page+"api/feedback", body, stranger); code != http.StatusForbidden {
+		t.Errorf("POST by a stranger: %d", code)
+	}
+	if events, _ := r.Server.Entries()[0].Store.Load(); len(events) != 0 {
+		t.Errorf("a stranger's note reached the log: %+v", events)
+	}
+}
+
+func TestResolvedHumanCarriesProviderAndSubject(t *testing.T) {
+	e := newEdge(t)
+	h, _ := openWithEdge(t, e)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set(accessHeader, e.mint(e.key, e.claims("berkay@example.com")))
+	id, code, err := h.human(req)
+	if err != nil {
+		t.Fatalf("%d %v", code, err)
+	}
+	if id.Provider != "edge" || id.Subject != "sub-1" || id.Name != "berkay@example.com" {
+		t.Errorf("got %+v", id)
+	}
+}
