@@ -109,10 +109,18 @@ func (h *Host) agentVerifier() auth.TokenVerifier {
 // agents. With an authorization server configured, a refusal carries the
 // metadata URL, which is how a client discovers where to get a token.
 func (h *Host) transport() http.Handler {
-	verifier := h.agentVerifier()
-	var opts *auth.RequireBearerTokenOptions
-	if h.oauthEnabled() {
-		opts = &auth.RequireBearerTokenOptions{ResourceMetadataURL: h.metadataURL()}
+	return mcpserver.TransportWith(h.mcp, h.agentVerifier(), h.bearerOptions())
+}
+
+// agentOnly puts an agent route other than /mcp behind exactly /mcp's
+// check, so the two cannot drift in who they let in.
+func (h *Host) agentOnly(next http.Handler) http.Handler {
+	return mcpserver.RequireAgent(h.agentVerifier(), h.bearerOptions(), next)
+}
+
+func (h *Host) bearerOptions() *auth.RequireBearerTokenOptions {
+	if !h.oauthEnabled() {
+		return nil
 	}
-	return mcpserver.TransportWith(h.mcp, verifier, opts)
+	return &auth.RequireBearerTokenOptions{ResourceMetadataURL: h.metadataURL()}
 }

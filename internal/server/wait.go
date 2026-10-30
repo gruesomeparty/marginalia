@@ -122,6 +122,10 @@ func (s *Server) handleWait(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, waitResult{Events: n, Done: done})
 }
 
+// WaitHandler is the long-poll on its own, for a caller that may reach
+// nothing else of this server: a hosted agent (issue #186).
+func (s *Server) WaitHandler() http.Handler { return http.HandlerFunc(s.handleWait) }
+
 type waitResult struct {
 	Events   uint64 `json:"events"`
 	Done     bool   `json:"done"`

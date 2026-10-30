@@ -471,6 +471,7 @@ func (h *Host) routes() {
 	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
+	mux.Handle("GET "+AgentWaitPath, h.agentOnly(http.HandlerFunc(h.handleAgentWait)))
 	if h.oauthEnabled() {
 		meta := auth.ProtectedResourceMetadataHandler(h.metadata())
 		mux.Handle(metadataPath, meta)
@@ -501,6 +502,26 @@ func (h *Host) handleReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.StripPrefix("/r/"+id, rv.Server.Handler()).ServeHTTP(w, r)
+}
+
+// AgentWaitPath is the long-poll an agent holding the /mcp credential may
+// call over plain HTTP (issue #186): a review's GET /api/wait, and nothing
+// else of it. It sits under /mcp/ on purpose. That prefix is already the
+// agents' at the edge: Access bypasses /mcp and its subpaths, and the
+// Worker refuses one with no bearer, or a wrong static token, before it
+// would wake the container. The page routes stay human-only, structurally.
+const AgentWaitPath = "/mcp/reviews/{id}/wait"
+
+// handleAgentWait answers an agent's long-poll on one review, with the same
+// handler, query and answer as the page's /api/wait.
+func (h *Host) handleAgentWait(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rv := h.Review(id)
+	if !ValidID(id) || rv == nil {
+		http.NotFound(w, r)
+		return
+	}
+	rv.Server.WaitHandler().ServeHTTP(w, r)
 }
 
 // Handler is the whole listener's mux.

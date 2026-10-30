@@ -166,7 +166,8 @@ overview page. Those three values go into the container's secrets.
    `Cf-Access-Jwt-Assertion` header (and sets a `CF_Authorization` cookie).
 2. Put a second self-hosted application, with a single **Bypass** policy
    that includes *Everyone*, on three paths of the same hostname:
-   - `/mcp`
+   - `/mcp` (Access applies a path to everything under it, so this also
+     covers the agents' long-poll at `/mcp/reviews/<id>/wait`)
    - `/.well-known/oauth-protected-resource`
    - `/healthz`
 
@@ -200,6 +201,27 @@ publish an OpenID configuration at `/.well-known/openid-configuration`.
 Bypassing the edge on a laptop: `--insecure-dev-identity you@example.com`
 makes every page request that human. It refuses to start on anything but a
 loopback address.
+
+## Agents: waiting on a review without MCP
+
+`await_review_done` is a tool call, and MCP clients drop one that runs past
+their timeout. An agent with a shell can long-poll instead, with the same
+credential `/mcp` takes (the static token or an access token):
+
+```
+curl -H "Authorization: Bearer $MARGINALIA_MCP_TOKEN" \
+  "https://review.<your-domain>/mcp/reviews/<id>/wait?since=0&timeout=60"
+{"events":1,"done":false}
+```
+
+It is the page's `/api/wait`: without `since` it answers at once with the
+count to start from; with it, it answers as soon as the review holds more
+events than that, or after `timeout` seconds (at most 60) with
+`"timed_out":true`. Pass the returned `events` as the next `since`. It reads
+and never writes, and it is the only part of a review an agent credential
+reaches: the review pages under `/r/` still refuse one. It lives under
+`/mcp/` so the Worker refuses a request with no bearer, or the wrong static
+token, before it wakes the container.
 
 ## Agents: `/mcp` as an OAuth resource server
 

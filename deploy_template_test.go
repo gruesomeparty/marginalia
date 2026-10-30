@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/gruesomeparty/marginalia/internal/hosted"
 )
 
 // deploy/cloudflare is the deployment the repo ships, and these are the
@@ -187,5 +189,24 @@ func readJSON(t *testing.T, path string, v any) {
 	t.Helper()
 	if err := json.Unmarshal([]byte(readFile(t, path)), v); err != nil {
 		t.Fatalf("%s: %v", path, err)
+	}
+}
+
+// Every agent route the host serves lives under /mcp/, because that prefix
+// is what the Worker refuses at the edge without a bearer, or with a wrong
+// static token, before it forwards anything and so before the container
+// wakes (issue #186). A route outside it would be one anyone could hammer
+// to keep a billed container awake.
+func TestTemplateRefusesAgentRoutesAtTheEdge(t *testing.T) {
+	if !strings.HasPrefix(hosted.AgentWaitPath, "/mcp/") {
+		t.Errorf("the agent wait %s is outside /mcp/, which the Worker does not guard", hosted.AgentWaitPath)
+	}
+	src := readFile(t, filepath.Join(templateDir, "src", "index.ts"))
+	if !strings.Contains(src, `path !== "/mcp" && !path.startsWith("/mcp/")`) {
+		t.Error("the Worker no longer treats /mcp/ as the agents' prefix")
+	}
+	refuse, forward := strings.Index(src, "await refuse("), strings.Index(src, "container.fetch(request)")
+	if refuse < 0 || forward < 0 || refuse > forward {
+		t.Error("the Worker must refuse before it forwards to the container")
 	}
 }

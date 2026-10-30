@@ -459,7 +459,13 @@ users are agents, not humans.
   assumes `/`), and told its inbox through `server.Options.InboxURL` (`/`),
   which gives the header an **← Inbox** link and the `i` key — neither exists
   under `serve` or `export`, which have no inbox, `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
-  `mcp --http`), `/healthz`. Keys are the same on every backend:
+  `mcp --http`), `/healthz`, and `GET /mcp/reviews/{id}/wait`
+  (`hosted.AgentWaitPath`, issue #186): one review's `/api/wait`
+  (`server.WaitHandler`) for an agent with a shell, behind `/mcp`'s own
+  bearer check (`mcpserver.RequireAgent` via `Host.agentOnly`), and the only
+  part of a review an agent credential reaches. It lives under `/mcp/`
+  because the Worker already refuses that prefix at the edge without a valid
+  bearer; `deploy_template_test.go` pins both. Keys are the same on every backend:
   `reviews/<id>/meta/<n>.json` (versioned, highest wins),
   `reviews/<id>/rev/<n>/<name>` (immutable snapshots), `reviews/<id>/log/<name>`
   (the feedback log, `feedback.OpenStore`). Ids are 128 random bits, URL-safe;

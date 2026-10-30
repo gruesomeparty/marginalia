@@ -86,8 +86,16 @@ func TransportWith(ms *mcp.Server, verifier auth.TokenVerifier, opts *auth.Requi
 		PropagateRequestCancellation: true,
 		DisableLocalhostProtection:   verifier != nil,
 	})
+	return RequireAgent(verifier, opts, streamable)
+}
+
+// RequireAgent puts next behind the same bearer check /mcp has: verifier
+// decides, a refusal is a 401 with a Bearer challenge, and the TokenInfo
+// reaches next through the request context. A nil verifier is no check at
+// all, as /mcp has none on loopback with no credential configured.
+func RequireAgent(verifier auth.TokenVerifier, opts *auth.RequireBearerTokenOptions, next http.Handler) http.Handler {
 	if verifier == nil {
-		return streamable
+		return next
 	}
 	if opts == nil {
 		opts = &auth.RequireBearerTokenOptions{}
@@ -95,7 +103,7 @@ func TransportWith(ms *mcp.Server, verifier auth.TokenVerifier, opts *auth.Requi
 	// The static token carries no expiry of its own; its lifetime is the
 	// operator's to end.
 	opts.AllowMissingExpiration = true
-	return challenge(auth.RequireBearerToken(verifier, opts)(streamable))
+	return challenge(auth.RequireBearerToken(verifier, opts)(next))
 }
 
 // StaticTokenVerifier accepts exactly one token, compared as fixed-length
