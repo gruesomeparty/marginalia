@@ -129,7 +129,7 @@ func (h *Host) tally(id string) (n uint64, done bool, err error) {
 	}
 	done = len(targets) > 0
 	for _, k := range r.Meta.Retired {
-		n += uint64(k)
+		n += k
 	}
 	for _, t := range targets {
 		events, err := t.Store.Load()

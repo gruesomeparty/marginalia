@@ -117,7 +117,7 @@ type Meta struct {
 	// and this one does not. No page or tool writes to those logs any more,
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
-	Retired map[string]int `json:"retired,omitempty"`
+	Retired map[string]uint64 `json:"retired,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

@@ -366,9 +366,9 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
 		}
 		if retired == nil {
-			retired = map[string]int{}
+			retired = map[string]uint64{}
 		}
-		retired[e.Rel] = len(events)
+		retired[e.Rel] = uint64(len(events))
 	}
 	if len(retired) == 0 {
 		retired = nil
