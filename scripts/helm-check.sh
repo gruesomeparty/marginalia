@@ -38,6 +38,14 @@ expect "an existing claim" 'claimName: mine' -- --set persistence.existingClaim=
 expect "a digest pin" 'marginalia@sha256:abc' -- --set image.digest=sha256:abc
 expect "extra objects, templated" "name: '?check-extra" -- --set-json 'extraObjects=[{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"{{ .Release.Name }}-extra"}}]'
 
+# A number written in a values file is a float to helm; it must still reach
+# the host as an integer, not 1e+07.
+numbers="$(mktemp)"
+trap 'rm -f "$numbers"' EXIT
+printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  SOME_NUMBER: 25000000\n' >"$numbers"
+expect "numbers from a values file stay integers" 'value: "10000000"' -- -f "$numbers"
+expect "extraEnv numbers too" 'value: "25000000"' -- -f "$numbers"
+
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \
    | awk '/name: check-marginalia-public/{p=1} p' | grep -q 'auth: x'; then

@@ -76,9 +76,11 @@ spec:
               protocol: TCP
           env:
             {{- range $name, $value := $env }}
-            {{- if ne (toString $value) "" }}
+            {{- /* A number in a values file decodes as a float, which prints as 1e+07: the host's integer parse refuses that. */}}
+            {{- $s := ternary (int64 $value | toString) (toString $value) (kindIs "float64" $value) }}
+            {{- if ne $s "" }}
             - name: {{ $name }}
-              value: {{ toString $value | quote }}
+              value: {{ $s | quote }}
             {{- end }}
             {{- end }}
           {{- if or .Values.existingSecret .Values.extraEnvFrom }}
