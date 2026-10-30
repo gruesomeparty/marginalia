@@ -843,7 +843,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
       box.insertBefore(about, box.firstChild);
     }
     if(!phone.matches) return;
-    lift();
+    // attach() calls this before the sheet is in the page: place it once
+    // it is, so a keyboard already up does not cover it.
+    requestAnimationFrame(lift);
     document.addEventListener("click", function outside(e){
       if(!box.isConnected){ document.removeEventListener("click", outside, true); return; }
       if(box.contains(e.target)) return;
