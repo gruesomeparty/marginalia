@@ -291,7 +291,13 @@ users are agents, not humans.
   positioned column right of the text, top-aligned to its block and pushed
   below the previous box on overlap, whenever ≥1200px leaves 18rem beside
   `main`; otherwise boxes stay inline exactly as before. The composer and
-  requester sidenotes always stay inline.
+  requester sidenotes always stay inline. On a phone (≤640px, issue #131) the header is
+  one row (title, progress as a fraction, the menus by their short labels,
+  Done), the note-count badge moves into the narrower gutter, and the
+  composer is a bottom sheet: it quotes its block, rides above the on-screen
+  keyboard through `visualViewport`, and a tap outside closes it unless
+  something is typed. That is a media query plus `phoneSheet()`; desktop is
+  untouched.
 - Sentence-level notes (issue #49) are a **new event field, never a longer
   block id**: a sub-block id like `5.3/2#1` would be accepted by every consumer
   that already reads `block` and would silently mean something different to
