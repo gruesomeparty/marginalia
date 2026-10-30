@@ -23,7 +23,7 @@
 # internal/pipeline. This script only fetches their inputs and carries out
 # what they say, so what it may do is: merge the exact commit the gate saw
 # (--match-head-commit), publish a PR's diff for review, and edit its own
-# labels (merge:human, merge:changes) and its own two comments.
+# labels (merge:human, merge:changes, merge:conflict) and its own comments.
 #
 # State lives on the PR, in one comment of this workflow's own, edited in place:
 #   <!-- agent:merge v1
@@ -75,6 +75,43 @@ sticky() { # number marker body-file
 
 field() { sed -n "s/^$1: //p" <<<"$2" | head -n1; }
 
+gate_of() { # pr-json review-sha approved-sha
+  jq -n --argjson pr "$1" --arg owner "$OWNER" --arg trusted "${MERGE_TRUSTED:-}" \
+    --arg review_sha "$2" --arg approved_sha "$3" --arg auto "${MERGE_LOOP_AUTO:-}" \
+    '{pr: $pr, owner: $owner, trusted: $trusted, review_sha: $review_sha, approved_sha: $approved_sha, auto: $auto}' |
+    "$here/merge-gate.sh"
+}
+
+# A conflict with main is the author's to resolve, never this loop's: it
+# labels the PR merge:conflict with one comment naming the head, and takes
+# both away once the conflict is gone. Not for a PR the gate skips: Renovate
+# and release-please rebase their own, and a draft is not ready.
+conflict_mark="<!-- agent:merge-conflict v1"
+conflicts() { # number pr-json
+  local head mergeable labelled said
+  head="$(jq -r .headRefOid <<<"$2")"
+  mergeable="$(jq -r '.mergeable // "UNKNOWN"' <<<"$2")"
+  [ "$mergeable" != UNKNOWN ] || return 0
+  labelled=false
+  if jq -e '[.labels[].name] | index("merge:conflict")' >/dev/null <<<"$2"; then labelled=true; fi
+  if [ "$mergeable" = CONFLICTING ] && [ "$(gate_of "$2" "" "" | jq -r .decision)" != skip ]; then
+    said="$(field sha "$(own "$1" "$conflict_mark" body)")"
+    $labelled || label_add "$1" merge:conflict
+    if ! $labelled || [ "$said" != "$head" ]; then
+      echo "#$1: has a merge conflict with main"
+      printf '%s\nsha: %s\n-->\n**Merge conflict with main** at %s: rebase onto main and push, and the merge loop picks it up again.\n' \
+        "$conflict_mark" "$head" "${head:0:7}" >"$work/conflict.md"
+      sticky "$1" "$conflict_mark" "$work/conflict.md"
+    fi
+  elif $labelled; then
+    echo "#$1: the merge conflict is resolved"
+    label_rm "$1" merge:conflict "$2"
+    printf '%s\nsha: %s\n-->\n~~Merge conflict with main~~ resolved at %s.\n' \
+      "$conflict_mark" "$head" "${head:0:7}" >"$work/conflict.md"
+    sticky "$1" "$conflict_mark" "$work/conflict.md"
+  fi
+}
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -96,6 +133,15 @@ for n in "$@"; do
   pr="$(jq --argjson files "$files" '.files = $files' <<<"$pr")"
   [ "$(jq -r .state <<<"$pr")" = OPEN ] || continue
   head="$(jq -r .headRefOid <<<"$pr")"
+  # GitHub computes mergeability when asked, so a PR read just after main
+  # moved is often UNKNOWN; one more look usually settles it.
+  if [ "$(jq -r '.mergeable // "UNKNOWN"' <<<"$pr")" = UNKNOWN ]; then
+    sleep "${MERGEABLE_RETRY:-5}"
+    if m="$(gh pr view "$n" --repo "$REPO" --json mergeable --jq .mergeable)"; then
+      pr="$(jq --arg m "$m" '.mergeable = $m' <<<"$pr")"
+    fi
+  fi
+  conflicts "$n" "$pr"
 
   review_comment="$(own "$n" "<!-- agent:review v1" body)"
   review_sha="$(field sha "$review_comment")"
@@ -136,10 +182,7 @@ for n in "$@"; do
     fi
   fi
 
-  gate="$(jq -n --argjson pr "$pr" --arg owner "$OWNER" --arg trusted "${MERGE_TRUSTED:-}" \
-    --arg review_sha "$review_sha" --arg approved_sha "$approved_sha" --arg auto "${MERGE_LOOP_AUTO:-}" \
-    '{pr: $pr, owner: $owner, trusted: $trusted, review_sha: $review_sha, approved_sha: $approved_sha, auto: $auto}' |
-    "$here/merge-gate.sh")"
+  gate="$(gate_of "$pr" "$review_sha" "$approved_sha")"
   decision="$(jq -r .decision <<<"$gate")"
   echo "#$n: $decision — $(jq -r '.reasons | join("; ")' <<<"$gate")"
 

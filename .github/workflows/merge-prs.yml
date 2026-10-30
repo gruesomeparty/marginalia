@@ -12,8 +12,15 @@
 #
 # Triggers. CI or the review loop finishing on a PR (workflow_run runs the
 # default branch's copy of this file, so a PR cannot loosen the rules for its
-# own merge), an hourly sweep that also collects the maintainer's decisions,
-# and by hand. Not pull_request_review: that event runs the PR's copy.
+# own merge), a push to main (which is what puts other PRs in conflict), an
+# hourly sweep that also collects the maintainer's decisions, and by hand.
+# Not pull_request_review: that event runs the PR's copy.
+#
+# Conflicts. A PR that conflicts with main gets merge:conflict and one comment
+# naming its head, both removed once it is resolved. Nothing is rebased or
+# resolved here: that is the author's (or their agent's) job. A PR that is only
+# behind main is left alone, since main does not require an up-to-date branch,
+# and an update made with the workflow token would start no CI on the new head.
 #
 # Repository variables:
 #   MERGE_LOOP_AUTO=true  merge low-risk PRs with no human. Off by default:
@@ -36,6 +43,8 @@ on:
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [CI, Review PRs]
     types: [completed]
+  push:
+    branches: [main]
   schedule:
     - cron: '47 * * * *'
   workflow_dispatch:

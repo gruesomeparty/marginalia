@@ -512,3 +512,75 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 		t.Errorf("#3 was decided without its file listing:\n%s\n%s", out, log)
 	}
 }
+
+// A conflict with main is flagged, never resolved: the PR gets merge:conflict
+// and a comment naming its head, and loses both once it merges cleanly. A PR
+// whose mergeability is not known yet is asked again, and one the gate skips
+// (Renovate rebases its own) is left alone.
+func TestMergeLoopFlagsConflicts(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, v any) {
+		t.Helper()
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gh := strings.Replace(fakeGH, `"pr view") cat`,
+		`"pr view") case "$*" in *--jq*) cat "$dir/mergeable-$3"; exit 0 ;; esac; cat`, 1)
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(gh), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mergeable-4"), []byte("CONFLICTING\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 2, 3, 4} {
+		p := prOf(lowRisk())
+		p["number"], p["state"], p["latestReviews"] = n, "OPEN", []any{}
+		switch n {
+		case 1:
+			p["mergeable"] = "CONFLICTING"
+		case 2:
+			p["labels"] = labels("review:pass", "merge:conflict")
+		case 3:
+			p["mergeable"], p["headRefName"] = "CONFLICTING", "renovate/go-deps"
+		case 4:
+			p["mergeable"] = "UNKNOWN"
+		}
+		write(fmt.Sprintf("pr-%d.json", n), p)
+		write(fmt.Sprintf("files-%d.json", n), []map[string]any{{"filename": "internal/web/review.html.tmpl"}})
+	}
+
+	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2", "3", "4")
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"REPO=o/r", "OWNER=gruesomeparty", "GH_TOKEN=x", "MERGE_LOOP_AUTO=",
+		"MARGINALIA_URL=", "MARGINALIA_MCP_TOKEN=", "MERGE_TOKEN=", "DRY_RUN=", "MERGEABLE_RETRY=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("merge-loop failed: %v\n%s", err, out)
+	}
+	calls, err := os.ReadFile(filepath.Join(dir, "calls.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(calls)
+	for _, n := range []string{"1", "4"} {
+		if !strings.Contains(log, "issues/"+n+"/labels -f labels[]=merge:conflict") ||
+			!strings.Contains(log, "issues/"+n+"/comments -F body=@") {
+			t.Errorf("#%s was not flagged as conflicting:\n%s", n, log)
+		}
+	}
+	if !strings.Contains(log, "--method DELETE repos/o/r/issues/2/labels/merge%3Aconflict") {
+		t.Errorf("#2's resolved conflict kept its label:\n%s", log)
+	}
+	if strings.Contains(log, "issues/3/labels") || strings.Contains(log, "issues/3/comments -F") {
+		t.Errorf("Renovate's PR was flagged:\n%s", log)
+	}
+	if strings.Contains(log, "pr merge") {
+		t.Errorf("a conflicting PR was merged:\n%s", log)
+	}
+}
