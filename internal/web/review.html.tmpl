@@ -25,6 +25,8 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--serif);line
 header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:.6rem 1rem;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;font-family:var(--sans);font-size:var(--fs-base)}
 header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .count{color:var(--muted)}
+header .back{color:var(--muted);text-decoration:none;white-space:nowrap;flex-shrink:0}
+header .back:hover{color:var(--fg)}
 header .where{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header .actions{margin-left:auto;display:flex;gap:.5rem;flex-shrink:0}
 header button{font:inherit;padding:.4rem .9rem;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:var(--r-md);cursor:pointer}
@@ -216,6 +218,8 @@ blockquote{margin:0;padding-left:1rem;border-left:3px solid var(--rule);color:va
    stylesheet already reads. */
 .diagram .pic [data-anchor][data-count]:not([data-count="0"]){--mg-line:var(--marker-ink);--mg-node-stroke:var(--marker-ink)}
 .diagram .pic [data-anchor][data-hover]{--mg-line:var(--accent);--mg-node-stroke:var(--accent);--mg-text:var(--accent)}
+.diagram .pic [data-anchor]:focus{outline:none}
+.diagram .pic [data-anchor]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Weight is the one thing still taken by force: mermaid sets it per edge class
    (.edge-thickness-normal) and per node rule, neither of which reads a
    variable, and a highlight two pixels wide is not one. */
@@ -296,6 +300,12 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .composer .actions button{font:inherit;padding:.35rem .8rem;border-radius:var(--r-md);cursor:pointer;border:1px solid var(--rule);background:transparent;color:var(--fg)}
 .composer .actions .save{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .existing{margin:.3rem 0 .6rem;font-family:var(--sans);font-size:var(--fs-base)}
+/* The margin rail (issue 130): on a screen with room beside the text, notes
+   sit to the right of their block instead of between blocks, and the page
+   script places them. */
+body.rail main{margin-left:var(--sp-5);margin-right:auto}
+body.rail .existing.in-rail{position:absolute;z-index:1;width:18rem;margin:0;text-align:left;font-style:normal;font-weight:400;line-height:1.45;white-space:normal}
+body.rail .existing.in-rail.off{display:none}
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:var(--r-tab)}
 .existing .item .type{font-weight:600;text-transform:capitalize;color:var(--accent)}
 .existing .item.current{border-left-width:3px}
@@ -356,6 +366,25 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 .orphans .item{padding:.5rem .7rem;margin:.4rem 0;background:var(--card);border-left:2px solid var(--muted);border-radius:var(--r-tab)}
 .orphans .meta{color:var(--muted)}
 .orphans .was{color:var(--muted);font-style:italic;margin:.15rem 0}
+/* Every note in one list (issue 130): document order, the page's own filter,
+   and the notes that no longer anchor anywhere at the end, which until now
+   only had a section at the foot of the page. It sits under the sticky
+   header's stacking level, so the header's own menus open over it. */
+.notes-panel{position:fixed;top:0;right:0;bottom:0;z-index:9;width:22rem;max-width:100%;overflow:auto;background:var(--bg);border-left:1px solid var(--rule);box-shadow:var(--shadow);padding:var(--sp-4);font-family:var(--sans);font-size:var(--fs-base)}
+.notes-panel .head{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)}
+.notes-panel .head .n{color:var(--muted)}
+.notes-panel .close{margin-left:auto;font:inherit;font-size:var(--fs-lg);line-height:1;background:transparent;border:0;color:var(--muted);cursor:pointer;padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm)}
+.notes-panel .hint{color:var(--muted);font-size:var(--fs-sm);margin:0 0 var(--sp-3)}
+.notes-panel .entries{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--sp-2)}
+.notes-panel .entries h3{font-size:var(--fs-sm);color:var(--muted);margin:var(--sp-4) 0 var(--sp-1);font-weight:600}
+.notes-panel .entry{display:block;width:100%;text-align:left;font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--rule);border-left:2px solid var(--marker-ink);border-radius:var(--r-tab);padding:var(--sp-2) var(--sp-3);cursor:pointer}
+.notes-panel .entry:hover{border-color:var(--accent)}
+.notes-panel .entry .type{color:var(--accent);font-weight:600;margin-right:var(--sp-2)}
+.notes-panel .entry .flag{font-size:var(--fs-xs);color:var(--muted);border:1px solid var(--rule);border-radius:var(--r-pill);padding:0 var(--sp-2);margin-right:var(--sp-1)}
+.notes-panel .entry .flag.stale,.notes-panel .entry .flag.orphan{color:var(--bad);border-color:var(--bad)}
+.notes-panel .entry .text{display:block;margin-top:var(--sp-1);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.notes-panel .entry .quote{display:block;margin-top:var(--sp-1);color:var(--muted);font-style:italic;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notes-panel .entry.orphan{border-left-color:var(--muted)}
 main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
@@ -382,6 +411,7 @@ header #fold+button{margin-left:.5rem}
 </head>
 <body>
 <header>
+  {{if .Inbox}}<a class="back" id="back" href="{{.Inbox}}" title="Back to the inbox (i)">&larr; Inbox</a>{{end}}
   <strong>{{.Title}}</strong>
   {{if and .ShowNav (ne .Title .Doc.Path)}}<span class="where">{{.Doc.Path}}</span>{{end}}
   <span class="count" id="count">0 comments</span>
@@ -391,6 +421,7 @@ header #fold+button{margin-left:.5rem}
     <span class="short" id="progshort"></span>
   </span>
   <span class="actions">
+    <button id="notes-toggle" type="button" class="secondary" aria-controls="notes-panel" aria-expanded="false">Notes</button>
     <details class="filter" id="filter">
       <summary><span class="long">Show all</span><span class="short">All</span></summary>
       <div class="panel">
@@ -483,6 +514,11 @@ header #fold+button{margin-left:.5rem}
   {{end}}
 </main>
 </div>
+<aside class="notes-panel" id="notes-panel" aria-label="All notes" hidden>
+  <div class="head"><strong>All notes</strong><span class="n" id="notes-n"></span><button type="button" class="close" id="notes-close" aria-label="Close all notes">×</button></div>
+  <p class="hint" id="notes-hidden" hidden></p>
+  <ol class="entries" id="notes-list"></ol>
+</aside>
 <div class="reloader" id="reloader" role="status" aria-live="polite" hidden>
   <span>This document changed on disk.</span>
   <button type="button" id="reload">Reload</button>
@@ -579,6 +615,125 @@ window.__MARGINALIA__ = {{.DataJSON}};
     if(stale) parts.push(stale+" stale");
     if(unanchored) parts.push(unanchored+" unanchored");
     document.getElementById("count").textContent = parts.join(" · ");
+    renderNotesPanel();
+    layoutRail();
+  }
+  // --- margin rail --------------------------------------------------------
+  // Where there is room to the right of the text, each block's notes move
+  // into a column beside it, top-aligned with the block and pushed down
+  // below the previous one when they would overlap, so a note never pushes
+  // the document apart. Without the room — a phone, a narrow window, a wide
+  // tree — the notes stay inline exactly as before. The composer always
+  // opens inline: it is where the reviewer is typing, next to what they read.
+  var RAIL = 288, RAIL_GAP = 16;
+  var railSize = window.ResizeObserver ? new ResizeObserver(function(){ layoutRail(); }) : null;
+  function layoutRail(){
+    var main = document.querySelector("main");
+    if(!main) return;
+    var boxes = Array.prototype.slice.call(main.querySelectorAll(".existing"));
+    document.body.classList.add("rail");
+    var mr = main.getBoundingClientRect();
+    var room = window.innerWidth >= 1200 && mr.right + RAIL_GAP + RAIL <= document.documentElement.clientWidth - RAIL_GAP;
+    if(!room){
+      document.body.classList.remove("rail");
+      boxes.forEach(function(b){ b.classList.remove("in-rail", "off"); b.style.top = b.style.left = ""; });
+      return;
+    }
+    var placed = boxes.map(function(b){
+      b.classList.add("in-rail");
+      var el = b.mgFor, shown = el && el.getClientRects().length > 0;
+      b.classList.toggle("off", !shown);
+      return {box: b, top: shown ? el.getBoundingClientRect().top + window.scrollY : 0, shown: shown};
+    }).filter(function(p){ return p.shown; });
+    placed.sort(function(a, b){ return a.top - b.top; });
+    var floor = -Infinity;
+    placed.forEach(function(p){
+      // A reply box opening inside a note makes it taller: move the ones below.
+      if(railSize) railSize.observe(p.box);
+      var top = Math.max(p.top, floor);
+      var op = (p.box.offsetParent || document.body).getBoundingClientRect();
+      p.box.style.top = (top - (op.top + window.scrollY)) + "px";
+      p.box.style.left = (mr.right + RAIL_GAP - op.left) + "px";
+      floor = top + p.box.offsetHeight + 8;
+    });
+  }
+  window.addEventListener("resize", layoutRail);
+  if(window.ResizeObserver){
+    var mainEl = document.querySelector("main");
+    if(mainEl) new ResizeObserver(function(){ layoutRail(); }).observe(mainEl);
+  }
+  // --- all notes ----------------------------------------------------------
+  // One list of every note, in document order, through the same filter the
+  // page uses (passes), so there is one filter and not two. A note that no
+  // longer anchors is listed at the end and jumps to the section that keeps
+  // it. Built from byBlock, the same view the badges read.
+  var notesPanel = document.getElementById("notes-panel");
+  var notesToggle = document.getElementById("notes-toggle");
+  function renderNotesPanel(){
+    if(!notesPanel || notesPanel.hidden) return;
+    var list = document.getElementById("notes-list");
+    list.textContent = "";
+    var shown = 0, hiddenN = 0;
+    function entry(note, quote, orphan, go){
+      var li = document.createElement("li");
+      var b = document.createElement("button"); b.type = "button"; b.className = "entry" + (orphan ? " orphan" : "");
+      var e = note.event || note;
+      var t = document.createElement("span"); t.className = "type"; t.textContent = labelOf[e.type] || String(e.type||"").replace("_"," ");
+      b.appendChild(t);
+      var flags = [];
+      if(orphan) flags.push(["orphan","no longer anchors"]);
+      if(note.stale) flags.push(["stale","stale"]);
+      if(note.status && note.status !== "outstanding") flags.push([note.status, note.status === "addressed" ? "to re-check" : note.status]);
+      if(note.unclaimed) flags.push(["unclaimed","unclaimed"]);
+      flags.forEach(function(f){ var x = document.createElement("span"); x.className = "flag " + f[0]; x.textContent = f[1]; b.appendChild(x); });
+      if(e.text){ var tx = document.createElement("span"); tx.className = "text"; tx.textContent = e.text; b.appendChild(tx); }
+      var q = document.createElement("span"); q.className = "quote"; q.textContent = quote || ""; b.appendChild(q);
+      b.onclick = go;
+      li.appendChild(b); list.appendChild(li);
+      shown++;
+    }
+    data.doc.blocks.forEach(function(blk){
+      var notes = byBlock[blk.id];
+      if(!notes) return;
+      if(!passes(blk.id)){ hiddenN += notes.length; return; }
+      notes.forEach(function(n){ entry(n, blk.quote, false, function(){ goTo(blk.id); }); });
+    });
+    var orphans = (res.states||[]).filter(function(st){ return st.orphaned; });
+    if(orphans.length){
+      var h = document.createElement("li"); var h3 = document.createElement("h3"); h3.textContent = "No longer anchored"; h.appendChild(h3); list.appendChild(h);
+      orphans.forEach(function(st){
+        // An answer to a requester note belongs under that note, as above.
+        (st.history||[]).filter(function(n){ return !n.answers; }).forEach(function(n){
+          entry(n, n.event && n.event.quote, true, function(){ var o = document.querySelector(".orphans"); if(o) o.scrollIntoView({block:"start", behavior:"smooth"}); });
+        });
+      });
+    }
+    document.getElementById("notes-n").textContent = shown ? String(shown) : "none yet";
+    var hint = document.getElementById("notes-hidden");
+    hint.hidden = !hiddenN;
+    hint.textContent = hiddenN + (hiddenN === 1 ? " note is" : " notes are") + " on blocks the current filter hides.";
+  }
+  // Under the sticky header, however many rows it wraps to — and it wraps
+  // again when a label in it changes, so the panel follows it rather than
+  // sliding its own close button under the header.
+  function placeNotesPanel(){
+    if(notesPanel) notesPanel.style.top = document.querySelector("header").getBoundingClientRect().bottom + "px";
+  }
+  if(notesPanel && window.ResizeObserver) new ResizeObserver(placeNotesPanel).observe(document.querySelector("header"), {box: "border-box"});
+  function showNotesPanel(on){
+    if(!notesPanel) return;
+    notesPanel.hidden = !on;
+    placeNotesPanel();
+    notesToggle.setAttribute("aria-expanded", on ? "true" : "false");
+    try{ localStorage.setItem("marginalia.notes", on ? "open" : "closed"); }catch(e){}
+    renderNotesPanel();
+  }
+  if(notesToggle){
+    notesToggle.onclick = function(){ showNotesPanel(notesPanel.hidden); };
+    document.getElementById("notes-close").onclick = function(){ showNotesPanel(false); notesToggle.focus(); };
+    notesPanel.addEventListener("keydown", function(e){
+      if(e.key === "Escape"){ e.preventDefault(); showNotesPanel(false); notesToggle.focus(); }
+    });
   }
   function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(function(){t.classList.remove("show");},1800); }
   // The badge says how much was said about a block; its colour says what was
@@ -652,6 +807,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return anchor;
   }
   function attach(el, box){
+    box.mgFor = el;
     if(box.classList.contains("composer")) phoneSheet(el, box);
     // A statement of a drawn diagram: its notes belong under the whole
     // figure, where they are visible in both the picture and the source.
@@ -934,7 +1090,19 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var blk = blockOf[id];
     return blk ? blk.text : "";
   }
-  function closeComposer(){ var c=document.querySelector(".composer"); if(c) c.remove(); }
+  // Closing the composer hands focus back to whatever opened it (a block, a
+  // diagram shape) when focus was still in the composer, so a keyboard user
+  // lands where they were rather than at the top of the page. A pointer user
+  // who has already clicked elsewhere keeps their focus.
+  var composerFrom = null;
+  function closeComposer(){
+    var c=document.querySelector(".composer"), from=composerFrom;
+    composerFrom = null;
+    if(!c) return;
+    var inside = c.contains(document.activeElement);
+    c.remove();
+    if(inside && from && from.isConnected) from.focus({preventScroll:true});
+  }
   // save appends one event and folds it into the page without a reload. In
   // share mode there is no server to append to, so the browser is the store
   // and the reviewer hands the result over themselves — the one place in
@@ -982,9 +1150,13 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // with the action already chosen.
   function openComposer(el, want, selection){
     closeComposer();
+    composerFrom = document.activeElement !== document.body ? document.activeElement : el;
     var id=el.dataset.block, current=want||actions[0];
     if(!current) return;
     var c=document.createElement("div"); c.className="composer";
+    // Inline, not a dialog: the block stays readable above it. Named, so a
+    // screen reader says where focus went.
+    c.setAttribute("role", "group"); c.setAttribute("aria-label", "New note on block " + id);
     // What the note is about, when it is about less than the whole block.
     if(selection){
       var on=document.createElement("div"); on.className="quoted";
@@ -1069,6 +1241,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
     c.appendChild(chips); c.appendChild(fieldBox); c.appendChild(ta); c.appendChild(row);
     el.mg_composer = c;
     renderFields();
+    c.addEventListener("keydown", function(e){
+      if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); closeComposer(); }
+    });
     attach(el, c); ta.focus();
   }
   // --- commenting on a sentence -------------------------------------------
@@ -1289,6 +1464,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     return true;
   }
   function updateFilterLabel(){
+    renderNotesPanel();
     var sum = document.querySelector("#filter summary");
     if(!sum) return;
     var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
@@ -1334,6 +1510,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var what = navKeys[e.key];
     return what && keyFree(e.key) ? what : "";
   }
+  // `i` goes back to the inbox. Like the letters above it yields to a
+  // configured action (no shipped preset claims it; `copy` takes `u`, which
+  // is why it is not Gmail's key), and it only exists where there is an
+  // inbox to go back to.
+  function upKey(e){ return !!data.inbox && e.key === "i" && !e.shiftKey && keyFree("i"); }
+  function goUp(){ window.location.href = data.inbox; }
   function doNav(what){
     move(what === "next" || what === "nextOpen" ? 1 : -1, what === "nextOpen" || what === "prevOpen");
   }
@@ -1385,6 +1567,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       if(keyFree(k)) lines.push(k + " — " + names[navKeys[k]]);
       else lines.push(k + " — taken by " + (byKey[k].label || byKey[k].type));
     });
+    if(data.inbox) lines.push(keyFree("i") ? "i — back to inbox" : "i — taken by " + (byKey.i.label || byKey.i.type));
     toast(lines.join("  \u00b7  "));
   }
   // Typing into anything, or composing a note, owns the keyboard outright.
@@ -1400,6 +1583,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     // A focused block has its own handler, and a configured action there beats
     // navigation. It calls doNav itself for what is left over.
     if(e.target && e.target.closest && e.target.closest(".block")) return;
+    if(upKey(e)){ e.preventDefault(); goUp(); return; }
     var what = navFor(e);
     if(!what) return;
     e.preventDefault();
@@ -1534,6 +1718,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
       });
       return;
     }
+    // A block that holds other controls (a list around its items, a fence
+    // around its statements, a tree node around its fold caret, a paragraph
+    // around a link) is announced as a group, not a button: a button may not
+    // contain controls, and a screen reader flattens what is inside one. It
+    // still takes focus, a click and Enter like any other block.
+    if(el.getAttribute("role") === "button" && el.querySelector("button,a[href],input,select,textarea,[tabindex],[role=button]")) el.setAttribute("role", "group");
     // Blocks nest — a list item sits inside its list, a sub-item inside it —
     // so only the innermost block under the pointer answers.
     el.addEventListener("click", function(e){
@@ -1559,6 +1749,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
         if(needsInput(a)) openComposer(el, a); else save(el, a, "", {});
         return;
       }
+      if(upKey(e)){ e.preventDefault(); goUp(); return; }
       var what = navFor(e);
       if(!what) return;
       e.preventDefault();
@@ -1600,14 +1791,55 @@ window.__MARGINALIA__ = {{.DataJSON}};
       // A shape the renderer anchored answers for its statement. The click
       // stops here: the diagram block around it would otherwise claim it and
       // open a composer about the whole picture.
+      function choose(shape){
+        var el = elOf[shape.dataset.anchor];
+        if(!el) return false;
+        if((blockOf[el.dataset.block]||{}).readonly){ toast("This block is read-only in this review."); return true; }
+        openComposer(el);
+        return true;
+      }
       pic.addEventListener("click", function(e){
         var shape = e.target.closest && e.target.closest("[data-anchor]");
         if(!shape) return;
-        var el = elOf[shape.dataset.anchor];
-        if(!el) return;
+        if(choose(shape)) e.stopPropagation();
+      });
+      // The keyboard reaches the picture too (issue #154). Each statement is
+      // one stop — its box, or for an arrow its label (else the arrow) —
+      // named by the statement it stands for, in the order the source
+      // declares them, which is not the order mermaid paints them in. The
+      // figure is one Tab stop holding a roving focus: Tab and the arrow keys
+      // move between statements, and Tab past the last one leaves.
+      var stops = [];
+      Array.prototype.forEach.call(fig.querySelectorAll(".src .block[data-block]"), function(span){
+        var id = span.dataset.block, sel = '[data-anchor="' + id.replace(/"/g, '\\"') + '"]';
+        var shape = pic.querySelector("g" + sel) || pic.querySelector("path" + sel + ":not(.mg-hit)");
+        if(!shape) return;
+        shape.setAttribute("tabindex", stops.length ? "-1" : "0");
+        shape.setAttribute("role", "button");
+        shape.setAttribute("aria-label", "Statement " + (span.dataset.quote || id));
+        shape.addEventListener("focus", function(){ hover(shape, true); });
+        shape.addEventListener("blur", function(){ hover(shape, false); });
+        stops.push(shape);
+      });
+      function move(from, by){
+        var i = stops.indexOf(from) + by;
+        if(i < 0 || i >= stops.length) return false;
+        from.setAttribute("tabindex", "-1");
+        stops[i].setAttribute("tabindex", "0");
+        stops[i].focus();
+        return true;
+      }
+      pic.addEventListener("keydown", function(e){
+        var shape = e.target;
+        if(stops.indexOf(shape) < 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+        var by = 0;
+        if(e.key === "Enter" || e.key === " "){ e.preventDefault(); e.stopPropagation(); choose(shape); return; }
+        if(e.key === "Tab") by = e.shiftKey ? -1 : 1;
+        else if(e.key === "ArrowRight" || e.key === "ArrowDown") by = 1;
+        else if(e.key === "ArrowLeft" || e.key === "ArrowUp") by = -1;
+        if(!by) return;
+        if(move(shape, by) || e.key !== "Tab"){ e.preventDefault(); }
         e.stopPropagation();
-        if((blockOf[el.dataset.block]||{}).readonly){ toast("This block is read-only in this review."); return; }
-        openComposer(el);
       });
     });
   })();
@@ -1792,6 +2024,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
   }
   count();
   progress();
+  // On a phone the panel covers the page, so it opens only when asked.
+  var narrow = window.matchMedia && window.matchMedia("(max-width:640px)").matches;
+  try{ if(!narrow && localStorage.getItem("marginalia.notes") === "open") showNotesPanel(true); }catch(e){}
   // Folding is a tree's business, but filtering is every document's, and both
   // resolve here — so this runs for a markdown page too.
   applyFolds();

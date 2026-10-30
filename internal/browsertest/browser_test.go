@@ -71,6 +71,16 @@ func browser(t *testing.T) context.Context {
 	)
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
 	ctx, cancelCtx := chromedp.NewContext(alloc)
+	// Start the browser before the clock does: a cold first launch on a CI
+	// runner can take most of the budget meant for the page. The start runs
+	// on the untimed context because the first run's context owns the
+	// browser, and cancelling a timeout on it would kill Chrome; a launch
+	// that hangs is left to go test's own -timeout.
+	if err := chromedp.Do(ctx); err != nil {
+		cancelCtx()
+		cancelAlloc()
+		t.Fatalf("starting the browser: %v", err)
+	}
 	ctx, cancelTimeout := context.WithTimeout(ctx, 20*time.Second)
 	t.Cleanup(func() { cancelTimeout(); cancelCtx(); cancelAlloc() })
 	return ctx
@@ -287,31 +297,7 @@ func TestReplyRoundTrip(t *testing.T) {
 // render committed in internal/diagram/testdata, so the page under test draws
 // exactly what mermaid draws, without Node on the runner.
 func TestDiagramShapeClickLandsOnItsStatement(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the mmdc stand-in is a shell script")
-	}
-	src, err := os.ReadFile("../diagram/testdata/flowchart.mmd")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fixtures, _ := filepath.Glob("../diagram/testdata/flowchart-mermaid-cli-*.svg")
-	if len(fixtures) != 1 {
-		t.Fatalf("want exactly one mermaid-cli fixture, found %v", fixtures)
-	}
-	svg, err := filepath.Abs(fixtures[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	// mmdc -i <in> -o <out> …: copy the fixture to <out>.
-	mmdc := filepath.Join(t.TempDir(), "mmdc")
-	script := "#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ \"$1\" = -o ]; then cp '" + svg + "' \"$2\"; fi; shift; done\n"
-	if err := os.WriteFile(mmdc, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// The renderer caches by source hash in the user cache dir; keep this
-	// test's render out of the developer's cache.
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	src, mmdc := standInMMDC(t)
 
 	r := serve(t, "flow.md", "# Flow\n\n```mermaid\n"+string(src)+"```\n",
 		session.Options{Diagrams: "auto", MMDC: mmdc})
@@ -348,4 +334,38 @@ func TestDiagramShapeClickLandsOnItsStatement(t *testing.T) {
 	if ev.Block != target || ev.Text != "Which database?" {
 		t.Errorf("saved %+v, want a note on %s", ev, target)
 	}
+}
+
+// standInMMDC returns flowchart.mmd and an mmdc stand-in that hands back the
+// real render committed in internal/diagram/testdata, so a page under test
+// draws exactly what mermaid draws, without Node on the runner.
+func standInMMDC(t *testing.T) (src []byte, mmdc string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the mmdc stand-in is a shell script")
+	}
+	src, err := os.ReadFile("../diagram/testdata/flowchart.mmd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtures, _ := filepath.Glob("../diagram/testdata/flowchart-mermaid-cli-*.svg")
+	if len(fixtures) != 1 {
+		t.Fatalf("want exactly one mermaid-cli fixture, found %v", fixtures)
+	}
+	svg, err := filepath.Abs(fixtures[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// mmdc -i <in> -o <out> …: copy the fixture to <out>.
+	mmdc = filepath.Join(t.TempDir(), "mmdc")
+	script := "#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ \"$1\" = -o ]; then cp '" + svg + "' \"$2\"; fi; shift; done\n"
+	if err := os.WriteFile(mmdc, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The renderer caches by source hash in the user cache dir; keep this
+	// test's render out of the developer's cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	return src, mmdc
 }

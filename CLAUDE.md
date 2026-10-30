@@ -160,7 +160,13 @@ users are agents, not humans.
   split ambiguous, so every split is tried and the one naming a real statement
   wins. Each anchored edge also carries an invisible wide copy of itself
   (`.mg-hit`) so a two-pixel arrow is a clickable target, and a box no
-  statement declares answers for the statement that named it. Because those
+  statement declares answers for the statement that named it. The keyboard
+  reaches the picture too (issue #154): the page gives each statement one
+  focusable shape (its box, or an arrow's label), named "Statement …", in the
+  order the *source* declares them rather than mermaid's paint order, as a
+  roving tab stop — Tab and the arrows move, Enter opens the composer, and
+  closing it hands focus back. That is page script, so the SVG and its cache
+  are unchanged. Because those
   names are mermaid's internals and not API, `internal/diagram/testdata` holds
   a **real** `mmdc` output for `flowchart.mmd`, its version in the filename,
   and `fixture_test.go` drives it through the whole pipeline: a mermaid
@@ -274,12 +280,24 @@ users are agents, not humans.
   are out of view. **`require_verdict`** now names the outstanding blocks and
   scrolls to one on click, computed in the page but still enforced by the
   server — a 409 re-opens the same panel, so if the two ever disagree the
-  server wins visibly. On a phone (≤640px, issue #131) the header is
+  server wins visibly. The **all-notes panel** (issue #130, header
+  "Notes") lists every note in document order from `byBlock`, through the
+  same `passes()` filter as the page — one filter, not two — then the notes
+  that no longer anchor; an entry lands on its block. Open/closed is a
+  `localStorage` display choice. The **margin rail** (issue #130 part 2) is page
+  script only: `layoutRail()` (called from `count()`, on resize and by
+  ResizeObservers on `main` and each placed box) moves every `.existing`
+  box, found through `box.mgFor` set in `attach()`, into an absolutely
+  positioned column right of the text, top-aligned to its block and pushed
+  below the previous box on overlap, whenever ≥1200px leaves 18rem beside
+  `main`; otherwise boxes stay inline exactly as before. The composer and
+  requester sidenotes always stay inline. On a phone (≤640px, issue #131) the header is
   one row (title, progress as a fraction, the menus by their short labels,
   Done), the note-count badge moves into the narrower gutter, and the
   composer is a bottom sheet: it quotes its block, rides above the on-screen
-  keyboard through `visualViewport`, and a tap outside closes it. That is a
-  media query plus `phoneSheet()`; desktop is untouched.
+  keyboard through `visualViewport`, and a tap outside closes it unless
+  something is typed. That is a media query plus `phoneSheet()`; desktop is
+  untouched.
 - Sentence-level notes (issue #49) are a **new event field, never a longer
   block id**: a sub-block id like `5.3/2#1` would be accepted by every consumer
   that already reads `block` and would silently mean something different to
@@ -393,7 +411,9 @@ users are agents, not humans.
   `server.Server` routes mounted with `http.StripPrefix` and told their mount
   through `server.Options.BasePath` → `web.Page.Base` → the payload's `base`,
   which every fetch and nav link in the page starts from (the page never
-  assumes `/`), `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
+  assumes `/`), and told its inbox through `server.Options.InboxURL` (`/`),
+  which gives the header an **← Inbox** link and the `i` key — neither exists
+  under `serve` or `export`, which have no inbox, `/mcp` Streamable HTTP (`mcpserver.Transport`, shared with
   `mcp --http`), `/healthz`. Keys are the same on every backend:
   `reviews/<id>/meta/<n>.json` (versioned, highest wins),
   `reviews/<id>/rev/<n>/<name>` (immutable snapshots), `reviews/<id>/log/<name>`
@@ -742,7 +762,14 @@ template) — done**.
   the DOM *and* the appended JSONL. No Chrome → skip; `MARGINALIA_BROWSER=require`
   (set on CI's ubuntu job) makes that a failure; `MARGINALIA_CHROME` names the
   binary. Diagrams use a stand-in `mmdc` that copies the committed real render,
-  so no Node is needed. A PR that changes the page's JS brings a case. Prose
+  so no Node is needed. A PR that changes the page's JS brings a case. axe-core
+  (`axe_test.go`, issue #155) audits a markdown page, the open composer, the
+  Done sheet, a tree, a drawn diagram and the inbox, failing on serious or
+  critical violations; the test fetches a pinned axe tarball from the npm
+  registry, checks its sha256 and caches it — the page never loads it. A
+  block that contains controls (a list, a fence, a tree node, a paragraph
+  with a link) is `role="group"`, not `button`, and list items keep their
+  native role. Prose
   blocks keep their notes and composer as the *next sibling* (`[data-block] +
   .existing`), not inside; diagram statements put theirs under the figure.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
