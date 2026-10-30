@@ -9,7 +9,7 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/document"
 )
 
-// Issue #153: real mmdc 11.17.0 renders of a sequence, a state and an ER
+// Issue #153: real mmdc 12.0.0 renders of a sequence, a state and an ER
 // diagram, driven through the whole pipeline like the flowchart fixture.
 // Shapes are named by id where mermaid gives one, and otherwise by
 // data-et:data-id, since a message or note has no id of its own.
@@ -28,6 +28,10 @@ var kindFixtures = []struct {
 		"message:i6":           "A->DB",
 		"note:i2":              "note",
 		"control-structure:i5": "loop",
+		// nested groups are drawn as they close: the inner one first
+		"message:i9":            "alt/opt/A->DB",
+		"control-structure:i10": "alt/opt",
+		"control-structure:i11": "alt",
 	}, nil},
 	{"state", map[string]string{
 		"my-svg-state-Pending-1": "[*]-->Pending",
@@ -44,6 +48,8 @@ var kindFixtures = []struct {
 		"my-svg-entity-LINE-ITEM-2":                     "ORDER--LINE-ITEM",
 		"my-svg-id_entity-CUSTOMER-0_entity-ORDER-1_0":  "CUSTOMER--ORDER",
 		"my-svg-id_entity-ORDER-1_entity-LINE-ITEM-2_1": "ORDER--LINE-ITEM",
+		// a second relationship between the same pair, and its own label
+		"my-svg-id_entity-CUSTOMER-0_entity-ORDER-1_2": "CUSTOMER--ORDER#2",
 	}, []string{"CUSTOMER/name"}}, // an attribute is a row inside its entity's box
 }
 
@@ -90,7 +96,7 @@ func shapeAnchors(svg string) map[string]string {
 func TestRealKindsAreAnchored(t *testing.T) {
 	for _, f := range kindFixtures {
 		t.Run(f.name, func(t *testing.T) {
-			raw, err := os.ReadFile("testdata/" + f.name + "-mermaid-cli-11.17.0.svg")
+			raw, err := os.ReadFile("testdata/" + f.name + "-mermaid-cli-12.0.0.svg")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -120,7 +126,7 @@ func TestRealKindsAreAnchored(t *testing.T) {
 // A drawing that disagrees with the source on how many messages there are
 // is not paired by position: nothing is better than the wrong one.
 func TestKindsRefuseAMiscount(t *testing.T) {
-	raw, err := os.ReadFile("testdata/sequence-mermaid-cli-11.17.0.svg")
+	raw, err := os.ReadFile("testdata/sequence-mermaid-cli-12.0.0.svg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,5 +135,38 @@ func TestKindsRefuseAMiscount(t *testing.T) {
 	_, out := renderKind(t, "sequence", svg)
 	if got := shapeAnchors(out)["message:i0"]; got != "" {
 		t.Errorf("message paired by position despite a miscount: %q", got)
+	}
+}
+
+// Each label of a repeated ER pair answers for its own relationship, not
+// the pair's first.
+func TestRepeatedPairLabelsKeepTheirOrder(t *testing.T) {
+	raw, err := os.ReadFile("testdata/er-mermaid-cli-12.0.0.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, svg := renderKind(t, "er", string(raw))
+	for _, tag := range shapeTag.FindAllString(svg, -1) {
+		if !strings.HasPrefix(tag, "<g") || attr(tag, "data-id") != "id_entity-CUSTOMER-0_entity-ORDER-1_2" {
+			continue
+		}
+		if got := attr(tag, "data-anchor"); got != "CUSTOMER--ORDER#2" {
+			t.Errorf("the second relationship's label answers for %q", got)
+		}
+		return
+	}
+	t.Fatal("the fixture no longer labels the second CUSTOMER--ORDER relationship")
+}
+
+// A block id is written as HTML, not as a Go string: a quote must not end
+// the attribute, and a backslash is just a backslash.
+func TestAnchorsAreHTMLEscaped(t *testing.T) {
+	got := mark(`<g class="node">`, `say "hi"\&`)
+	if want := `<g class="node" data-anchor="say &quot;hi&quot;\&amp;">`; got != want {
+		t.Errorf("mark wrote %s, want %s", got, want)
+	}
+	line := hitLine(`<line x1="1" y1="2" x2="3" y2="4">`, `a"b`)
+	if !strings.Contains(line, `data-anchor="a&quot;b"`) {
+		t.Errorf("hitLine wrote %s", line)
 	}
 }

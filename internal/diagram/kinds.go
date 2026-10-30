@@ -104,7 +104,28 @@ func newKindIndex(anchors []Anchor) *kindIndex {
 			}
 		}
 	}
+	// mermaid draws a loop or alt when it reaches its `end`, so an inner
+	// group is drawn before the one around it: pair them in closing order.
+	k.byKind["group"] = closingOrder(k.byKind["group"])
 	return k
+}
+
+// closingOrder turns groups listed as the source opens them into the order
+// they close in: each after everything nested in it, siblings in turn.
+func closingOrder(open []Anchor) []Anchor {
+	out := make([]Anchor, 0, len(open))
+	var stack []Anchor
+	for _, g := range open {
+		for len(stack) > 0 && !strings.HasPrefix(g.Block, stack[len(stack)-1].Block+"/") {
+			out = append(out, stack[len(stack)-1])
+			stack = stack[:len(stack)-1]
+		}
+		stack = append(stack, g)
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		out = append(out, stack[i])
+	}
+	return out
 }
 
 // stampKinds anchors the shapes of a sequence, state or ER drawing.
@@ -177,8 +198,13 @@ func (k *kindIndex) match(tag string) (block string, hit bool) {
 			}
 		}
 		if m := erEdge.FindStringSubmatch(id); m != nil {
-			if rs := k.byName[m[1]+"--"+m[2]]; len(rs) > 0 {
-				return rs[0].Block, false
+			// The k-th label of a pair answers for its k-th relationship, on
+			// the same terms as the edges: only when the counts agree.
+			pair := m[1] + "--" + m[2]
+			i := k.seen["label "+pair]
+			k.seen["label "+pair]++
+			if rs := k.byName[pair]; i < len(rs) && k.drawn["relationship "+pair] == len(rs) {
+				return rs[i].Block, false
 			}
 		}
 	}
@@ -240,6 +266,6 @@ func hitLine(tag, block string) string {
 	for _, a := range []string{"x1", "y1", "x2", "y2"} {
 		fmt.Fprintf(&b, " %s=%q", a, attr(tag, a))
 	}
-	fmt.Fprintf(&b, ` stroke="transparent" stroke-width="16" pointer-events="stroke" data-anchor=%q/>`, block)
+	fmt.Fprintf(&b, ` stroke="transparent" stroke-width="16" pointer-events="stroke" data-anchor=%s/>`, quoteAttr(block))
 	return b.String()
 }

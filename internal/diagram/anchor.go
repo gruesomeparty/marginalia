@@ -115,7 +115,7 @@ func hitPath(tag, block string) string {
 	if d == nil {
 		return ""
 	}
-	return fmt.Sprintf(`<path class="mg-hit" d=%q fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" data-anchor=%q/>`, d[1], block)
+	return fmt.Sprintf(`<path class="mg-hit" d=%q fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" data-anchor=%s/>`, d[1], quoteAttr(block))
 }
 
 // shapeName reads the diagram's own name for a group: a flowchart node's
@@ -207,5 +207,14 @@ func mark(tag, block string) string {
 	if strings.HasSuffix(body, "/") {
 		body, close = strings.TrimSuffix(body, "/"), "/>"
 	}
-	return body + fmt.Sprintf(" data-anchor=%q", block) + close
+	return body + " data-anchor=" + quoteAttr(block) + close
 }
+
+// quoteAttr writes a block id as a double-quoted attribute value. Go's %q
+// is not HTML: it would turn a quote in an id into a backslash and a quote
+// that ends the attribute, in markup the page inlines after sanitizing.
+func quoteAttr(v string) string {
+	return `"` + attrEscaper.Replace(v) + `"`
+}
+
+var attrEscaper = strings.NewReplacer("&", "&amp;", `"`, "&quot;")

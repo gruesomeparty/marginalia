@@ -145,7 +145,8 @@ users are agents, not humans.
   11 names in them: a participant, state or entity by name; a message,
   note, group, transition or relationship by its ordinal — and only when the
   drawing holds exactly as many as the source, since a miscount means the
-  pairing would guess. Transitions go unstamped once a composite state is
+  pairing would guess (groups in the order they close, since mermaid draws a
+  loop at its `end`, inner first). Transitions go unstamped once a composite state is
   involved (mermaid numbers those edges its own way), and ER attributes stay
   source-only. A message line gets a wide invisible `line.mg-hit`. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG

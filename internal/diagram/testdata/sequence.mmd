@@ -8,3 +8,8 @@ sequenceDiagram
     C->>A: poll
   end
   A->>DB: write
+  alt cached
+    opt refresh
+      A->>DB: read
+    end
+  end
