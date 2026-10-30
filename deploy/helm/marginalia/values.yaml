@@ -47,6 +47,9 @@ auth:
     header: X-Auth-Request-Id-Token
     # Cookie to read the token from when the header is absent; "-" for none.
     cookie: "-"
+    # The only people the pages admit, by the name their token resolves to
+    # (its email). Empty admits everyone the proxy lets sign in.
+    reviewers: []
   # Agents on /mcp: the static bearer token in existingSecret
   # (MARGINALIA_MCP_TOKEN), an OAuth authorization server, or both.
   mcp:
@@ -100,7 +103,7 @@ service:
 
 # The host is reached on two kinds of path, and they want different auth:
 #   pages   /, /r/<id>/…   reviewers, behind the OIDC proxy
-#   public  /mcp, /healthz, /.well-known/oauth-protected-resource
+#   public  /mcp, /agent/, /healthz, /.well-known/oauth-protected-resource
 #           agents and probes, authenticated by the host itself — a proxy
 #           that redirects them to a login page breaks every agent
 # So each route kind renders two objects, and auth annotations or policies
@@ -190,6 +193,9 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 priorityClassName: ""
+
+# The image `helm test` runs its health check from (needs wget).
+testImage: busybox:1.37
 
 # Admit traffic to the pod only from these peers (NetworkPolicy `from`
 # entries), e.g. the ingress controller's namespace. Egress stays open: the

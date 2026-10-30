@@ -606,9 +606,9 @@ users are agents, not humans.
   `MARGINALIA_HUMAN_JWT_HEADER` (`Options.HumanHeader`, default Cloudflare's)
   and may never be `Authorization`, which is the agent's. Ingress and
   HTTPRoute each render a `-pages` object (where auth annotations/policies
-  go) and a `-public` one for `/mcp`, `/healthz` and
+  go) and a `-public` one for `/mcp`, `/agent/`, `/healthz` and
   `/.well-known/oauth-protected-resource`, which must never sit behind the
-  proxy's login. `validate.yaml` refuses at template time what the host would
+  proxy's login — a new agent-facing path joins `marginalia.publicPaths`. `validate.yaml` refuses at template time what the host would
   refuse at startup. `helm_chart_test.go` pins the chart version to the
   release (release-please `extra-files`), the single-writer shape, and every
   `MARGINALIA_*` it passes to one the binary reads; `scripts/helm-check.sh`

@@ -131,7 +131,7 @@ chart for any cluster: one pod, a `file://` store on a PersistentVolumeClaim,
 an OIDC proxy of your choosing in front of the pages, and Ingress or Gateway
 API routes. It keeps the same points: exactly one replica, replaced with
 `Recreate` so two pods never hold the store at once; credentials from an
-existing Secret only; and `/mcp`, `/healthz` and
+existing Secret only; and `/mcp`, `/agent/`, `/healthz` and
 `/.well-known/oauth-protected-resource` routed separately so the proxy's
 login never sits in front of an agent. CI installs it into a kind cluster
 (`scripts/helm-smoke.sh`).

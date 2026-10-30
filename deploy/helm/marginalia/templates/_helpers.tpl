@@ -75,6 +75,8 @@ OIDC proxy, as (path, pathType) pairs.
 {{- define "marginalia.publicPaths" -}}
 - path: /mcp
   type: PathPrefix
+- path: /agent/
+  type: PathPrefix
 - path: /healthz
   type: Exact
 - path: /.well-known/oauth-protected-resource

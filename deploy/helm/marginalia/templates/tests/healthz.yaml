@@ -17,7 +17,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: healthz
-      image: busybox:1.37
+      image: {{ .Values.testImage }}
       command: ["wget", "-qO-", "http://{{ include "marginalia.fullname" . }}:{{ .Values.service.port }}/healthz"]
       securityContext:
         allowPrivilegeEscalation: false

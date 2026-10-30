@@ -29,6 +29,9 @@ expect "the chart's own claim" 'kind: PersistentVolumeClaim' --
 expect "the proxy's header reaches the host" 'MARGINALIA_HUMAN_JWT_HEADER' --
 expect "an ingress for pages" 'name: check-marginalia-pages' -- --set ingress.enabled=true
 expect "agents bypass the proxy" 'path: /mcp' -- --set ingress.enabled=true
+expect "the agent long-poll bypasses it too" 'path: /agent/' -- --set ingress.enabled=true
+expect "the gateway's public route has it" 'value: /agent/' -- --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw'
+expect "a reviewer allow-list" 'value: "a@example.com,b@example.com"' -- --set 'auth.human.reviewers={a@example.com,b@example.com}'
 expect "auth annotations on pages" 'auth-url: x' -- --set ingress.enabled=true --set ingress.pagesAnnotations.nginx\\.ingress\\.kubernetes\\.io/auth-url=x
 expect "gateway API routes" 'kind: HTTPRoute' -- --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw'
 expect "an existing claim" 'claimName: mine' -- --set persistence.existingClaim=mine

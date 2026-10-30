@@ -6,6 +6,7 @@
   "MARGINALIA_HUMAN_JWKS_URL" .Values.auth.human.jwksURL
   "MARGINALIA_HUMAN_JWT_HEADER" .Values.auth.human.header
   "MARGINALIA_HUMAN_JWT_COOKIE" .Values.auth.human.cookie
+  "MARGINALIA_REVIEWERS" (join "," .Values.auth.human.reviewers)
   "MARGINALIA_MCP_OAUTH_ISSUER" .Values.auth.mcp.oauth.issuer
   "MARGINALIA_MCP_OAUTH_AUDIENCE" .Values.auth.mcp.oauth.audience
   "MARGINALIA_MCP_OAUTH_JWKS_URL" .Values.auth.mcp.oauth.jwksURL

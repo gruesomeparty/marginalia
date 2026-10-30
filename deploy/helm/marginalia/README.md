@@ -59,6 +59,7 @@ everything that reviewer writes.
 | `auth.human.jwksURL` | Only if the issuer has no `/.well-known/openid-configuration` |
 | `auth.human.header` | The header the proxy forwards it in (default `X-Auth-Request-Id-Token`) |
 | `auth.human.cookie` | A cookie holding it, if the proxy uses one (default: none) |
+| `auth.human.reviewers` | Optional: the only emails the pages admit; anyone else the proxy signed in gets a 403 |
 
 The header cannot be `Authorization`. On a page route a bearer token is an
 agent's credential and is refused outright, so the proxy has to put the
@@ -134,18 +135,20 @@ also the escape hatch for any routing the chart does not render: leave both
 
 ## Agents: the public paths
 
-Three paths must reach the host without the proxy's login in the way:
+These paths must reach the host without the proxy's login in the way:
 
 - `/mcp` — agents authenticate there themselves, with the bearer token from
   the Secret or an OAuth token (`auth.mcp.oauth.*`). A proxy that answers
   with a login redirect breaks every agent, and hides the 401 an OAuth client
   needs to find its authorization server.
+- `/agent/` — the long-poll an agent with a shell waits on
+  (`/agent/r/<id>/wait`), with the same bearer token.
 - `/.well-known/oauth-protected-resource` — the metadata that 401 points to.
 - `/healthz` — the probes, and anything watching from outside.
 
 So the chart renders two objects per route kind: `<release>-marginalia-pages`
 for `/`, which gets `ingress.pagesAnnotations` (the auth), and
-`<release>-marginalia-public` for those three paths, which does not. The
+`<release>-marginalia-public` for those paths, which does not. The
 more specific path wins on any controller that implements the spec.
 
 ## Values
