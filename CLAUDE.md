@@ -757,7 +757,11 @@ owner is the decision instead (it always counts). State is one sticky
 github-actions' own, and labels `merge:human`/`merge:changes`. A merge always
 passes `--match-head-commit`; made with the workflow token it starts no push
 workflow, so the loop dispatches `release.yml` (or merges with a
-`MERGE_TOKEN` secret instead).
+`MERGE_TOKEN` secret instead). It also runs on a push to `main` and flags
+conflicts: a non-skipped PR GitHub reports `CONFLICTING` gets
+`merge:conflict` and one `<!-- agent:merge-conflict v1 sha: -->` comment,
+both cleared once it merges cleanly. It never rebases or resolves, and leaves
+a PR that is merely behind alone (`main` does not require up to date).
 
 Dependency updates are the one exception to the human gate on `main`, at
 Berkay's request: Renovate (`renovate.json`) owns every ecosystem —
