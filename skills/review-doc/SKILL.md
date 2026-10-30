@@ -128,6 +128,7 @@ Supported inputs and how their blocks are anchored:
 | `.md`, `.markdown` | `5.3/2` (section path + ordinal); list items add their position, `5.3/2.1` |
 | `.proto` | `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` |
+| OpenAPI/Swagger in any of those | `GET /orders/{id}`, `components/schemas/Order` (`definitions/Order`), the rest as above |
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; inside a fence, under the fence's block — `1/3/client-->api` |
 | `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |

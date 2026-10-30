@@ -117,6 +117,10 @@ func bracket(open, count, close string) string {
 // one root per document, distinguished in the path.
 func dataDocument(path, format string, roots []dataNode) *Document {
 	tb := newTreeBuilder()
+	if isOpenAPI(roots) {
+		addOpenAPI(tb, roots[0])
+		return &Document{Path: path, Format: format, Blocks: tb.blocks}
+	}
 	for i, root := range roots {
 		id := "$"
 		if len(roots) > 1 {
@@ -130,15 +134,18 @@ func dataDocument(path, format string, roots []dataNode) *Document {
 // addDataNode appends n and its descendants in pre-order. label is what the
 // node is called on its own line ("" for a root, which shows only its shape).
 func addDataNode(tb *treeBuilder, n dataNode, id, parentID, label string, level int) {
-	id = tb.add(node{
+	id = tb.add(dataLine(n, id, parentID, label, level))
+	addDataChildren(tb, n, id, level+1)
+}
+
+// dataLine is the tree node for n's own line.
+func dataLine(n dataNode, id, parentID, label string, level int) node {
+	return node{
 		Parent: parentID,
 		ID:     id,
 		Kind:   n.Kind,
 		Level:  level,
 		Text:   strings.Join(nonEmpty(n.Comment, dataText(n, label), n.Trailing), " "),
 		HTML:   dataHTML(n, label),
-	})
-	for i, child := range n.Children {
-		addDataNode(tb, child, dataPath(id, child, i), id, dataLabel(child, i), level+1)
 	}
 }
