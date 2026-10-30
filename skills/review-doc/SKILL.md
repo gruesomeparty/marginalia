@@ -1,6 +1,6 @@
 ---
 name: review-doc
-description: Use when you need a human to review a document, schema, config or diagram you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML file, mermaid flowchart) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
+description: Use when you need a human to review a document, schema, config or diagram you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML file, mermaid diagram) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
 ---
 
 # Reviewing a document with Marginalia
@@ -129,7 +129,7 @@ Supported inputs and how their blocks are anchored:
 | `.proto` | `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` |
 | OpenAPI/Swagger in any of those | `GET /orders/{id}`, `components/schemas/Order` (`definitions/Order`), the rest as above |
-| `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; inside a fence, under the fence's block — `1/3/client-->api` |
+| `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; sequence messages `C->A` (repeats `C->A#2`), state transitions `Pending-->Paid`, ER relationships `CUSTOMER--ORDER`; inside a fence, under the fence's block — `1/3/client-->api` |
 | `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |
 

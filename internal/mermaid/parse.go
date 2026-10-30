@@ -1,13 +1,15 @@
 // Package mermaid parses mermaid diagram source structurally, so every
-// statement of a flowchart — a node, an edge, a subgraph — can be anchored and
-// commented on its own instead of the diagram being one opaque block of code.
+// statement of a diagram — a flowchart's nodes, edges and subgraphs, a
+// sequence diagram's messages, a state diagram's transitions, an ER
+// diagram's relationships — can be anchored and commented on its own instead
+// of the diagram being one opaque block of code.
 //
 // Like internal/protoschema the parser is deliberately tolerant rather than
 // semantic: it does not validate, resolve or reject. A construct it does not
 // recognize is still kept, verbatim, as a statement — losing a line of
 // someone's diagram would be far worse than mislabelling it. Diagram types
-// other than flowchart/graph return ErrUnsupported, which callers turn into
-// "review this as source" rather than an error.
+// it does not take apart (class, gantt, pie…) return ErrUnsupported, which
+// callers turn into "review this as source" rather than an error.
 package mermaid
 
 import (
@@ -17,9 +19,9 @@ import (
 	"strings"
 )
 
-// ErrUnsupported reports source that is not a flowchart, so the caller can
-// fall back to reviewing it as a single block of source.
-var ErrUnsupported = errors.New("mermaid: only flowchart and graph diagrams are parsed statement by statement")
+// ErrUnsupported reports a diagram type Parse does not take apart, so the
+// caller can fall back to reviewing it as a single block of source.
+var ErrUnsupported = errors.New("mermaid: only flowchart, sequence, state and ER diagrams are parsed statement by statement")
 
 // Statement kinds produced by Parse.
 const (
@@ -60,19 +62,25 @@ type Stmt struct {
 	Children []*Stmt // statements inside a subgraph
 }
 
-// Diagram is a parsed flowchart. Stmts is in source order and includes the
+// Diagram is a parsed diagram. Stmts is in source order and includes the
 // header as its first statement, so a renderer that walks it emits the
 // document as written.
 type Diagram struct {
-	Type  string // "flowchart" or "graph"
+	Type  string // "flowchart", "graph", "sequence", "state" or "er"
 	Stmts []*Stmt
 }
 
-var headerRe = regexp.MustCompile(`(?i)^(flowchart|graph)\b`)
+var headerRe = regexp.MustCompile(`(?i)^(flowchart|graph|sequenceDiagram|stateDiagram-v2|stateDiagram|erDiagram)\b`)
+
+// types maps a header keyword to the diagram type it opens.
+var types = map[string]string{
+	"flowchart": "flowchart", "graph": "graph", "sequencediagram": "sequence",
+	"statediagram-v2": "state", "statediagram": "state", "erdiagram": "er",
+}
 
 // Parse turns mermaid source into a diagram. It returns ErrUnsupported when
-// the source does not open a flowchart — every other input parses, however
-// odd, because the fallback is to keep the line as it was written.
+// the source does not open a type it takes apart — every other input parses,
+// however odd, because the fallback is to keep the line as it was written.
 func Parse(src []byte) (*Diagram, error) {
 	p := &parser{lines: splitLines(src), dia: &Diagram{}}
 	i := p.prelude()
@@ -84,14 +92,18 @@ func Parse(src []byte) (*Diagram, error) {
 	if m == nil {
 		return nil, ErrUnsupported
 	}
-	p.dia.Type = strings.ToLower(m[1])
+	p.dia.Type = types[strings.ToLower(m[1])]
 	p.add(&Stmt{
-		Kind: KindDiagram, Name: p.dia.Type, Text: parts[0].text,
+		Kind: KindDiagram, Name: strings.ToLower(m[1]), Text: parts[0].text,
 		Line: p.lines[i].num, Start: parts[0].start, End: parts[0].end,
 	})
 	// `graph TD; A-->B` is legal: the header's own line can carry statements.
 	for _, part := range parts[1:] {
-		p.statement(part, p.lines[i].num)
+		if p.flowchart() {
+			p.statement(part, p.lines[i].num)
+		} else {
+			p.other(part, p.lines[i].num)
+		}
 	}
 	for i++; i < len(p.lines); i++ {
 		ln := p.lines[i]
@@ -102,6 +114,14 @@ func Parse(src []byte) (*Diagram, error) {
 			p.comment(ln)
 		case strings.HasPrefix(body, "%%{"):
 			i = p.directive(i, KindInit, "init", "}%%")
+		case p.dia.Type == "state" && blockNote(body):
+			i = p.directive(i, KindNote, "note", "end note")
+		case !p.flowchart():
+			// Only a flowchart is split at semicolons: elsewhere one may sit
+			// in a message or a label, and the line is the statement.
+			if sp, ok := trimSpan(ln, 0, len(ln.text)); ok {
+				p.other(sp, ln.num)
+			}
 		default:
 			for _, part := range splitStatements(ln) {
 				p.statement(part, ln.num)

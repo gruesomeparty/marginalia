@@ -18,7 +18,7 @@ const mermaidSourceKind = "source"
 // subgraph — so a note lands on the edge that is wrong rather than on the
 // diagram that contains it.
 //
-// A diagram type the parser does not take apart (a sequence diagram, say) is
+// A diagram type the parser does not take apart (a class diagram, say) is
 // not an error: it renders as the single source block it is today, which is
 // exactly what the reviewer had before.
 func parseMermaid(path string, src []byte) (*Document, error) {

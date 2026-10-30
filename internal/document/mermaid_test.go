@@ -149,8 +149,8 @@ func TestMermaidDocument(t *testing.T) {
 // A diagram type Marginalia does not take apart keeps every character and
 // stays reviewable as the source block it already was.
 func TestMermaidUnsupportedDiagramKeepsSource(t *testing.T) {
-	src := "sequenceDiagram\n  Alice->>Bob: Hi\n  Bob-->>Alice: Hello\n"
-	doc, err := ParseBytes("seq.mmd", []byte(src))
+	src := "classDiagram\n  Alice <|-- Bob\n  Bob --> Carol\n"
+	doc, err := ParseBytes("class.mmd", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestMermaidUnsupportedDiagramKeepsSource(t *testing.T) {
 	if one.Kind != mermaidSourceKind {
 		t.Errorf("kind = %q", one.Kind)
 	}
-	for _, want := range []string{"Alice-&gt;&gt;Bob: Hi", "Bob--&gt;&gt;Alice: Hello"} {
+	for _, want := range []string{"Alice &lt;|-- Bob", "Bob --&gt; Carol"} {
 		if !strings.Contains(one.HTML, want) {
 			t.Errorf("source block is missing %q:\n%s", want, one.HTML)
 		}
@@ -171,7 +171,7 @@ func TestMermaidUnsupportedDiagramKeepsSource(t *testing.T) {
 // The same fallback inside markdown: the fence is the code block it is today,
 // with the anchor it already had, and nothing extra.
 func TestMermaidUnsupportedFenceStaysOneBlock(t *testing.T) {
-	doc, err := ParseBytes("doc.md", []byte("# T\n\n```mermaid\nsequenceDiagram\n  Alice->>Bob: Hi\n```\n"))
+	doc, err := ParseBytes("doc.md", []byte("# T\n\n```mermaid\nclassDiagram\n  Alice <|-- Bob\n```\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestMermaidUnsupportedFenceStaysOneBlock(t *testing.T) {
 	if fence.HasChildren {
 		t.Error("an unparsed diagram has no statements to anchor")
 	}
-	if !strings.Contains(fence.HTML, "Alice-&gt;&gt;Bob: Hi") {
+	if !strings.Contains(fence.HTML, "Alice &lt;|-- Bob") {
 		t.Errorf("fence lost its source: %s", fence.HTML)
 	}
 }
@@ -250,4 +250,26 @@ func stripTags(html string) string {
 		}
 	}
 	return strings.NewReplacer("&lt;", "<", "&gt;", ">", "&#34;", `"`, "&#39;", "'", "&amp;", "&").Replace(b.String())
+}
+
+// Issue #153: a sequence diagram's messages anchor by sender, receiver and
+// ordinal among that pair; an ER diagram's relationships by their entities.
+func TestMermaidSequenceAndERAnchor(t *testing.T) {
+	doc, err := ParseBytes("seq.mmd", []byte("sequenceDiagram\n  C->>A: one\n  A-->>C: ok\n  C->>A: two\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ids(doc), ","); got != "sequencediagram,C->A,A->C,C->A#2" {
+		t.Fatalf("blocks = %s", got)
+	}
+	if doc.Blocks[0].Source == "" {
+		t.Error("the diagram is not handed to the renderer")
+	}
+	doc, err = ParseBytes("doc.md", []byte("# T\n\n```mermaid\nerDiagram\n  CUSTOMER ||--o{ ORDER : places\n```\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ids(doc), ","); got != "1/1,1/2,1/2/CUSTOMER--ORDER" {
+		t.Fatalf("blocks = %s", got)
+	}
 }

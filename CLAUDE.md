@@ -136,7 +136,13 @@ users are agents, not humans.
   JSON walks the token stream, YAML uses `yaml.Node`, TOML recovers order from
   `MetaData.Keys()`. Mermaid is parsed by `internal/mermaid` — line-based,
   bracket-aware and equally tolerant, returning statements with the byte range
-  they occupy so a fence can be annotated in place. `internal/diagram` draws the
+  they occupy so a fence can be annotated in place. Flowcharts, and since
+  issue #153 sequence, state and ER diagrams (`kinds.go`): a message is
+  `from->to` (repeats numbered by the id assigner, so pair + ordinal), a
+  transition `from-->to`, a relationship `A--B`; groups, composite states and
+  entities are containers. Only a flowchart is split at `;`. Their pictures
+  are drawn but not yet stamped; the flowchart matchers find nothing in them,
+  checked against real renders. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
   (scripts, handlers, external refs, `@import` — the page runs no code it did
   not write), stamps the page's block ids onto the shapes as `data-anchor`, and
