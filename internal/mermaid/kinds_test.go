@@ -120,6 +120,10 @@ func TestParseOtherTolerant(t *testing.T) {
 		"diagram erdiagram", "statement }", "entity A", "  attribute id")
 	check(t, parse(t, "sequenceDiagram\n  web-xray->>B: hi\n  B--xweb-xray: no\n"),
 		"diagram sequencediagram", "message web-xray->B", "message B->web-xray")
+	check(t, parse(t, "sequenceDiagram\n  Loop ->> B: tick\n  B->>Loop: ok\n"),
+		"diagram sequencediagram", "message Loop->B", "message B->Loop")
+	check(t, parse(t, "sequenceDiagram\n  alt retry -> fallback\n    A->>B: x\n  end\n"),
+		"diagram sequencediagram", "group alt", "  message A->B")
 	check(t, parse(t, "sequenceDiagram; A->>B: hi\n"),
 		"diagram sequencediagram", "message A->B")
 	check(t, parse(t, "stateDiagram\n  note left of A\n  A --> B\n"),

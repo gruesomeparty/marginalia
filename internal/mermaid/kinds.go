@@ -88,6 +88,13 @@ func (p *parser) sequence(s *Stmt) {
 		kw, rest = keyword(rest)
 		lower = strings.ToLower(kw)
 	}
+	// A message first: a sender may be named like a keyword (`Loop->>B`),
+	// and reading that as a group would nest the rest of the diagram in it.
+	if name, ok := message(s.Text); ok && lower != "note" {
+		s.Kind, s.Name = KindMessage, name
+		p.add(s)
+		return
+	}
 	switch {
 	case lower == "end":
 		p.close(s)
@@ -108,25 +115,26 @@ func (p *parser) sequence(s *Stmt) {
 			s.Name += "/" + t
 		}
 	default:
-		head := s.Text
-		if i := strings.Index(head, ":"); i >= 0 {
-			head = head[:i]
-		}
-		m := seqArrow.FindStringIndex(head)
-		if m == nil {
-			m = seqCross.FindStringIndex(head)
-		}
-		if m != nil {
-			from := strings.TrimSpace(head[:m[0]])
-			to := strings.TrimLeft(strings.TrimSpace(head[m[1]:]), "+-")
-			if from != "" && to != "" {
-				s.Kind, s.Name = KindMessage, from+"->"+strings.TrimSpace(to)
-				break
-			}
-		}
 		s.Kind, s.Name = KindStatement, "statement"
 	}
 	p.add(s)
+}
+
+// message names a message statement by its sender and receiver.
+func message(text string) (string, bool) {
+	head, _, _ := strings.Cut(text, ":")
+	m := seqArrow.FindStringIndex(head)
+	if m == nil {
+		m = seqCross.FindStringIndex(head)
+	}
+	if m == nil {
+		return "", false
+	}
+	from := strings.TrimSpace(head[:m[0]])
+	to := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(head[m[1]:]), "+-"))
+	// A participant id has no spaces, so `alt retry -> fallback` is a
+	// group whose label holds an arrow, not a message from `alt retry`.
+	return from + "->" + to, from != "" && to != "" && !strings.ContainsAny(from, " \t")
 }
 
 // blockNote reports a state diagram note that runs to `end note`, as
