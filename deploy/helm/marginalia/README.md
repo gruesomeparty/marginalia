@@ -48,9 +48,14 @@ crash-loop on the same complaint.
 
 The proxy signs reviewers in and forwards their **ID token** on every
 request. The host verifies it against the issuer's published keys
-(signature, issuer, audience, expiry), so a header that did not come from the
-proxy gets nowhere, and the token's `email` (else `sub`) is the author of
-everything that reviewer writes.
+(signature, issuer, audience, expiry), so a forged header gets nowhere, and
+the token's `email` (else `sub`) is the author of everything that reviewer
+writes.
+
+The host does not know the proxy's own sign-in rules (an email domain, a
+group). Anyone holding a valid token for the audience who can reach the pod
+around the proxy gets in. Close that with `auth.human.reviewers`, with
+`networkPolicy` admitting only the ingress controller, or both.
 
 | Value | |
 |---|---|
