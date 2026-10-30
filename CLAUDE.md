@@ -68,7 +68,10 @@ users are agents, not humans.
   running HTTP server, so they survive the agent's session ending and let any
   number of agents follow one review; the wait polls the log's size+mtime, not
   `/api/revision`, which counts document re-parses and moves for a different
-  reason. **An agent may answer and may claim, never decide**: `reply_to_note`
+  reason. The wait is short by default (45s, issue #182 — MCP clients such as
+  claude.ai's connector drop a tool call at 60s) and is called in a loop with
+  the returned cursor; it also returns `reason: "question"` on an unanswered
+  `question` past the cursor, so the agent can answer before Done. **An agent may answer and may claim, never decide**: `reply_to_note`
   and `mark_addressed` are the only tools that write, each writes one fixed
   type, and both name the note they are about. There is deliberately **no**
   confirm or reopen tool — that is the reviewer's verdict on the agent's work,
