@@ -144,7 +144,8 @@ users are agents, not humans.
   are drawn but not yet stamped; the flowchart matchers find nothing in them,
   checked against real renders. `internal/diagram` draws the
   diagram: it shells out to mermaid's own CLI (`mmdc`), sanitizes the SVG
-  (scripts, handlers, external refs, `@import` — the page runs no code it did
+  (scripts, handlers, external refs, `@import`, and the `@font-face` webfonts
+  mermaid-cli 12 embeds, issue #87 — the page runs no code it did
   not write), stamps the page's block ids onto the shapes as `data-anchor`, and
   caches by source hash in the user cache dir, never beside the document. That
   reverses the earlier "no picture" decision *on the rendering route only*: an

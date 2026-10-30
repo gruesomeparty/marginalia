@@ -121,6 +121,9 @@ func TestSVGSanitizes(t *testing.T) {
 <!DOCTYPE svg>
 <svg xmlns="http://www.w3.org/2000/svg">
 <style>@import url(https://fonts.example/x.css); .node{fill:red}</style>
+<style>/* licence: http://scripts.sil.org/OFL */
+@font-face { font-family: "X"; src: url("https://fonts.example/x.woff2") }
+@font-face { font-family: "X"; src: url("data:font/woff2;base64,AA") }</style>
 <script>alert(1)</script>
 <script src="https://evil.example/x.js"/>
 <g onclick="steal()" ONMOUSEOVER='x()'><image href="https://evil.example/p.png"/></g>
@@ -135,7 +138,7 @@ func TestSVGSanitizes(t *testing.T) {
 	if !strings.HasPrefix(svg, "<svg") {
 		t.Fatalf("prolog survived: %q", svg[:min(60, len(svg))])
 	}
-	for _, bad := range []string{"script", "onclick", "ONMOUSEOVER", "@import", "evil.example"} {
+	for _, bad := range []string{"script", "onclick", "ONMOUSEOVER", "@import", "evil.example", "@font-face", "fonts.example", "sil.org", "<style></style>"} {
 		if strings.Contains(svg, bad) {
 			t.Errorf("sanitize kept %q:\n%s", bad, svg)
 		}
