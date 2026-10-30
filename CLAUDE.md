@@ -142,7 +142,7 @@ users are agents, not humans.
   transition `from-->to`, a relationship `A--B`; groups, composite states and
   entities are containers. Only a flowchart is split at `;`. Their pictures
   are stamped by `internal/diagram/kinds.go` (issue #153), from what mermaid
-  11 names in them: a participant, state or entity by name; a message,
+  12 names in them: a participant, state or entity by name; a message,
   note, group, transition or relationship by its ordinal — and only when the
   drawing holds exactly as many as the source, since a miscount means the
   pairing would guess (groups in the order they close, since mermaid draws a
