@@ -12,8 +12,10 @@ emptyDir and is lost when the pod goes.
 {{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
 
 No Ingress or HTTPRoute was rendered. Route {{ include "marginalia.host" . }} to
-service {{ include "marginalia.fullname" . }}:{{ .Values.service.port }}, with /mcp, /healthz and
-/.well-known/oauth-protected-resource kept out of the OIDC proxy.
+service {{ include "marginalia.fullname" . }}:{{ .Values.service.port }}, and keep these paths out of the OIDC proxy:
+{{- range (include "marginalia.publicPaths" . | fromYamlArray) }}
+  {{ .path }}
+{{- end }}
 {{- end }}
 
 Check it:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "marginalia.fullname" . }} 8080:{{ .Values.service.port }}

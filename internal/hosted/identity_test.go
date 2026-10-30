@@ -323,7 +323,7 @@ func TestResolvedHumanCarriesProviderAndSubject(t *testing.T) {
 // Cloudflare one is no longer a way in.
 func TestHumanHeaderAndCookieAreConfigurable(t *testing.T) {
 	e := newEdge(t)
-	h, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", Token: "tok", HumanAuth: e.verifier(), HumanHeader: "X-Auth-Request-Id-Token", HumanCookie: "-", Log: testWriter{t}})
+	h, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", Token: "tok", HumanAuth: e.verifier(), HumanHeader: " X-Auth-Request-Id-Token ", HumanCookie: "- ", Log: testWriter{t}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -147,6 +147,7 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.HumanAuth == nil && opts.DevIdentity == "" {
 		return nil, errors.New("hosted: no human identity: configure the edge's JWT (--human-jwt-issuer, --human-jwt-audience) or, on loopback only, --insecure-dev-identity <email>")
 	}
+	opts.HumanHeader, opts.HumanCookie = strings.TrimSpace(opts.HumanHeader), strings.TrimSpace(opts.HumanCookie)
 	if err := checkHumanHeader(opts.HumanHeader); err != nil {
 		return nil, err
 	}
