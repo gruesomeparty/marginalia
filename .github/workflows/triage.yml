@@ -30,7 +30,10 @@ name: Triage issues
 on:
   issues:
     types: [opened, reopened]
-  issue_comment:
+  # Safe here: it runs the default branch, never checks out a PR, passes the
+  # comment body through env (never into a script), and only a trusted
+  # login's unmarked comment picks an issue (scripts/comment-from.sh).
+  issue_comment: # zizmor: ignore[dangerous-triggers]
     types: [created]
   schedule:
     - cron: '41 */6 * * *'   # sweeps anything the event missed, and the backlog
