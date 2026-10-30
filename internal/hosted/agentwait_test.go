@@ -203,3 +203,22 @@ func TestAgentWaitCountsADroppedDocument(t *testing.T) {
 		}
 	}
 }
+
+// A review archived while a wait is parked is gone, not broken.
+func TestAgentWaitOnAnArchivedReview(t *testing.T) {
+	e := newEdge(t)
+	h, ts := openWithEdge(t, e)
+	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	got := make(chan int, 1)
+	go func() {
+		code, _ := do(t, "GET", ts.URL+"/agent/r/"+r.Meta.ID+"/wait?since=0&timeout=5", nil, map[string]string{"Authorization": "Bearer tok"})
+		got <- code
+	}()
+	time.Sleep(100 * time.Millisecond)
+	if err := h.archive(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+	if code := <-got; code != http.StatusNotFound {
+		t.Errorf("archived mid-wait: %d, want 404", code)
+	}
+}

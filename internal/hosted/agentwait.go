@@ -68,16 +68,17 @@ func (h *Host) handleAgentWait(w http.ResponseWriter, r *http.Request) {
 		// Count again only when a log moved or a revision was published: a
 		// parked wait must not decode every log four times a second.
 		tokens, err := h.tokens(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if err == nil && (seen == nil || !slices.Equal(tokens, seen)) {
+			n, done, err = h.tally(id)
+			seen = tokens
 		}
-		if seen == nil || !slices.Equal(tokens, seen) {
-			if n, done, err = h.tally(id); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err != nil {
+			if h.Review(id) == nil {
+				http.NotFound(w, r) // archived while the wait was parked
 				return
 			}
-			seen = tokens
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		if !parked || done || n > since {
 			agentAnswer(w, waitAnswer{Events: n, Done: done})
