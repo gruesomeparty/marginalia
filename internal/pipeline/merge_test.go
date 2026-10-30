@@ -516,7 +516,7 @@ func TestMergeLoopSurvivesARefusedDiff(t *testing.T) {
 // A conflict with main is flagged, never resolved: the PR gets merge:conflict
 // and a comment naming its head, and loses both once it merges cleanly. A PR
 // whose mergeability is not known yet is asked again, and one the gate skips
-// (Renovate rebases its own) is left alone.
+// (Renovate rebases its own, or one put on hold) is left alone.
 func TestMergeLoopFlagsConflicts(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, v any) {
@@ -537,10 +537,12 @@ func TestMergeLoopFlagsConflicts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "mergeable-4"), []byte("CONFLICTING\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, n := range []int{1, 2, 3, 4} {
+	for _, n := range []int{1, 2, 3, 4, 5} {
 		p := prOf(lowRisk())
 		p["number"], p["state"], p["latestReviews"] = n, "OPEN", []any{}
 		switch n {
+		case 5:
+			p["mergeable"], p["labels"] = "CONFLICTING", labels("review:pass", "merge:conflict", "hold")
 		case 1:
 			p["mergeable"] = "CONFLICTING"
 		case 2:
@@ -554,7 +556,7 @@ func TestMergeLoopFlagsConflicts(t *testing.T) {
 		write(fmt.Sprintf("files-%d.json", n), []map[string]any{{"filename": "internal/web/review.html.tmpl"}})
 	}
 
-	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2", "3", "4")
+	cmd := exec.Command("bash", filepath.Join(filepath.Dir(script(t)), "merge-loop.sh"), "1", "2", "3", "4", "5")
 	cmd.Env = append(os.Environ(),
 		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"REPO=o/r", "OWNER=gruesomeparty", "GH_TOKEN=x", "MERGE_LOOP_AUTO=",
@@ -579,6 +581,9 @@ func TestMergeLoopFlagsConflicts(t *testing.T) {
 	}
 	if strings.Contains(log, "issues/3/labels") || strings.Contains(log, "issues/3/comments -F") {
 		t.Errorf("Renovate's PR was flagged:\n%s", log)
+	}
+	if strings.Contains(log, "issues/5/labels") || strings.Contains(log, "issues/5/comments -F") {
+		t.Errorf("a PR put on hold while conflicting was touched:\n%s", log)
 	}
 	if strings.Contains(log, "pr merge") {
 		t.Errorf("a conflicting PR was merged:\n%s", log)

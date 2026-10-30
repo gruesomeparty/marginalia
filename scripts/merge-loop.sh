@@ -94,7 +94,9 @@ conflicts() { # number pr-json
   [ "$mergeable" != UNKNOWN ] || return 0
   labelled=false
   if jq -e '[.labels[].name] | index("merge:conflict")' >/dev/null <<<"$2"; then labelled=true; fi
-  if [ "$mergeable" = CONFLICTING ] && [ "$(gate_of "$2" "" "" | jq -r .decision)" != skip ]; then
+  if [ "$mergeable" = CONFLICTING ]; then
+    # Skipped now (on hold, a draft) but labelled earlier: still conflicting.
+    [ "$(gate_of "$2" "" "" | jq -r .decision)" != skip ] || return 0
     said="$(field sha "$(own "$1" "$conflict_mark" body)")"
     $labelled || label_add "$1" merge:conflict
     if ! $labelled || [ "$said" != "$head" ]; then
