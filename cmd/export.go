@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -65,6 +67,10 @@ func buildExport(paths []string, opts exportOptions) (path string, page []byte, 
 	if _, failures := diagram.Attach(doc, drawer); len(failures) > 0 {
 		return "", nil, fmt.Errorf("a diagram could not be drawn: %w (use --diagrams=off to share the source instead)", failures[0])
 	}
+	source, err := sourceHash(src)
+	if err != nil {
+		return "", nil, err
+	}
 	events, err := feedback.NewStore(src).Load()
 	if err != nil {
 		return "", nil, err
@@ -82,6 +88,7 @@ func buildExport(paths []string, opts exportOptions) (path string, page []byte, 
 		Review:     cfg,
 		Theme:      theme,
 		Static:     true,
+		Source:     source,
 	})
 	if err != nil {
 		return "", nil, err
@@ -142,4 +149,15 @@ func newExportCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.diagrams, "diagrams", "auto", "draw mermaid diagrams into the file: auto (when mermaid-cli is installed), off")
 	cmd.Flags().StringVar(&opts.mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
+}
+
+// sourceHash is the sha256 of a document's bytes: the revision a shared page
+// was made from, which `import` compares against the file it merges into.
+func sourceHash(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }

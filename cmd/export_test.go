@@ -198,8 +198,8 @@ func TestImportRefusesUnanchoredEvents(t *testing.T) {
 	src := doc(t, "spec.md", "# Spec\n\nCapped at 500.\n")
 	bad := filepath.Join(filepath.Dir(src), "bad.json")
 	for _, body := range []string{
-		`{"doc":"x","events":[{"block":"1/2","type":"comment","text":"ok"},{"type":"comment","text":"nowhere"}]}`,
-		`{"doc":"x","events":[{"block":"1/2","text":"no type"}]}`,
+		`{"doc":"spec.md","events":[{"block":"1/2","type":"comment","text":"ok"},{"type":"comment","text":"nowhere"}]}`,
+		`{"doc":"spec.md","events":[{"block":"1/2","text":"no type"}]}`,
 	} {
 		if err := os.WriteFile(bad, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -452,5 +452,52 @@ func TestDiagramModes(t *testing.T) {
 	// better behaviour.
 	if !strings.Contains(err.Error(), "auto, off") || !strings.Contains(err.Error(), "request-feature") {
 		t.Errorf("unhelpful error: %v", err)
+	}
+}
+
+// An export says which file it was made from, and import holds a reply to
+// it (issue #54): another document is refused, naming both; another
+// revision of the same one is merged with a warning, since its notes
+// re-anchor and the changed blocks read as stale.
+func TestImportChecksProvenance(t *testing.T) {
+	src := doc(t, "spec.md", "# Spec\n\nCapped at 500.\n")
+	_, page, err := buildExport([]string{src}, exportOptions{diagrams: "off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, _ := sourceHash(src)
+	if !strings.Contains(string(page), `"source":"`+source+`"`) {
+		t.Fatal("the shared page does not carry the source hash")
+	}
+	shared := filepath.Join(filepath.Dir(src), "review.json")
+	body, _ := json.Marshal(sharedReview{Doc: "spec.md", Source: source, Events: []feedback.Event{
+		{Block: "1/2", Type: feedback.TypeComment, Text: "too low", Ts: "2026-07-03T10:00:00Z"},
+	}})
+	if err := os.WriteFile(shared, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	other := doc(t, "plan.md", "# Plan\n")
+	_, _, _, err = importReview(shared, other)
+	if err == nil || !strings.Contains(err.Error(), "spec.md") || !strings.Contains(err.Error(), "plan.md") {
+		t.Fatalf("a reply to another document: %v", err)
+	}
+
+	var warn strings.Builder
+	if added, _, _, err := importFrom(shared, src, &warn); err != nil || added != 1 || warn.Len() != 0 {
+		t.Fatalf("same revision: added=%d err=%v warn=%q", added, err, warn.String())
+	}
+	if err := os.WriteFile(src, []byte("# Spec\n\nCapped at 900.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(t.TempDir(), "review.json")
+	body, _ = json.Marshal(sharedReview{Doc: "spec.md", Source: source, Events: []feedback.Event{
+		{Block: "1/2", Type: feedback.TypeComment, Text: "still low", Ts: "2026-07-03T11:00:00Z"},
+	}})
+	if err := os.WriteFile(moved, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if added, _, _, err := importFrom(moved, src, &warn); err != nil || added != 1 || !strings.Contains(warn.String(), "earlier revision") {
+		t.Fatalf("edited since: added=%d err=%v warn=%q", added, err, warn.String())
 	}
 }

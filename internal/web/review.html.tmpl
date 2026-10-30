@@ -1996,7 +1996,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var out = document.getElementById("sharejson");
     var hint = document.getElementById("sharehint");
     refreshShare = function(){
-      out.value = JSON.stringify({marginalia: 1, doc: data.doc.path, events: kept}, null, 2);
+      out.value = JSON.stringify({marginalia: 1, doc: data.doc.path, source: data.doc.source, events: kept}, null, 2);
     };
     revealShare = function(){
       panel.hidden = false;
