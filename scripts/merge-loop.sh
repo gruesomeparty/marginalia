@@ -89,7 +89,7 @@ for n in "$@"; do
   # gives the old one, so moving a file out of a sensitive directory still
   # counts as touching it. Without that listing the gate would decide on the
   # weaker one, so the PR waits for the next run instead.
-  if ! files="$(gh api --paginate "repos/$REPO/pulls/$n/files" | jq -s '[add[] | {path: .filename} + (if .previous_filename then {previous_filename} else {} end)]')"; then
+  if ! files="$(gh api --paginate "repos/$REPO/pulls/$n/files" | jq -s '[add[] | {path: .filename, additions, deletions} + (if .previous_filename then {previous_filename} else {} end)]')"; then
     echo "::warning::#$n: could not list the PR's files; skipped"
     continue
   fi
@@ -99,6 +99,8 @@ for n in "$@"; do
 
   review_comment="$(own "$n" "<!-- agent:review v1" body)"
   review_sha="$(field sha "$review_comment")"
+  # The first domain line: it precedes the review's notes in that block.
+  domain="$(field domain "$review_comment")"
   marker="$(own "$n" "$merge_mark" body)"
   asked_sha="$(field sha "$marker")"
   review_id="$(field review "$marker")"
@@ -137,8 +139,8 @@ for n in "$@"; do
   fi
 
   gate="$(jq -n --argjson pr "$pr" --arg owner "$OWNER" --arg trusted "${MERGE_TRUSTED:-}" \
-    --arg review_sha "$review_sha" --arg approved_sha "$approved_sha" --arg auto "${MERGE_LOOP_AUTO:-}" \
-    '{pr: $pr, owner: $owner, trusted: $trusted, review_sha: $review_sha, approved_sha: $approved_sha, auto: $auto}' |
+    --arg review_sha "$review_sha" --arg domain "$domain" --arg approved_sha "$approved_sha" --arg auto "${MERGE_LOOP_AUTO:-}" \
+    '{pr: $pr, owner: $owner, trusted: $trusted, review_sha: $review_sha, domain: $domain, approved_sha: $approved_sha, auto: $auto}' |
     "$here/merge-gate.sh")"
   decision="$(jq -r .decision <<<"$gate")"
   echo "#$n: $decision — $(jq -r '.reasons | join("; ")' <<<"$gate")"
