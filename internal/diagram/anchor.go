@@ -44,6 +44,9 @@ type Anchor struct {
 	Block string // the block id, e.g. 1/4/client-->api
 	Kind  string // the statement kind: edge, node, subgraph…
 	Name  string // the statement's own path segment, e.g. client-->api
+	// Nested is set for a statement inside a subgraph, group or composite
+	// state, whose drawing may be ordered differently from the source.
+	Nested bool
 }
 
 // Stamp adds data-anchor to the shapes of an SVG whose statements appear in
@@ -99,7 +102,8 @@ func Stamp(svg string, anchors []Anchor) (string, int) {
 		matched++
 		return mark(tag, block)
 	})
-	return svg, matched
+	svg, n := stampKinds(svg, anchors)
+	return svg, matched + n
 }
 
 // hitPath widens an edge's target. Mermaid draws an arrow two pixels wide; a

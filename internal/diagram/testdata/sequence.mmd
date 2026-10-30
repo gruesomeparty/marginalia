@@ -1,0 +1,10 @@
+sequenceDiagram
+  participant C as Client
+  participant A as API
+  C->>A: POST /orders
+  A-->>C: 201 Created
+  Note right of A: idempotent
+  loop every minute
+    C->>A: poll
+  end
+  A->>DB: write
