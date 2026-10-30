@@ -76,12 +76,12 @@ type awaitIn struct {
 	ReviewID       string         `json:"review_id"`
 	Name           string         `json:"name,omitempty"`
 	Cursor         map[string]int `json:"cursor,omitempty"`
-	TimeoutSeconds int            `json:"timeout_seconds,omitempty" jsonschema:"how long to wait; default 300, capped at 1800"`
+	TimeoutSeconds int            `json:"timeout_seconds,omitempty" jsonschema:"how long to wait; default 45, capped at 1800. Keep it under your client's tool timeout (often 60s) and call again with the returned cursor"`
 }
 
 type awaitOut struct {
 	Done   bool                  `json:"done"`
-	Reason string                `json:"reason" jsonschema:"review_done, timeout or cancelled"`
+	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), timeout or cancelled"`
 	Docs   []mcpserver.DocEvents `json:"docs"`
 }
 
@@ -127,7 +127,7 @@ func (h *Host) tools() {
 	}, h.markAddressed)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "await_review_done",
-		Description: "Block until the human marks every document of the review done, then return everything new. A timeout is not an error: it reports done=false so you can tell the human they still have it.",
+		Description: "Wait until the human marks every document of the review done, or asks a question (reason \"question\": answer it with reply_to_note while they are still on the page), then return everything new since the cursor. Waits are short by default (45s), under common client tool timeouts such as claude.ai's 60s: call it in a loop, passing each docs[].cursor back as cursor, until done. A timeout is not an error: it reports done=false with the new cursor.",
 	}, h.awaitReviewDone)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "close_review",
