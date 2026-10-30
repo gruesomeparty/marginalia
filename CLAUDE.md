@@ -361,6 +361,14 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
+- OpenAPI (issue #150, `document/openapi.go`) is not a format: a JSON/YAML/TOML
+  document whose one root has an `openapi` or `swagger` key is anchored by
+  what the spec names — `GET /orders/{id}`, the path item `/orders/{id}`,
+  `components/schemas/Order`, Swagger's `definitions/Order` — and generic
+  data paths below and around those. Detection reads the decoded document,
+  never the file name; a misshapen `paths` or `components` falls back to
+  the generic tree under it. Notes written on a spec before this used the
+  generic paths and now surface as orphaned.
 - `internal/highlight` tokenizes code at render time — fenced blocks and
   `.proto` declarations — because a client-side highlighter means a CDN script
   and the page must survive strict CSP. Small on purpose: comments, strings,
