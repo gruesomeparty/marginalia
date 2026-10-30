@@ -127,8 +127,16 @@ func audit(t *testing.T, ctx context.Context, what string) {
 	if _, err := chromedp.Run(ctx, chromedp.Evaluate[any](src+";0")); err != nil {
 		t.Fatalf("inject axe: %v", err)
 	}
+	// Contrast is measured on what is painted, so a toast caught halfway
+	// through its fade reads as faint text on the page. Let running
+	// transitions finish first (capped, in case something loops).
 	found := get(t, ctx, chromedp.Evaluate[[]violation](
-		`axe.run(document, {resultTypes: ["violations"]}).then(r => r.violations)`,
+		`new Promise(done => {
+			const until = performance.now() + 2000;
+			const settle = () => document.getAnimations().some(a => a.playState === "running") && performance.now() < until
+				? requestAnimationFrame(settle) : done();
+			settle();
+		}).then(() => axe.run(document, {resultTypes: ["violations"]})).then(r => r.violations)`,
 		chromedp.EvalAwaitPromise))
 	for _, v := range found {
 		if v.Impact != "critical" && v.Impact != "serious" {
