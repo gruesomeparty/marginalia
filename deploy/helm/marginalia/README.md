@@ -55,7 +55,12 @@ writes.
 The host does not know the proxy's own sign-in rules (an email domain, a
 group). Anyone holding a valid token for the audience who can reach the pod
 around the proxy gets in. Close that with `auth.human.reviewers`, with
-`networkPolicy` admitting only the ingress controller, or both.
+`networkPolicy.enabled` and a `networkPolicy.from` naming only the ingress
+controller (an empty `from` admits every pod), or both.
+
+The host checks the token's expiry on every request, so the proxy has to
+refresh it: with oauth2-proxy, a `--cookie-refresh` shorter than the ID
+token's lifetime. Otherwise a reviewer gets a 401 partway through a review.
 
 | Value | |
 |---|---|

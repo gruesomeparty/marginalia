@@ -93,6 +93,8 @@ limits:
   retainOpen: ""
 
 # More environment, as a map of name: value, and more envFrom sources.
+# extraEnv wins over a setting the chart derives (and skips its checks), and
+# is plain text in the release: credentials go in existingSecret instead.
 extraEnv: {}
 extraEnvFrom: []
 
