@@ -57,7 +57,11 @@ func anchorsOf(doc *document.Document, host string) []Anchor {
 		if i := strings.LastIndex(name, "/"); i >= 0 {
 			name = name[i+1:]
 		}
-		out = append(out, Anchor{Block: b.ID, Kind: b.Kind, Name: name})
+		rel := b.ID
+		if !whole {
+			rel = strings.TrimPrefix(b.ID, host+"/")
+		}
+		out = append(out, Anchor{Block: b.ID, Kind: b.Kind, Name: name, Nested: strings.Contains(rel, "/")})
 	}
 	return out
 }

@@ -561,8 +561,11 @@ Sequence, state and ER diagrams are taken apart the same way: a message by
 who sends it to whom (`C->A`, the second one between the same pair `C->A#2`),
 a transition by what it connects (`Pending-->Paid`), a relationship by its
 pair of entities (`CUSTOMER--ORDER`), with groups, composite states and
-entity attributes underneath. Those are anchored in the source; their
-drawings are not yet clickable. A diagram type the parser does not take
+entity attributes underneath. Their drawings are clickable too: a
+participant, state or entity by name, and a message, note, loop, transition or
+relationship by its place in the source when the picture draws as many as the
+source writes. What cannot be paired that surely (a state edge inside a
+composite state, an entity's attributes) stays one toggle away in the source. A diagram type the parser does not take
 apart — a class diagram, say — stays reviewable as one source block rather
 than failing.
 
@@ -936,7 +939,7 @@ links to where it is tracked.
 | Gap | Detail |
 |---|---|
 | **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs, SQL, HCL and OpenAPI have landed. Still missing: source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
-| **Only some mermaid types decompose** | Flowchart, sequence, state and ER diagrams anchor per statement, and only a flowchart's picture is clickable. Other types stay reviewable as a single source block. |
+| **Only some mermaid types decompose** | Flowchart, sequence, state and ER diagrams anchor per statement, and their pictures are clickable. Other types stay reviewable as a single source block. |
 | **The page's JavaScript is barely tested** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | `internal/browsertest` drives the page in headless Chrome for the composer, one-tap actions, replies and diagram clicks. Keyboard movement, folding, share-mode storage and `--watch` reloads are still verified by hand; each PR that touches the page adds its case. |
 | **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
 | **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
