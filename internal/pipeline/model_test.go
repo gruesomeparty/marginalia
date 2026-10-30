@@ -31,6 +31,8 @@ func TestPickModel(t *testing.T) {
 		{"large review", "review", `{"labels":[],"files":[{"path":"internal/web/page.go","additions":250,"deletions":60}]}`, opus},
 		{"design-heavy review", "review", `{"labels":[],"files":[{"path":"internal/storage/r2.go","additions":3,"deletions":1}]}`, opus},
 		{"deploy review", "review", `{"files":[{"path":"deploy/cloudflare/src/index.ts","additions":1,"deletions":1}]}`, opus},
+		{"mcp review", "review", `{"files":[{"path":"internal/mcpserver/tools.go","additions":1,"deletions":0}]}`, opus},
+		{"truncated listing", "review", `{"files":[`+strings.Repeat(`{"path":"a","additions":0,"deletions":1},`, 99)+`{"path":"a","additions":0,"deletions":1}]}`, opus},
 		{"label up", "review", `{"labels":[{"name":"model:opus"}],"files":[]}`, opus},
 		{"label down", "review", `{"labels":[{"name":"model:sonnet"}],"files":[{"path":"internal/storage/r2.go","additions":900,"deletions":0}]}`, sonnet},
 		{"small issue", "implement", `{"labels":[{"name":"size:s"}]}`, sonnet},

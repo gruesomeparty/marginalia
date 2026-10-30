@@ -39,7 +39,9 @@ case "$loop" in
     lines="$(jq '[.files[]? | .additions + .deletions] | add // 0' <<<"$json")"
     deep="$(jq -r '.files[]?.path' <<<"$json" |
       grep -cE '^(internal/(storage|identity|mcpserver|hosted|review|server|feedback)/|deploy/|PRD\.md$)' || true)"
-    if [ "$deep" -gt 0 ] || [ "$lines" -gt 300 ]; then echo "$opus"; else echo "$sonnet"; fi ;;
+    count="$(jq '[.files[]?] | length' <<<"$json")"
+    # gh lists at most 100 files; a listing that long is a big PR either way.
+    if [ "$deep" -gt 0 ] || [ "$lines" -gt 300 ] || [ "$count" -ge 100 ]; then echo "$opus"; else echo "$sonnet"; fi ;;
   implement)
     if grep -qx 'size:s' <<<"$labels"; then echo "$sonnet"; else echo "$opus"; fi ;;
 esac
