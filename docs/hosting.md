@@ -93,7 +93,8 @@ by step. It is a Worker in front of one **Cloudflare Container**, with the
 store in R2 and Cloudflare Access in front of the pages. These points are
 what it encodes. Anyone building their own deployment has to keep them:
 
-- **One instance.** `max_instances` is `1`. The process loads the store at
+- **One instance.** The Worker addresses one Durable Object, so one
+  container runs. The process loads the store at
   startup and is its single writer. A second instance on the same store
   would corrupt the budget and the inbox, and race the logs.
 - **The image comes through Cloudflare's registry.** A Container cannot pull

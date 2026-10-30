@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // sharedReview is what the share-mode page exports: the document it was
@@ -108,7 +109,9 @@ func identity(e feedback.Event) string {
 func checkReplies(path string, incoming, existing []feedback.Event, logPath string) error {
 	var known map[string]bool
 	for i, e := range incoming {
-		if e.ReplyTo == "" {
+		// A requester note lives in the review config, not in any log, so
+		// there is nothing here to check an answer to one against.
+		if e.ReplyTo == "" || strings.HasPrefix(e.ReplyTo, review.RequesterPrefix) {
 			continue
 		}
 		if known == nil {

@@ -265,6 +265,9 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		AuthorOf: authorOf,
 		Log:      h.out(),
 		BasePath: "/r/" + meta.ID,
+		// The inbox is at the host's root: --public-url is an origin and
+		// nothing else (publicOrigin), so a host is never mounted below "/".
+		InboxURL: "/",
 	})
 	return &Review{Meta: meta, Server: srv}, nil
 }
@@ -485,7 +488,7 @@ func (h *Host) routes() {
 	mux.Handle("/r/{id}", h.requireHuman(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// The page's URLs are relative to its mount, so it has to be
 		// opened with the trailing slash.
-		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently) //nolint:gosec // same-origin: the route only matches /r/{id}, so the target is that path plus a slash
 	})))
 	mux.Handle("/r/{id}/", h.requireHuman(http.HandlerFunc(h.handleReview)))
 	h.mux = mux
@@ -524,7 +527,7 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 	stopped := make(chan struct{})
 	defer close(stopped)
 	drained := make(chan error, 1)
-	go func() {
+	go func() { //nolint:gosec // the drain runs after ctx is done, so it needs a context of its own
 		select {
 		case <-ctx.Done():
 		case <-stopped:

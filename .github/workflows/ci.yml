@@ -41,6 +41,10 @@ jobs:
         with:
           go-version: '1.26'
       - name: Test
+        # The browser suite skips without Chrome; on ubuntu, which ships one,
+        # a skip would mean it silently tested nothing.
+        env:
+          MARGINALIA_BROWSER: ${{ matrix.os == 'ubuntu-latest' && 'require' || '' }}
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Coverage gate + summary
         if: matrix.os == 'ubuntu-latest'
@@ -79,6 +83,8 @@ jobs:
           cache: false
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # goreleaser's sboms step shells out to syft.
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: '~> v2'
@@ -87,6 +93,65 @@ jobs:
           HOMEBREW_TAP_TOKEN: ''
       - name: Smoke-test the amd64 image
         run: ./scripts/image-smoke.sh
+      # The shipped image is scanned (the distroless base, and the Go binary
+      # inside it, whose build info Trivy reads) and compared with the same
+      # image built from the base branch. Only a fixable HIGH or CRITICAL this
+      # change adds fails the job; one already on the base branch is a
+      # warning, so a CVE disclosed against something we ship never blocks
+      # the PR that fixes it. A scan that cannot run (the vulnerability
+      # database failed to download, say) is a warning, not a red PR.
+      - name: Name the amd64 image
+        id: img
+        run: echo "ref=$(docker images 'ghcr.io/gruesomeparty/marginalia' --format '{{.Repository}}:{{.Tag}}' | grep -- '-amd64$' | head -1)" >>"$GITHUB_OUTPUT"
+      - name: Scan the amd64 image
+        id: scan-head
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.img.outputs.ref }}
+          format: json
+          output: trivy-head.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+      - name: Check out the base branch
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.base_ref }}
+          path: .base
+          persist-credentials: false
+      # The base image the way goreleaser builds one: a static linux binary
+      # COPYed onto the base branch's own Dockerfile.
+      - name: Build the base branch image
+        id: base-image
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          ctx="$RUNNER_TEMP/base-image"
+          mkdir -p "$ctx"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go -C .base build -trimpath -ldflags '-s -w' -o "$ctx/marginalia" .
+          docker build -q -t marginalia-base:scan -f .base/Dockerfile "$ctx"
+      - name: Scan the base branch image
+        id: scan-base
+        if: github.event_name == 'pull_request' && steps.base-image.outcome == 'success'
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: marginalia-base:scan
+          format: json
+          output: trivy-base.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+      - name: Fail on vulnerabilities this change adds
+        env:
+          HEAD_OK: ${{ steps.scan-head.outcome == 'success' }}
+          BASE_OK: ${{ steps.scan-base.outcome == 'success' }}
+        run: |
+          head=""; base=""
+          [ "$HEAD_OK" = true ] && head=trivy-head.json
+          [ "$BASE_OK" = true ] && base=trivy-base.json
+          ./scripts/trivy-new.sh "$base" "$head"
   # deploy/helm/marginalia: the chart lints, renders each shape and refuses
   # each setting the host would refuse (helm-check.sh), then installs into a
   # kind cluster from an image built from this checkout (helm-smoke.sh). The
@@ -150,3 +215,22 @@ jobs:
           # Fail the job on findings instead of uploading them to code scanning.
           advanced-security: false
           min-severity: medium
+  # What a pull request adds to go.mod or the Cloudflare template's
+  # package-lock.json: refused if it carries a known high-severity
+  # vulnerability or a licence an MIT project cannot ship. Agents open PRs
+  # here, and so does Renovate, which merges its own on green.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # Permissive licences only. Checked against the changed
+          # dependencies, not the whole graph, so a new one that is not on
+          # this list is a decision to make in that PR.
+          allow-licenses: >-
+            MIT, MIT-0, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, MPL-2.0,
+            Unlicense, 0BSD, CC0-1.0, BlueOak-1.0.0, Python-2.0, Zlib

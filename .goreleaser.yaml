@@ -22,6 +22,10 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: checksums.txt
+# An SPDX SBOM per archive, made by syft (installed by the workflows), so
+# what a release ships can be audited without unpacking it.
+sboms:
+  - artifacts: archive
 
 # The hosted image: the linux binaries above on a distroless base, as a
 # non-root user, pushed to GHCR on every release for linux/amd64 (what

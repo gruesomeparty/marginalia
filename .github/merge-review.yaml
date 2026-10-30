@@ -1,0 +1,20 @@
+# The review the merge loop publishes when a pull request needs the
+# maintainer (.github/workflows/merge-prs.yml). Layered over the default
+# vocabulary, so comments, questions and suggested edits still work on any
+# hunk; the two actions below are the decision, and scripts/merge-verdict.sh
+# reads nothing else as one. internal/pipeline tests that this file loads.
+title: Merge decision
+instructions: |
+  The merge loop could not merge this pull request on its own; the cover page
+  says why. Read the diff, leave notes where you want changes, then press
+  "Merge it" or "Request changes" on any block and finish with Done. A note
+  without a decision counts as a request for changes. The loop merges only the
+  commit you reviewed: if the branch moves, you are asked again.
+actions:
+  - type: merge_pr
+    label: Merge it
+    key: m
+  - type: request_changes
+    label: Request changes
+    key: x
+    requires_text: true

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -74,6 +76,8 @@ func newServeCmd() *cobra.Command {
 		theme       string
 		diagramMode string
 		mmdc        string
+		untilDone   bool
+		timeout     time.Duration
 	)
 	cmd := &cobra.Command{
 		Use:   "serve <doc|dir>...",
@@ -90,7 +94,7 @@ func newServeCmd() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return srv.Run(ctx)
+			return serveUntil(ctx, srv, untilDone, timeout, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", 8787, "port to listen on")
@@ -103,5 +107,50 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&theme, "theme", "", "page palette: "+themeList())
 	cmd.Flags().StringVar(&diagramMode, "diagrams", "auto", "draw mermaid diagrams: auto (when mermaid-cli is installed), off")
 	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
+	cmd.Flags().BoolVar(&untilDone, "until-done", false, "exit 0 once every served document is marked done")
+	cmd.Flags().DurationVar(&timeout, "timeout", 0, fmt.Sprintf("stop serving after this long (e.g. 30m) and exit %d", exitTimeout))
 	return cmd
+}
+
+// exitTimeout is what `serve --timeout` exits with when the deadline passes:
+// GNU timeout's code, so a script can tell "the human never finished" from
+// both success and a failure.
+const exitTimeout = 124
+
+var errReviewDone = errors.New("review done")
+
+// serveUntil runs the server until it is interrupted, every document is
+// marked done (with untilDone), or the timeout passes. Either way Run drains
+// before returning, so a comment saved in the last instant is on disk before
+// the exit code is.
+func serveUntil(ctx context.Context, srv *server.Server, untilDone bool, timeout time.Duration, out io.Writer) error {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	ctx, finish := context.WithCancelCause(ctx)
+	defer finish(nil)
+	if untilDone {
+		_, _ = fmt.Fprintln(out, "marginalia: will exit once every document is marked done")
+		go func() {
+			select {
+			case <-srv.Done():
+				finish(errReviewDone)
+			case <-ctx.Done():
+			}
+		}()
+	}
+	if err := srv.Run(ctx); err != nil {
+		return err
+	}
+	done, total := srv.Progress()
+	switch cause := context.Cause(ctx); {
+	case errors.Is(cause, errReviewDone):
+		_, _ = fmt.Fprintf(out, "marginalia: review done (%d of %d documents)\n", done, total)
+		return nil
+	case timeout > 0 && errors.Is(cause, context.DeadlineExceeded):
+		return exitError{code: exitTimeout, err: fmt.Errorf("timed out after %s with %d of %d documents marked done", timeout, done, total)}
+	}
+	return nil
 }

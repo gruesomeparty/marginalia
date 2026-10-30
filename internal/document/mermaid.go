@@ -116,7 +116,7 @@ func (p *mdParser) mermaidFence(fence *ast.FencedCodeBlock, section, parentID st
 			continue
 		}
 		plain := normalize(mermaidText(s))
-		p.blocks = append(p.blocks, Block{
+		child := Block{
 			ID:      fb.id,
 			Section: section,
 			Ordinal: fb.ordinal,
@@ -130,11 +130,10 @@ func (p *mdParser) mermaidFence(fence *ast.FencedCodeBlock, section, parentID st
 			Quote:       quote(plain, 90),
 			Hash:        hashText(plain),
 			PlainText:   plain,
-		})
+		}
+		p.blocks = append(p.blocks, child)
 		b.WriteString(esc(code[at:s.Start]))
-		fmt.Fprintf(&b, `<span class="block" data-block="%s" data-hash="%s" data-quote="%s" data-kind="%s" data-level="%d" data-parent="%s"%s tabindex="0" role="button" aria-label="Block %s">`,
-			esc(fb.id), esc(hashText(plain)), esc(quote(plain, 90)), esc(s.Kind),
-			fb.level, esc(fb.parent), kidsAttr(len(s.Children) > 0), esc(fb.id))
+		inlineAnchor(&b, child, child.HasChildren)
 		b.WriteString(esc(code[s.Start:s.End]))
 		b.WriteString(`</span>`)
 		at = s.End
@@ -143,6 +142,14 @@ func (p *mdParser) mermaidFence(fence *ast.FencedCodeBlock, section, parentID st
 	b.WriteString(esc(code[at:]))
 	b.WriteString("</code></pre>")
 	return b.String(), kids, true
+}
+
+// inlineAnchor opens the span that makes a stretch of a fence's source its
+// own block; the caller writes the source and closes the span.
+func inlineAnchor(b *strings.Builder, blk Block, kids bool) {
+	fmt.Fprintf(b, `<span class="block" data-block="%s" data-hash="%s" data-quote="%s" data-kind="%s" data-level="%d" data-parent="%s"%s tabindex="0" role="button" aria-label="Block %s">`,
+		esc(blk.ID), esc(blk.Hash), esc(blk.Quote), esc(blk.Kind),
+		blk.Level, esc(blk.Parent), kidsAttr(kids), esc(blk.ID))
 }
 
 func kidsAttr(has bool) string {

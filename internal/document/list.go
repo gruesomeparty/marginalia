@@ -60,7 +60,7 @@ func (p *mdParser) renderList(list *ast.List, section, parentID string, level in
 			return "", err
 		}
 		p.blocks[at].HasChildren = nested != ""
-		fmt.Fprintf(&b, `<li class="block" data-block="%s" data-hash="%s" data-quote="%s" data-kind="%s" tabindex="0" role="button" aria-label="Block %s">`,
+		fmt.Fprintf(&b, `<li class="block" data-block="%s" data-hash="%s" data-quote="%s" data-kind="%s" tabindex="0" aria-label="Block %s">`,
 			esc(id), esc(hashText(plain)), esc(quote(plain, 90)), listItemKind, esc(id))
 		b.WriteString(content)
 		b.WriteString(nested)

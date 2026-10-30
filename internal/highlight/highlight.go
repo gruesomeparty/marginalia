@@ -265,6 +265,12 @@ func init() {
 	}, "proto", "proto3", "protobuf")
 
 	register(Lang{
+		Name: "hcl", lineComment: []string{"#", "//"}, blockOpen: "/*", blockClose: "*/", quotes: "\"",
+		keywords: words(`resource data variable output locals module provider terraform backend required_providers
+			moved import check dynamic content for for_each in if count depends_on lifecycle true false null`),
+	}, "hcl", "terraform", "tf")
+
+	register(Lang{
 		Name: "http", lineComment: []string{"#"}, quotes: "\"",
 		keywords: words(`GET POST PUT PATCH DELETE HEAD OPTIONS HTTP`),
 	}, "http")

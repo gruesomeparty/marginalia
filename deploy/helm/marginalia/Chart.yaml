@@ -13,6 +13,6 @@ keywords:
 # chart 0.3.0 runs image 0.3.0 and a chart never names an image that does not
 # exist yet.
 # x-release-please-start-version
-version: 0.3.0
-appVersion: "0.3.0"
+version: 0.4.0
+appVersion: "0.4.0"
 # x-release-please-end

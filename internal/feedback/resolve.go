@@ -1,6 +1,11 @@
 package feedback
 
-import "sort"
+import (
+	"sort"
+	"strings"
+
+	"github.com/gruesomeparty/marginalia/internal/review"
+)
 
 // Resolve returns the latest event per block (chronological by Ts).
 // Events with an empty Block (e.g. review_done) are excluded.
@@ -55,6 +60,11 @@ type Note struct {
 	// import, or a hand-edited file. It is surfaced as a note of its own
 	// rather than dropped, for the same reason an orphan is.
 	Dangling bool `json:"dangling,omitempty"`
+	// Answers names the requester note this reply answers (review.Note.Key),
+	// when it answers one. The question lives in the review config, not the
+	// log, so the reply stands as a note of its own — the reviewer's answer,
+	// which the agent then owes something — instead of being marked dangling.
+	Answers string `json:"answers,omitempty"`
 	// At is where a sub-anchored note's quote sits in the block as it now
 	// reads, so the page can mark it without searching again. Nil when the
 	// note is about the whole block, or when its quote is gone — and a note
@@ -313,6 +323,9 @@ func attachReplies(byBlock map[string][]Note, replies map[string][]Reply, seen [
 			// orphan is listed instead of discarded.
 			for _, r := range group {
 				n := r.note()
+				if strings.HasPrefix(target, review.RequesterPrefix) && r.Event.Type == TypeReply {
+					n.Dangling, n.Answers = false, target
+				}
 				if _, known := hashes[n.Event.Block]; !known {
 					if _, listed := byBlock[n.Event.Block]; !listed {
 						seen = append(seen, n.Event.Block)

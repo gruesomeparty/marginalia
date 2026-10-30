@@ -22,6 +22,8 @@ const (
 	FormatTOML     = "toml"
 	FormatMermaid  = "mermaid"
 	FormatDiff     = "diff"
+	FormatSQL      = "sql"
+	FormatHCL      = "hcl"
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -45,6 +47,10 @@ func FormatFor(path string) string {
 		return FormatMermaid
 	case ".diff", ".patch":
 		return FormatDiff
+	case ".sql":
+		return FormatSQL
+	case ".tf", ".tfvars", ".hcl":
+		return FormatHCL
 	}
 	return ""
 }
@@ -77,6 +83,10 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseMermaid(path, src)
 	case FormatDiff:
 		return parseDiff(path, src)
+	case FormatHCL:
+		return parseHCL(path, src)
+	case FormatSQL:
+		return parseSQL(path, src)
 	}
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }
@@ -126,6 +136,10 @@ func parseMarkdown(path string, src []byte) (*Document, error) {
 				// Not a diagram type we take apart: render it as the code
 				// block it is, with the anchor it already had.
 				p.blocks = p.blocks[:at]
+			} else if isSQLFence(fence, src) && p.sqlFence(block, fence) {
+				// SQL anchors per statement, like a diagram, once there is
+				// more than one statement to tell apart.
+				continue
 			} else if html, ok := highlightFence(fence, src); ok {
 				// Any other fence is read as code: tokenize it here rather
 				// than shipping a highlighter to the browser.

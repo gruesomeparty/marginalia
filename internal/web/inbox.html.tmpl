@@ -6,7 +6,8 @@
 <title>Marginalia — inbox</title>
 <script>
 // Before first paint: the reviewer's display choice, as on the review page.
-// Nothing else on this page needs a script.
+// Nothing else on this page needs a script; the filter form below only
+// submits itself when a menu changes.
 (function(){
   try{
     var mode = localStorage.getItem("marginalia.mode");
@@ -28,27 +29,43 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 .tabs a:focus-visible{outline:none;box-shadow:var(--ring)}
 .tabs .n{color:inherit;opacity:.75;margin-left:var(--sp-2)}
+/* Filters live in the query string, so a filtered inbox is a link and the
+   form works with no script; the one below only saves pressing Apply. */
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-3) var(--sp-4);margin:0 0 var(--sp-6);font-size:var(--fs-sm);color:var(--muted)}
+.filters label{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.filters .search{flex:1 1 100%}
+.filters input,.filters select,.filters button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--rule);border-radius:var(--r-pill);padding:var(--sp-2) var(--sp-4)}
+.filters input{width:100%}
+.filters button{cursor:pointer}
+.filters input:focus-visible,.filters select:focus-visible,.filters button:focus-visible,.filters .clear:focus-visible{outline:none;box-shadow:var(--ring)}
+.filters .clear{color:var(--accent)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .list{display:flex;flex-direction:column;gap:var(--sp-3);margin:0;padding:0;list-style:none}
 .review{display:block;padding:var(--sp-4) var(--sp-5);background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:var(--r-tab-lg);box-shadow:var(--shadow);color:inherit;text-decoration:none}
 .review:hover{border-color:var(--accent)}
 .review:focus-visible{outline:none;box-shadow:var(--ring)}
-.review .top{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4)}
-.review .title{font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
-.review .status{margin-left:auto;font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
-.review.s-awaiting{border-left-color:var(--marker)}
+/* A row leads with what it needs from you (issue 134): status, then how many
+   notes are outstanding, then anything wrong. Who sent it and which revision
+   it is are there for when you go looking, so they come last and quieter. */
+.group{margin:0 0 var(--sp-6)}
+.group h2{font-size:var(--fs-sm);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 var(--sp-3)}
+.review .lead{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);font-size:var(--fs-sm)}
+.review .need{font-weight:600}
+.review .warn{color:var(--bad)}
+.review .when{margin-left:auto;color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
+.review .title{display:block;margin-top:var(--sp-2);font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
+.review .status{font-size:var(--fs-xs);font-weight:600;padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
+.review.s-awaiting{border-left-color:var(--marker-ink)}
 .review.s-awaiting .status{background:var(--marker);color:var(--on-marker)}
 .review.s-in_progress{border-left-color:var(--accent)}
 .review.s-replied{border-left-color:var(--accent)}
 .review.s-replied .status{background:var(--accent);color:var(--on-accent)}
 .review.s-done{border-left-color:var(--ok)}
 .review.s-done .status{background:color-mix(in srgb,var(--ok) var(--tint-strong),transparent)}
-.review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);color:var(--muted);font-size:var(--fs-sm)}
-.review .counts{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-2);font-size:var(--fs-sm)}
-.review .counts .warn{color:var(--bad)}
+.review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-1);color:var(--muted);font-size:var(--fs-xs)}
 .empty{color:var(--muted);padding:var(--sp-6) 0;text-align:center}
 @media (max-width:40rem){
   main{margin:var(--sp-5) auto;padding:0 var(--sp-4)}
-  .review .status{margin-left:0}
 }
 @media (prefers-reduced-motion:no-preference){.review{transition:border-color .12s}}
 </style>
@@ -60,30 +77,49 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 </header>
 <main>
   <nav aria-label="Which reviews to show">
-    <ul class="tabs">
-      <li><a href="/?tab=needs-me"{{if eq .Tab "needs-me"}} aria-current="page"{{end}}>Needs me<span class="n">{{.NeedsMe}}</span></a></li>
-      <li><a href="/?tab=done"{{if eq .Tab "done"}} aria-current="page"{{end}}>Done<span class="n">{{.Done}}</span></a></li>
-      <li><a href="/?tab=all"{{if eq .Tab "all"}} aria-current="page"{{end}}>All<span class="n">{{.All}}</span></a></li>
+    <ul class="tabs">{{range .Tabs}}
+      <li><a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}<span class="n">{{.N}}</span></a></li>{{end}}
     </ul>
   </nav>
-  {{if .Rows}}<ul class="list">{{range .Rows}}
-    <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
-      <span class="top"><span class="title">{{.Title}}</span><span class="status">{{.StatusLabel}}</span></span>
-      <span class="meta">
-        {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
-        <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
-        <span>last activity <time datetime="{{.WhenISO}}">{{.When}}</time></span>
-        <span>revision {{.Revision}}</span>
-        <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
-      </span>
-      {{if .HasCounts}}<span class="counts">
-        <span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>
-        {{if .Outstanding}}<span>{{.Outstanding}} outstanding</span>{{end}}
-        {{if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
-        {{if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
-      </span>{{end}}
-    </a></li>{{end}}
-  </ul>{{else}}<p class="empty">{{.Empty}}</p>{{end}}
+  <form class="filters" method="get" action="/" role="search" aria-label="Filter and group reviews">
+    <input type="hidden" name="tab" value="{{.Tab}}">
+    <label class="search"><span class="sr">Search</span><input type="search" name="q" value="{{.Filter.Query}}" placeholder="Search titles, agents, documents"></label>
+    <label>Framing <select name="framing">{{range .Framings}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label>Agent <select name="agent">{{range .Agents}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label>Group by <select name="group">{{range .GroupBy}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <button type="submit">Apply</button>
+    {{if .Filtered}}<a class="clear" href="{{.Clear}}">Clear filters</a>{{end}}
+  </form>
+  {{if .Rows}}{{$grouped := .Grouped}}{{range .Groups}}
+  <section class="group" aria-label="{{.Label}}">
+    {{if $grouped}}<h2>{{.Label}}</h2>{{end}}
+    <ul class="list">{{range .Rows}}
+      <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
+        <span class="lead"><span class="status">{{.StatusLabel}}</span>
+          {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
+          {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
+          {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
+          <time class="when" datetime="{{.WhenISO}}" title="last activity">{{.When}}</time></span>
+        <span class="title">{{.Title}}</span>
+        <span class="meta">
+          {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
+          {{if .HasCounts}}<span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>{{end}}
+          <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
+          <span>revision {{.Revision}}</span>
+          <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
+        </span>
+      </a></li>{{end}}
+    </ul>
+  </section>{{end}}{{else}}<p class="empty">{{.Empty}}</p>{{end}}
 </main>
+<script>
+(function(){
+  var form = document.querySelector(".filters");
+  if(!form) return;
+  form.addEventListener("change", function(e){
+    if(e.target.tagName === "SELECT") form.submit();
+  });
+})();
+</script>
 </body>
 </html>

@@ -13,6 +13,12 @@
 # Claude subscription) or an ANTHROPIC_API_KEY repository secret. Without
 # either, runs skip with a notice rather than fail.
 #
+# Answers: a comment on an issue labelled needs-info or needs-decision
+# re-triages it, so a question the loop asked is picked up once it is
+# answered. Only a human's answer counts — scripts/comment-from.sh tells one
+# from an agent's (same account; agents mark what they write) and from a
+# stranger's, whose comment must not start a paid run.
+#
 # Repository variables:
 #   TRIAGE_AUTO_APPROVE=true  let triage add approved-for-agent to a ready,
 #                             s/m-sized issue by a trusted author, so the work
@@ -24,6 +30,11 @@ name: Triage issues
 on:
   issues:
     types: [opened, reopened]
+  # Safe here: it runs the default branch, never checks out a PR, passes the
+  # comment body through env (never into a script), and only a trusted
+  # login's unmarked comment picks an issue (scripts/comment-from.sh).
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created]
   schedule:
     - cron: '41 */6 * * *'   # sweeps anything the event missed, and the backlog
   workflow_dispatch:
@@ -34,7 +45,9 @@ on:
         type: string
 permissions: {}
 concurrency:
-  group: triage
+  # A comment run queues per issue, so a burst of comments (most of them on
+  # PRs, which this workflow ignores) cannot evict a pending sweep.
+  group: triage-${{ github.event_name == 'issue_comment' && github.event.issue.number || 'all' }}
   cancel-in-progress: false
 env:
   # At most this many issues per run, so a burst (or the first backlog sweep)
@@ -42,8 +55,14 @@ env:
   MAX_ISSUES: 10
 jobs:
   pick:
+    # A comment matters only on an issue (not a PR) that is waiting for an answer.
+    if: >-
+      github.event_name != 'issue_comment' || (!github.event.issue.pull_request &&
+      (contains(github.event.issue.labels.*.name, 'needs-info') ||
+       contains(github.event.issue.labels.*.name, 'needs-decision')))
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: read
     outputs:
       issues: ${{ steps.pick.outputs.issues }}
@@ -58,15 +77,29 @@ jobs:
             echo "::notice::No CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret; triage skipped"
             echo "ready=false" >>"$GITHUB_OUTPUT"
           fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: pick
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
           EVENT_ISSUE: ${{ github.event.issue.number }}
+          LOGIN: ${{ github.event.comment.user.login }}
+          USER_TYPE: ${{ github.event.comment.user.type }}
+          BODY: ${{ github.event.comment.body }}
+          TRUSTED: ${{ github.repository_owner }} ${{ vars.TRIAGE_TRUSTED }}
           INPUT: ${{ inputs.issues }}
         run: |
           set -euo pipefail
-          if [ -n "${EVENT_ISSUE:-}" ]; then
+          if [ "$EVENT" = issue_comment ]; then
+            from="$(jq -n --arg login "$LOGIN" --arg type "$USER_TYPE" --arg body "$BODY" \
+              --argjson trusted "$(xargs -n1 <<<"$TRUSTED" | jq -R . | jq -sc .)" \
+              '{login: $login, type: $type, body: $body, trusted: $trusted}' | scripts/comment-from.sh)"
+            echo "comment on #$EVENT_ISSUE is from: $from"
+            if [ "$from" = human ]; then list="$EVENT_ISSUE"; else list=""; fi
+          elif [ -n "${EVENT_ISSUE:-}" ]; then
             list="$EVENT_ISSUE"
           elif [ -n "${INPUT:-}" ]; then
             list="$(tr -cs '0-9' ' ' <<<"$INPUT")"
@@ -97,6 +130,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          # This repository's own workflows start runs with the workflow
+          # token (a triage approval, a merge, the chain), and the action
+          # refuses a bot actor unless named. Only that one: an outside app
+          # stays refused, and the github-actions bot acts for no one else.
+          allowed_bots: github-actions[bot]
           prompt: |
             REPO: ${{ github.repository }}
             ISSUES: ${{ needs.pick.outputs.issues }}

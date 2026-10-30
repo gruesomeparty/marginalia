@@ -267,3 +267,58 @@ func TestInboxIsEmptyBeforeAnythingIsPublished(t *testing.T) {
 		t.Errorf("empty /api/reviews: %d %q", code, body)
 	}
 }
+
+// Search, framing and agent narrow the inbox and its JSON alike, and the tab
+// counts follow the filter so they agree with the list.
+func TestInboxFilters(t *testing.T) {
+	clock := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	h, ts := openClocked(t, storage.NewMemory(), &clock)
+	reviews := seedInbox(t, h, ts, &clock)
+	adr, err := h.Publish(context.Background(), Publish{
+		Title: "Decision record", Agent: "agent:a", Review: "adr",
+		Docs: []Document{{Name: "decision.md", Content: []byte(specDoc)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := func(body string) []string {
+		var out []string
+		for _, m := range regexp.MustCompile(`data-review="([^"]+)"`).FindAllStringSubmatch(body, -1) {
+			out = append(out, m[1])
+		}
+		return out
+	}
+	for query, want := range map[string][]string{
+		"?tab=all&q=progress":       {reviews[web.StatusInProgress].Meta.ID},
+		"?tab=all&q=DECISION.MD":    {adr.Meta.ID},
+		"?tab=all&framing=adr":      {adr.Meta.ID},
+		"?tab=all&agent=agent%3Aa":  {adr.Meta.ID, reviews[web.StatusDone].Meta.ID},
+		"?tab=done&agent=agent%3Aa": {reviews[web.StatusDone].Meta.ID},
+	} {
+		_, body := get(t, ts+"/"+query)
+		if got := ids(body); strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("GET /%s lists %v, want %v", query, got, want)
+		}
+		_, js := get(t, ts+"/api/reviews"+query)
+		var rows []web.InboxRow
+		if err := json.Unmarshal([]byte(js), &rows); err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, r := range rows {
+			got = append(got, r.ID)
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("/api/reviews%s lists %v, want %v", query, got, want)
+		}
+	}
+	_, body := get(t, ts+"/?agent=agent%3Aa")
+	if !strings.Contains(body, `Needs me<span class="n">1</span>`) || !strings.Contains(body, `Done<span class="n">1</span>`) || !strings.Contains(body, `All<span class="n">2</span>`) {
+		t.Errorf("tab counts ignore the filter")
+	}
+	for _, opt := range []string{`<option value="adr">adr</option>`, `<option value="default">default framing</option>`, `<option value="agent:d">agent:d</option>`} {
+		if !strings.Contains(body, opt) {
+			t.Errorf("the filter menus lack %s", opt)
+		}
+	}
+}

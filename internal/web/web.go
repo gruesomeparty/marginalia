@@ -20,7 +20,7 @@ var files embed.FS
 // include — the two layers of the stylesheet live in tokens.css so a page
 // cannot drift from the other by growing a palette of its own.
 var tmpl = template.Must(template.New("review.html.tmpl").
-	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}).
+	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}). //nolint:gosec // only for goldmark output (raw HTML off) and SVG that internal/diagram sanitized
 	ParseFS(files, "review.html.tmpl", "inbox.html.tmpl", "tokens.css"))
 
 // NavDoc is one document of the review set as the navigation tree sees it.
@@ -64,6 +64,10 @@ type Page struct {
 	// API calls and the navigation tree — starts with it, so the page never
 	// assumes it lives at "/".
 	Base string
+	// Inbox is the URL of the list this review was opened from — the hosted
+	// inbox — and "" where there is none (`serve`, `export`). The header's
+	// back link and the `i` shortcut exist only when it is set.
+	Inbox string
 }
 
 // clientBlock is the projection of a Block the page's script actually reads:
@@ -93,11 +97,14 @@ type clientBlock struct {
 	// Notes are the requester's guidance for this block — the agent asking,
 	// not the human answering.
 	Notes []review.Note `json:"notes,omitempty"`
+	// Section is the outline entry the block rolls up into (sections.go).
+	Section string `json:"section,omitempty"`
 }
 
 type clientDoc struct {
-	Path   string        `json:"path"`
-	Blocks []clientBlock `json:"blocks"`
+	Path     string          `json:"path"`
+	Blocks   []clientBlock   `json:"blocks"`
+	Sections []clientSection `json:"sections,omitempty"`
 }
 
 type payload struct {
@@ -113,6 +120,8 @@ type payload struct {
 	// never an absolute path: under a hosted instance the review is mounted
 	// at /r/<id>.
 	Base string `json:"base"`
+	// Inbox is where `i` goes; "" means the page has nowhere to go back to.
+	Inbox string `json:"inbox,omitempty"`
 }
 
 // Review is the review configuration as the page and an API consumer see it:
@@ -175,9 +184,15 @@ func ReviewInfo(c *review.Config, doc *document.Document, rel string) Review {
 // ordinals are omitted deliberately: the page reads those off the block
 // element's data attributes.
 func project(doc *document.Document, cfg *review.Config, names []string) clientDoc {
-	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks))}
-	for _, b := range doc.Blocks {
+	of, secs := sections(doc)
+	out := clientDoc{Path: doc.Path, Blocks: make([]clientBlock, 0, len(doc.Blocks)), Sections: secs}
+	for i, b := range doc.Blocks {
+		section := ""
+		if secs != nil {
+			section = of[i]
+		}
 		out.Blocks = append(out.Blocks, clientBlock{
+			Section:     section,
 			ID:          b.ID,
 			Parent:      b.Parent,
 			HasChildren: b.HasChildren,
@@ -213,12 +228,14 @@ type viewData struct {
 	DataJSON    template.JS
 	Nav         []*navNode
 	ShowNav     bool
+	Outline     []clientSection
 	Total       int
 	DoneN       int
 	SetDone     bool
 	Review      Review
 	Theme       Theme
 	Static      bool
+	Inbox       string
 }
 
 // Render writes the self-contained review page.
@@ -242,11 +259,12 @@ func Render(w io.Writer, p Page) error {
 	if p.Rel != "" {
 		names = append(names, p.Rel)
 	}
+	client := project(doc, cfg, names)
 	raw, err := json.Marshal(payload{
 		Static: p.Static,
-		Doc:    project(doc, cfg, names), Events: events, Resolution: p.Resolution,
+		Doc:    client, Events: events, Resolution: p.Resolution,
 		Author: p.Author, Review: info, Watch: p.Watch, Revision: p.Revision,
-		Base: p.Base,
+		Base: p.Base, Inbox: p.Inbox,
 	})
 	if err != nil {
 		return err
@@ -272,15 +290,17 @@ func Render(w io.Writer, p Page) error {
 		Orphans:     lost,
 		OrphanTitle: orphanTitle(len(lost)),
 		Title:       title,
-		DataJSON:    template.JS(raw),
+		DataJSON:    template.JS(raw), //nolint:gosec // json.Marshal output, which escapes <, > and &
 		Nav:         buildNav(p.Docs, p.Nested, p.Base),
 		ShowNav:     len(p.Docs) > 1,
+		Outline:     client.Sections,
 		Total:       len(p.Docs),
 		DoneN:       done,
 		SetDone:     p.SetDone,
 		Review:      info,
 		Theme:       p.Theme,
 		Static:      p.Static,
+		Inbox:       p.Inbox,
 	})
 }
 

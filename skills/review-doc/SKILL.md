@@ -56,9 +56,16 @@ text, stale where a block changed and orphaned where it is gone, exactly as
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
 2. Give the human that URL and say what you want looked at.
-3. `await_review_done {session_id}` — blocks until they press Done. A timeout
-   is not a failure: it returns `done: false`, so tell the human you are still
-   waiting and call again rather than treating it as an error.
+3. `await_review_done {session_id, cursor}` — wait in a loop, short calls
+   (the default is 45s; keep `timeout_seconds` under your client's tool
+   timeout, often 60s, or the client drops the call and you get nothing).
+   Pass each returned `docs[].cursor` back as `cursor` and act on `reason`:
+   - `question` — the reviewer asked you something mid-review. Answer it with
+     `reply_to_note` now, while they are still on the page, then wait again.
+   - `timeout` — not a failure; they are still reading. Call again.
+   - `review_done` — they submitted the Done sheet. Its `text` is their
+     overall note, if they wrote one, so read it before acting on the
+     per-block notes.
 4. `review_status {session_id}` — per-block state, what went stale, and the
    suggested edits that are safe to apply verbatim.
 
@@ -108,6 +115,12 @@ This prints the URL and the feedback file path (`<path>.feedback.jsonl`). The
 server writes every comment to that file the instant it is saved — there is no
 export step.
 
+To wait for the human from a shell, add `--until-done --timeout 30m`: `serve`
+exits 0 once every served document is marked done, and 124 if the timeout
+passes first, with the log complete either way. To react while the review is
+still open, `GET /api/wait?since=<events>` long-polls and answers within a
+second of a saved note.
+
 Supported inputs and how their blocks are anchored:
 
 | Input | `block` looks like |
@@ -115,7 +128,10 @@ Supported inputs and how their blocks are anchored:
 | `.md`, `.markdown` | `5.3/2` (section path + ordinal); list items add their position, `5.3/2.1` |
 | `.proto` | `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
 | `.json`, `.yaml`, `.yml`, `.toml` | `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` |
+| OpenAPI/Swagger in any of those | `GET /orders/{id}`, `components/schemas/Order` (`definitions/Order`), the rest as above |
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; inside a fence, under the fence's block — `1/3/client-->api` |
+| `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
+| `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |
 
 Anchoring by path is what makes feedback on a schema, config or diagram
 mechanically applicable: the human's note points at the field, node or edge
@@ -260,15 +276,19 @@ The same file carries your own questions and the parts you are not asking about:
 
 ```yaml
 notes:
-  - doc: spec.md            # which document, when you serve a set
+  - id: batch-cap           # optional: the answer's reply_to is req:batch-cap
+    doc: spec.md            # which document, when you serve a set
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
 skip:
   - "2"                  # folded on the page, and refused if anything posts to it
 ```
 
-A note renders beside that block, labelled as yours; the human's reply comes
-back as an ordinary event on the same block. **Name the document** when you
+A note renders beside that block, labelled as yours, and the human answers it
+in place: a `reply` event whose `reply_to` is `req:<id>`. Give each note an `id`
+so you can match answers to questions without computing anything; without one,
+the id is `req:` plus a hash of doc, block and text, and editing the text
+orphans earlier answers. **Name the document** when you
 serve more than one: block ids are per-document (`1/2` exists in every markdown
 file), so an unnamed note follows its id into every document that has one, and
 startup warns you if a note names a document the review does not serve. Prefer a note on the block over a

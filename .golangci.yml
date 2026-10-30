@@ -7,6 +7,29 @@ linters:
     - staticcheck
     - unused
     - misspell
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        # G304 "file inclusion via variable": reading the files the user
+        # names is what this tool does. Paths an agent names are confined by
+        # mcpserver's --root, and storage keys by storage.CheckKey before
+        # they become a path.
+        - G304
+  exclusions:
+    rules:
+      # Tests write fixtures, run fake binaries and hold fake tokens; these
+      # rules describe production hazards and are noise there.
+      - path: _test\.go
+        linters: [gosec]
+        text: "G(101|107|122|204|301|306|703)"
+      # The Disk backend writes a review's log beside the document it reviews
+      # (`<doc>.feedback.jsonl`), so its files and folders take the same
+      # permissions the reviewer's own files have. Tightening them would hide
+      # the log from the user's other tools.
+      - path: internal/storage/disk\.go
+        linters: [gosec]
+        text: "G30[12]"
 formatters:
   enable:
     - gofmt
