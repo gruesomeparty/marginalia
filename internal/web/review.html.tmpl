@@ -423,7 +423,7 @@ header #fold+button{margin-left:.5rem}
   <span class="actions">
     <button id="notes-toggle" type="button" class="secondary" aria-controls="notes-panel" aria-expanded="false">Notes</button>
     <details class="filter" id="filter">
-      <summary><span class="long">Show all</span><span class="short">All</span></summary>
+      <summary aria-label="Filter: Show all"><span class="long">Show all</span><span class="short">All</span></summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Which blocks to show">
           <span class="opts" id="filters">
@@ -434,7 +434,7 @@ header #fold+button{margin-left:.5rem}
       </div>
     </details>
     <details class="display" id="display">
-      <summary><span class="long">Display</span><span class="short">Aa</span></summary>
+      <summary aria-label="Display"><span class="long">Display</span><span class="short">Aa</span></summary>
       <div class="panel">
         <div class="group" role="group" aria-label="Colour theme">
           <span>Theme</span>
@@ -848,6 +848,10 @@ window.__MARGINALIA__ = {{.DataJSON}};
       if(!box.isConnected){ document.removeEventListener("click", outside, true); return; }
       if(box.contains(e.target)) return;
       e.preventDefault(); e.stopPropagation();
+      // A stray tap must not throw away what was typed: with a draft the
+      // sheet stays open, and Cancel is how to drop it.
+      var ta = box.querySelector("textarea");
+      if(ta && ta.value.trim()) return;
       document.removeEventListener("click", outside, true);
       closeComposer();
     }, true);
@@ -1470,6 +1474,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var labels = {all:"Show all", unanswered:"Not answered", mine:"I answered", noted:"Requester asked", recheck:"To re-check"};
     var hiddenN = data.doc.blocks.filter(function(b){ return !b.inline && !passes(b.id); }).length;
     sum.querySelector(".long").textContent = labels[filterMode] + (filterMode !== "all" ? " (" + hiddenN + " hidden)" : "");
+    // The short label alone does not say what the menu is.
+    sum.setAttribute("aria-label", "Filter: " + sum.querySelector(".long").textContent);
     sum.querySelector(".short").textContent = filterMode !== "all" ? hiddenN + " hidden" : "All";
   }
   (function(){

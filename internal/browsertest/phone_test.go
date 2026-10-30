@@ -80,13 +80,28 @@ func TestPhoneLayout(t *testing.T) {
 		t.Errorf("the note-count badge starts %.1fpx off the left edge", m.BadgeLeft)
 	}
 
-	// A tap outside the sheet closes it and writes nothing.
+	// A tap outside keeps a typed draft rather than throwing it away…
 	do(t, ctx,
 		chromedp.Click(sel(id)),
 		chromedp.WaitVisible(chromedp.CSS(".composer textarea")),
-		chromedp.SendKeys(chromedp.CSS(".composer textarea"), "never mind"),
+		chromedp.SendKeys(chromedp.CSS(".composer textarea"), "half a thought"),
+		chromedp.MouseClickXY(200, 120),
+	)
+	if kept := get(t, ctx, chromedp.Evaluate[string](`(document.querySelector(".composer textarea")||{}).value || ""`)); kept != "half a thought" {
+		t.Fatalf("an outside tap left the draft as %q", kept)
+	}
+	// …and closes an empty sheet, writing nothing.
+	do(t, ctx,
+		chromedp.Evaluate[chromedp.Void](`document.querySelector(".composer textarea").value = ""`),
 		chromedp.MouseClickXY(200, 120),
 		chromedp.WaitNotPresent(chromedp.CSS(".composer")),
 	)
 	r.still(t, 1)
+
+	// The short menu labels do not name the menus; their summaries do.
+	names := get(t, ctx, chromedp.Evaluate[[]string](`[...document.querySelectorAll("#filter summary, #display summary")].map(s => s.getAttribute("aria-label"))`))
+	if len(names) != 2 || names[0] != "Filter: Show all" || names[1] != "Display" {
+		t.Errorf("menu names at phone width = %q", names)
+	}
+	audit(t, ctx, "phone width")
 }
