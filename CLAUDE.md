@@ -704,7 +704,11 @@ writes `review/<n>.json`, and a job with no agent applies it through
 `scripts/apply-review.sh` (tested in `internal/pipeline`), which derives the
 label from the findings' severities, refuses a verdict for a commit other than
 the one fetched, and makes visible text inert (no mentions, links or comment
-markers). **No `pull_request_target`**: a fork's PR gets no secrets on
+markers). The verdict also names the change's Cynefin domain (`clear`,
+`complicated`, `complex`, `chaotic`) with reasons, recorded as `domain:` in
+the comment's hidden block ahead of the agent's notes; a missing or unreasoned
+low call is recorded as `complex`. The merge gate does not read it yet.
+**No `pull_request_target`**: a fork's PR gets no secrets on
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
 Drafts and bots are skipped. It never approves, requests changes or blocks a

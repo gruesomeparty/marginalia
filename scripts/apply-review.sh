@@ -21,12 +21,19 @@
 #   - the comment names the commit reviewed, and a verdict for any other
 #     commit than the one the workflow fetched is refused: a review of a head
 #     the PR has since moved past must not label the new one
+#   - the comment records the reviewer's Cynefin domain for the change (clear,
+#     complicated, complex, chaotic) with its reasons; the merge gate reads it
+#     from the hidden block, where it comes before the agent's notes so no
+#     notes text can stand in for it. A domain that is missing, unknown, or a
+#     clear or complicated call with no reason given is recorded as complex:
+#     only a reasoned call can lower the bar, and a forgetful reviewer fails
+#     safe
 #
 # Visible text is short and inert: @-mentions are broken so a finding cannot
 # ping anyone, markdown links do not form, HTML comments cannot open or close,
 # and lengths are capped.
 #
-# Prints {number, add, remove, verdict, comment} and exits 0; exits 1 naming
+# Prints {number, add, remove, verdict, domain, comment} and exits 0; exits 1 naming
 # the first invalid field of the verdict, 2 on malformed input, 3 when the PR
 # moved past the reviewed commit (not an error: the next run reviews it).
 set -euo pipefail
@@ -76,6 +83,8 @@ jq -e '[.review.findings // [] | .[] | (.severity // "" | tostring)
   invalid "a severity other than blocking, major or minor"
 jq -e '[.review.findings // [] | .[] | (.title // "" | tostring | length > 0)] | all' >/dev/null <<<"$input" ||
   invalid "a finding without a title"
+jq -e '.review.domain_reasons == null or (.review.domain_reasons | type == "array" and length <= 5)' >/dev/null <<<"$input" ||
+  invalid "domain_reasons is not a list of at most 5"
 
 jq --arg sha "$reviewed" '
   # Visible text: one paragraph, no mentions, no markup that hides or links.
@@ -97,6 +106,18 @@ jq --arg sha "$reviewed" '
   | ([.pr.labels // [] | .[].name]) as $have
   | ("review:" + $verdict) as $label
 
+  # A reason is {file, reason}; one without a reason says nothing.
+  | ([$v.domain_reasons // [] | .[] | objects | select((.reason // "" | tostring | length) > 0)]) as $why
+  | (($v.domain // "") | tostring) as $claimed
+  | (if ($claimed | IN("complex", "chaotic")) then $claimed
+     elif ($claimed | IN("clear", "complicated")) and ($why | length) > 0 then $claimed
+     else "complex" end) as $domain
+  | (if $domain == $claimed then ""
+     elif ($claimed | IN("clear", "complicated")) then " (called \($claimed) without a reason)"
+     else " (the review did not name a domain)" end) as $domain_note
+  | ($why | map("- " + (if (.file // "") != "" then "`\(.file | path)` " else "" end) + (.reason | oneline(200)))
+      | join("\n")) as $why_list
+
   | ({blocking: 0, major: 1, minor: 2}) as $rank
   | ([$f[] | . + {r: $rank[.severity]}] | sort_by(.r)
       | map("- **\(.severity)**"
@@ -109,6 +130,7 @@ jq --arg sha "$reviewed" '
   | {
       number: .pr.number,
       verdict: $verdict,
+      domain: $domain,
       add: (if ($have | index($label)) then [] else [$label] end),
       remove: [$have[] | select(test("^review:(pass|concerns|blocking)$") and . != $label)],
       comment: (
@@ -116,11 +138,14 @@ jq --arg sha "$reviewed" '
         + "sha: \($sha)\n"
         + "updated: \(.now // "" | safe | gsub("\n"; " "))\n"
         + "verdict: \($verdict)\n"
+        + "domain: \($domain)\n"
         + (if ($v.agent_notes // "") != "" then "notes: \($v.agent_notes | safe)\n" else "" end)
         + "-->\n"
         + "**Adversarial review** of \($sha[0:7]): **\($verdict)**\n\n"
         + (if ($v.summary // "") != "" then ($v.summary | oneline(500)) + "\n\n" else "" end)
         + (if $list != "" then $list + "\n\n" else "" end)
+        + "Change domain: **\($domain)**\($domain_note)\n"
+        + (if $why_list != "" and $domain_note == "" then $why_list + "\n" else "" end) + "\n"
         + "<sub>Automated, read-only review. It labels and comments; it never approves, blocks or merges.</sub>")
     }
 ' <<<"$input"
