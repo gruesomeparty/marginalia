@@ -31,6 +31,7 @@ type Server struct {
 	root     string
 	mu       sync.Mutex
 	sessions map[string]*live
+	started  uint64 // sessions started, for live.seq
 	// closing is closed once, by interrupt, when the process is going down.
 	// Every wait selects on it, so a graceful shutdown returns in-flight
 	// awaits as "cancelled" instead of waiting them out.
@@ -203,6 +204,7 @@ func (s *Server) reviewDocument(_ context.Context, _ *mcp.CallToolRequest, in re
 		return nil, reviewDocumentOut{}, err
 	}
 	cfg := srv.Review()
+	l.completion = cfg.Completion()
 	out := reviewDocumentOut{
 		SessionID:      l.id,
 		URL:            l.url,
@@ -227,7 +229,7 @@ func (s *Server) feedbackSince(_ context.Context, _ *mcp.CallToolRequest, in rea
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
-	out, _, err := readAll(targetsOf(docs), s.normalizeCursor(in.Cursor))
+	out, _, err := readAll(s.targetsOf(docs), s.normalizeCursor(in.Cursor))
 	if err != nil {
 		return nil, feedbackOut{}, err
 	}
@@ -239,7 +241,7 @@ func (s *Server) reviewStatus(_ context.Context, _ *mcp.CallToolRequest, in stat
 	if err != nil {
 		return nil, statusOut{}, err
 	}
-	out, err := statuses(docs)
+	out, err := statuses(s.targetsOf(docs))
 	return nil, statusOut{Docs: out}, err
 }
 
@@ -250,7 +252,7 @@ func (s *Server) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 	ctx, cancel := s.untilClosed(ctx)
 	defer cancel()
-	done, reason, events, err := WaitForDone(ctx, targetsOf(docs), s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
+	done, reason, events, err := WaitForDone(ctx, s.targetsOf(docs), s.normalizeCursor(in.Cursor), time.Duration(in.TimeoutSeconds)*time.Second)
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
@@ -262,18 +264,19 @@ func (s *Server) closeReview(_ context.Context, _ *mcp.CallToolRequest, in close
 	if l == nil {
 		return nil, closeOut{}, session.Advertise(errUnknownSession(in.SessionID))
 	}
-	docs := l.docs
+	// The rule lives with the session, so take it before stopping that.
+	targets := s.targetsOf(l.docs)
 	if err := s.stop(in.SessionID); err != nil {
 		return nil, closeOut{}, err
 	}
-	out, err := statuses(docs)
+	out, err := statuses(targets)
 	return nil, closeOut{Stopped: true, Docs: out}, err
 }
 
-func statuses(docs []string) ([]DocStatus, error) {
+func statuses(docs []Target) ([]DocStatus, error) {
 	out := make([]DocStatus, 0, len(docs))
 	for _, d := range docs {
-		st, err := StatusOf(TargetOf(d))
+		st, err := StatusOf(d)
 		if err != nil {
 			return nil, err
 		}

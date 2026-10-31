@@ -265,7 +265,17 @@ actions:
 builtins: true           # false drops comment/suggest_edit/question/approve/reject
 readonly: ["2"]          # section 2 is context: shown, muted, not commentable
 require_verdict: false   # true: no review_done until every block is answered
+complete_when: any       # all, or quorum:2, when you hand one document to several people
+reviewers: [ana, bo]     # optional: who counts; with it, "all" means these people
 ```
+
+With several reviewers, each one's Done records only their own completion,
+and `done` in `feedback_since`, `review_status` and `await_review_done` turns
+true when `complete_when` is met; `done_by` and `done_needed` say how far it
+is ("1 of 2"). Every state carries `by_author`, each reviewer's latest word on
+the block, and `overall`, decided by reject > question > anything else >
+approve rather than by who spoke last. The rule travels with the review you
+started: reads by path from another process count any one Done.
 
 Use it when you want a **vocabulary** ("tag every finding") rather than prose: an
 action with nothing to fill in saves on one tap, which is what makes a long

@@ -17,16 +17,21 @@ import (
 //
 // Both count only what this process wrote. A review_done already in a log
 // from an earlier round is the previous handover's answer, not this one's.
+// A document is done when this process's Dones meet the review's completion
+// rule (issue #53): one of them by default, or everyone, or a quorum.
 
 // maxWait caps one long-poll, below the idle timeouts proxies tend to apply.
 const maxWait = 60 * time.Second
 
 type changes struct {
-	mu      sync.Mutex
-	n       uint64        // events appended since the server started
-	tick    chan struct{} // closed and replaced on every append
-	done    map[string]bool
-	allDone chan struct{} // closed once every document has a review_done
+	mu   sync.Mutex
+	n    uint64        // events appended since the server started
+	tick chan struct{} // closed and replaced on every append
+	done map[string]bool
+	// finished is who has said Done on each document through this server:
+	// a document is done once those meet the review's completion rule.
+	finished map[string][]string
+	allDone  chan struct{} // closed once every document has a review_done
 	// stopping is closed when the HTTP server starts shutting down. Shutdown
 	// does not cancel request contexts, so a parked long-poll would hold the
 	// drain to its deadline and turn a clean exit into an error.
@@ -35,7 +40,7 @@ type changes struct {
 }
 
 func newChanges() changes {
-	return changes{tick: make(chan struct{}), done: map[string]bool{}, allDone: make(chan struct{}), stopping: make(chan struct{})}
+	return changes{tick: make(chan struct{}), done: map[string]bool{}, finished: map[string][]string{}, allDone: make(chan struct{}), stopping: make(chan struct{})}
 }
 
 // stopWaits answers every parked long-poll, now and from here on.
@@ -50,6 +55,16 @@ func (s *Server) recorded(target *Entry, e feedback.Event) {
 	close(c.tick)
 	c.tick = make(chan struct{})
 	if e.Type != feedback.TypeReviewDone || c.done[target.Rel] {
+		return
+	}
+	c.finished[target.Rel] = append(c.finished[target.Rel], e.Author)
+	// Who counts as a reviewer is read off the whole log; whose Done counts
+	// is only this process's.
+	var participants []string
+	if events, err := target.Store.Load(); err == nil {
+		_, participants = feedback.Reviewers(events)
+	}
+	if !s.Review().Completion().Met(c.finished[target.Rel], participants) {
 		return
 	}
 	c.done[target.Rel] = true

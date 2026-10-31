@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/session"
 )
@@ -15,7 +16,12 @@ type DocEvents struct {
 	Doc    string  `json:"doc"`
 	Events []Noted `json:"events"`
 	Cursor int     `json:"cursor"`
-	Done   bool    `json:"done"`
+	// Done is whether this document's review is complete under the review's
+	// completion rule; DoneBy and DoneNeeded are its tally ("2 of 3"), so an
+	// agent can say who it is still waiting for.
+	Done       bool `json:"done"`
+	DoneBy     int  `json:"done_by"`
+	DoneNeeded int  `json:"done_needed"`
 }
 
 // Noted is an event as a tool reports it: the event, flattened, plus the id
@@ -47,6 +53,8 @@ type DocStatus struct {
 	Stale       int                   `json:"stale"`
 	Orphaned    int                   `json:"orphaned"`
 	Done        bool                  `json:"done"`
+	DoneBy      int                   `json:"done_by"`
+	DoneNeeded  int                   `json:"done_needed"`
 	States      []feedback.State      `json:"states"`
 	Ready       []ReadySuggestion     `json:"applicable_suggestions"`
 	Needs       []feedback.Suggestion `json:"suggestions_needing_confirmation"`
@@ -69,6 +77,9 @@ type Target struct {
 	Name  string
 	Parse func() (*document.Document, error)
 	Store *feedback.Store
+	// Completion is when the review counts as done (issue #53). The zero
+	// value is "any one reviewer's Done", which is what it always was.
+	Completion review.Completion
 }
 
 // TargetOf is the disk-backed Target: the document at path and the log
@@ -77,10 +88,28 @@ func TargetOf(path string) Target {
 	return Target{Name: path, Parse: func() (*document.Document, error) { return document.Parse(path) }, Store: feedback.NewStore(path)}
 }
 
-func targetsOf(paths []string) []Target {
+// targetsOf is the documents as targets, each carrying the completion rule
+// of the review this process is serving it in. Reads are disk-backed and a
+// path from another process has no config here, so it completes on any one
+// Done, as it always did.
+func (s *Server) targetsOf(paths []string) []Target {
+	s.mu.Lock()
+	rules := map[string]*live{}
+	for _, l := range s.sessions {
+		for _, d := range l.docs {
+			if r := rules[d]; r == nil || l.seq > r.seq {
+				rules[d] = l
+			}
+		}
+	}
+	s.mu.Unlock()
 	out := make([]Target, 0, len(paths))
 	for _, p := range paths {
-		out = append(out, TargetOf(p))
+		t := TargetOf(p)
+		if l := rules[p]; l != nil {
+			t.Completion = l.completion
+		}
+		out = append(out, t)
 	}
 	return out
 }
@@ -144,11 +173,9 @@ func EventsSince(t Target, cursor int) (DocEvents, error) {
 		return DocEvents{}, err
 	}
 	out := DocEvents{Doc: t.Name, Cursor: len(events), Events: []Noted{}}
-	for _, e := range events {
-		if e.Type == feedback.TypeReviewDone {
-			out.Done = true
-		}
-	}
+	finished, participants := feedback.Reviewers(events)
+	out.DoneBy, out.DoneNeeded = t.Completion.Tally(finished, participants)
+	out.Done = out.DoneBy >= out.DoneNeeded
 	// A cursor past the end can only mean the log was rewritten, which the
 	// append-only rule forbids. Start over rather than skip silently.
 	if cursor < 0 || cursor > len(events) {
@@ -179,6 +206,7 @@ func StatusOf(t Target) (DocStatus, error) {
 		text[b.ID] = b.PlainText
 	}
 	res := feedback.Materialize(events, blocks)
+	res.Complete(t.Completion)
 	ready, needs := res.Suggestions()
 	out := DocStatus{
 		Doc: t.Name, Blocks: len(doc.Blocks),
@@ -186,6 +214,7 @@ func StatusOf(t Target) (DocStatus, error) {
 		Outstanding: res.Outstanding, Addressed: res.Addressed,
 		Confirmed: res.Confirmed, Reopened: res.Reopened,
 		Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
+		DoneBy: res.DoneBy, DoneNeeded: res.DoneNeeded,
 		States: res.States,
 		Ready:  make([]ReadySuggestion, 0, len(ready)),
 		Needs:  needs,

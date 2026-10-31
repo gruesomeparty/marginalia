@@ -1,11 +1,15 @@
 package mcpserver
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // ask puts one question in a document's log, the way a reviewer would, and
@@ -263,4 +267,80 @@ func mustLoadN(t *testing.T, doc string) int {
 		t.Fatal(err)
 	}
 	return len(events)
+}
+
+// The reads report done by the review's completion rule (#53): with two
+// reviewers named and complete_when: all, one Done is half of it.
+func TestReadsFollowTheCompletionRule(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.md")
+	if err := os.WriteFile(path, []byte("# Spec\n\nText.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := TargetOf(path)
+	target.Completion = review.Completion{Rule: review.CompleteAll, Reviewers: []string{"ana", "bo"}}
+	if err := target.Store.Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"}); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := EventsSince(target, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Done || ev.DoneBy != 1 || ev.DoneNeeded != 2 {
+		t.Errorf("feedback_since: done %v, %d of %d", ev.Done, ev.DoneBy, ev.DoneNeeded)
+	}
+	st, err := StatusOf(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Done || st.DoneBy != 1 || st.DoneNeeded != 2 {
+		t.Errorf("review_status: done %v, %d of %d", st.Done, st.DoneBy, st.DoneNeeded)
+	}
+	if err := target.Store.Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "bo"}); err != nil {
+		t.Fatal(err)
+	}
+	if ev, _ := EventsSince(target, 0); !ev.Done {
+		t.Error("both reviewers done, the read still says not done")
+	}
+}
+
+func TestNewestSessionsRuleWins(t *testing.T) {
+	s := &Server{sessions: map[string]*live{}}
+	all := review.Completion{Rule: review.CompleteAll}
+	for i, c := range []review.Completion{{Rule: review.CompleteAny}, all} {
+		s.remember(&live{id: fmt.Sprint(i), docs: []string{"/d/spec.md"}, completion: c})
+	}
+	for range 20 { // map order varies; the answer must not
+		if got := s.targetsOf([]string{"/d/spec.md"})[0].Completion; got.Rule != all.Rule {
+			t.Fatalf("rule %q, want the newest session's %q", got.Rule, all.Rule)
+		}
+	}
+}
+
+// review_document hands its config's rule to the stdio reads: by path, one
+// of two reviewers' Done must not read as done.
+func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
+	root := t.TempDir()
+	path := writeDoc(t, root, "spec.md", specDoc)
+	cfg := writeDoc(t, root, "review.yaml", "complete_when: all\nreviewers: [ana, bo]\n")
+	cs, _ := serveMCP(t, root)
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}, "config": cfg}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := feedback.NewStore(path).Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"}); err != nil {
+		t.Fatal(err)
+	}
+	var st statusOut
+	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &st); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Docs) != 1 || st.Docs[0].Done || st.Docs[0].DoneBy != 1 || st.Docs[0].DoneNeeded != 2 {
+		t.Errorf("review_status after one of two Dones: %+v", st.Docs)
+	}
+	var fb feedbackOut
+	if err := call(t, cs, "feedback_since", map[string]any{"paths": []string{"spec.md"}}, &fb); err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Docs) != 1 || fb.Docs[0].Done {
+		t.Errorf("feedback_since after one of two Dones: %+v", fb.Docs)
+	}
 }

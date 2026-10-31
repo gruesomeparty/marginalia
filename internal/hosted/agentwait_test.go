@@ -222,3 +222,56 @@ func TestAgentWaitOnAnArchivedReview(t *testing.T) {
 		t.Errorf("archived mid-wait: %d, want 404", code)
 	}
 }
+
+// A review that needs every reviewer is not done after one Done: not in the
+// inbox, not to the waiting agent, not to review_status (#53).
+func TestHostedCompletionRule(t *testing.T) {
+	e := newEdge(t)
+	h, ts := openWithEdge(t, e)
+	r, err := h.Publish(context.Background(), Publish{
+		Title: "spec", Agent: "agent",
+		Config: "complete_when: all\nreviewers: [ana@example.com, bo@example.com]\n",
+		Docs:   []Document{{Name: "spec.md", Content: []byte(specDoc)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := func(who string) {
+		t.Helper()
+		body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone})
+		hdr := map[string]string{accessHeader: e.mint(e.key, e.claims(who))}
+		if code, out := do(t, "POST", ts.URL+"/r/"+r.Meta.ID+"/api/feedback", body, hdr); code != http.StatusCreated {
+			t.Fatalf("%s: %d %s", who, code, out)
+		}
+	}
+	status := func() string {
+		for _, row := range h.rows() {
+			if row.ID == r.Meta.ID {
+				return row.Status
+			}
+		}
+		return ""
+	}
+	agent := map[string]string{"Authorization": "Bearer tok"}
+	done("ana@example.com")
+	if got := status(); got == "done" {
+		t.Error("the inbox calls the review done after one of two reviewers")
+	}
+	if _, out := do(t, "GET", ts.URL+"/agent/r/"+r.Meta.ID+"/wait", nil, agent); !strings.Contains(out, `"done":false`) {
+		t.Errorf("agent wait after one reviewer: %s", out)
+	}
+	_, targets, err := h.targets(r.Meta.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := statuses(targets); st[0].Done || st[0].DoneBy != 1 || st[0].DoneNeeded != 2 {
+		t.Errorf("review_status: %+v", st[0])
+	}
+	done("bo@example.com")
+	if got := status(); got != "done" {
+		t.Errorf("inbox after both: %q", got)
+	}
+	if _, out := do(t, "GET", ts.URL+"/agent/r/"+r.Meta.ID+"/wait", nil, agent); !strings.Contains(out, `"done":true`) {
+		t.Errorf("agent wait after both: %s", out)
+	}
+}

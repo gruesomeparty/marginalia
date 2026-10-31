@@ -57,6 +57,7 @@ func (h *Host) row(r *Review) web.InboxRow {
 		row.Title = r.Meta.Docs[0]
 	}
 	entries := r.Server.Entries()
+	rule := r.Server.Review().Completion()
 	done := len(entries) > 0
 	var human bool
 	var lastDone, lastAgent time.Time
@@ -72,6 +73,7 @@ func (h *Host) row(r *Review) web.InboxRow {
 			blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 		}
 		res := feedback.Materialize(events, blocks)
+		res.Complete(rule)
 		row.Comments += res.Comments
 		row.Outstanding += res.Outstanding
 		row.Stale += res.Stale

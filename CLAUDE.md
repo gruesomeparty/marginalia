@@ -354,7 +354,12 @@ users are agents, not humans.
   `addressed`) feed `review.Completion` — the config's `complete_when:
   any|all|quorum:N` and optional `reviewers:` list, which once set is the
   denominator and the only Done that counts. `Materialize` applies `any`;
-  `Resolution.Complete(cfg.Completion())` applies the config's rule.
+  `Resolution.Complete(cfg.Completion())` applies the config's rule, and every
+  agent-facing signal does: the page's resolution, `serve --until-done`
+  (counting this process's Dones), `mcpserver.Target.Completion` (stdio reads
+  take it from the live session serving the path, else `any`), the hosted
+  tools, inbox status, archiving and `/agent/r/{id}/wait` (this revision's
+  Dones only).
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
