@@ -187,8 +187,8 @@ with the reason — the block changed since, a later note supersedes it, the blo
 is gone, or there is no hash to check.
 
 A suggestion the reviewer made on one sentence carries `sub` (the sentence) and
-`at` (where it sits in the block's text now): its `replacement` stands in for
-that sentence only. It is applicable while that sentence still reads the same,
+`at` (where it sits in the block's rendered text now, not its source, so match
+the quote by text): its `replacement` stands in for that sentence only. It is applicable while that sentence still reads the same,
 whatever happened to the rest of the paragraph, and a later note on the same
 sentence or on the whole block supersedes it.
 

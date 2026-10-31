@@ -966,6 +966,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       var redlined = e.type === "suggest_edit" && e.sub && e.sub.quote && e.text;
       if(redlined){
         var rl=document.createElement("div"); rl.className="redline";
+        rl.setAttribute("role","group");
         rl.setAttribute("aria-label", "Suggested: replace \u201c"+e.sub.quote+"\u201d with \u201c"+e.text+"\u201d");
         redline(rl, e.sub.quote, e.text);
         item.appendChild(rl);

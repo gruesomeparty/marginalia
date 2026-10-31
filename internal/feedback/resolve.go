@@ -637,13 +637,16 @@ func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
 // sentence: a note about the whole block, or one whose sentence overlaps.
 // Answers and dangling replies are not verdicts and do not count.
 func supersededOnSentence(n Note, history []Note) bool {
-	later := false
+	// Later by timestamp, as the block-level rule reads it; log order only
+	// breaks a tie, since an import can append an older note after a newer.
+	after := false
 	for _, o := range history {
 		if o.ID == n.ID {
-			later = true // history is in log order: what follows came after
+			after = true
 			continue
 		}
-		if !later || o.Dangling || o.Answers != "" {
+		newer := o.Event.Ts > n.Event.Ts || (o.Event.Ts == n.Event.Ts && after)
+		if !newer || o.Dangling || o.Answers != "" {
 			continue
 		}
 		if o.Event.Sub == nil {

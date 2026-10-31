@@ -203,6 +203,12 @@ func TestSentenceSuggestionsSupersedeBySentence(t *testing.T) {
 	if len(ready) != 2 || len(needs) != 1 || needs[0].Sub.Quote != "Two is second." || needs[0].Reason != ReasonSubLater {
 		t.Fatalf("ready %+v, needs %+v", ready, needs)
 	}
+	// An older note an import appended after them supersedes nothing: later
+	// is by timestamp, as it is for the block.
+	imported := append(append([]Event(nil), events...), Event{Block: "1/1", Hash: "h", Type: TypeComment, Text: "old", Ts: "2026-07-03T09:00:00Z"})
+	if ready, _ := Materialize(imported, blocks).Suggestions(); len(ready) != 2 {
+		t.Errorf("an older block note appended later superseded: ready %+v", ready)
+	}
 	events = append(events, Event{Block: "1/1", Hash: "h", Type: TypeApprove, Ts: "2026-07-03T10:04:00Z"})
 	if ready, _ = Materialize(events, blocks).Suggestions(); len(ready) != 0 {
 		t.Errorf("a later note on the block left %+v applicable", ready)
