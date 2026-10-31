@@ -76,8 +76,9 @@ func isWord(s string) bool {
 // HTML renders src[from:to] as escaped HTML with the file's spans applied.
 // Lines after the first lose the indentation of the line `from` starts on,
 // so a method read out of a class body reads flush rather than indented by
-// its position in the file; the tree already shows its depth. Stripping
-// the tags gives back the source byte for byte, less that indentation.
+// its position in the file; the tree already shows its depth — except inside
+// a string literal, whose whitespace is its content. Stripping the tags gives
+// back the source byte for byte, less that indentation.
 func (f *File) HTML(src []byte, from, to int) string {
 	if from < 0 || to > len(src) || from >= to {
 		return ""
@@ -97,11 +98,6 @@ func (f *File) HTML(src []byte, from, to int) string {
 	skip := 0 // indentation still to drop on this line
 	for i := from; i < to; i++ {
 		c := src[i]
-		if skip > 0 && (c == ' ' || c == '\t') {
-			skip--
-			continue
-		}
-		skip = 0
 		for k < len(f.Spans) && f.Spans[k].End <= i {
 			k++
 		}
@@ -109,6 +105,12 @@ func (f *File) HTML(src []byte, from, to int) string {
 		if k < len(f.Spans) && f.Spans[k].Start <= i {
 			class = f.Spans[k].Class
 		}
+		// Inside a multi-line string the indentation is the string's own.
+		if skip > 0 && class != classString && (c == ' ' || c == '\t') {
+			skip--
+			continue
+		}
+		skip = 0
 		if class != open {
 			if open != "" {
 				b.WriteString("</span>")

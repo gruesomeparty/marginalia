@@ -3,6 +3,8 @@ package codetree
 import (
 	"html"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -172,6 +174,42 @@ func TestReleaseEmbedsEveryGrammar(t *testing.T) {
 	}
 }
 
+// The tags are only strings until the library reads them: build the
+// grammars package the way a release does and check each grammar is really
+// embedded, so a tag gotreesitter does not recognise fails here rather than
+// shipping a binary that shows every file whole.
+func TestReleaseTagsEmbedTheGrammars(t *testing.T) {
+	gobin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("no go toolchain on PATH")
+	}
+	raw, err := os.ReadFile("../../.goreleaser.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`-tags=(\S+)`).FindStringSubmatch(string(raw))
+	if m == nil {
+		t.Fatal("no -tags in .goreleaser.yaml")
+	}
+	out, err := exec.Command(gobin, "list", "-tags="+m[1], "-f", "{{join .EmbedFiles \" \"}}",
+		"github.com/odvcencio/gotreesitter/grammars").CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list: %v\n%s", err, out)
+	}
+	embedded := map[string]bool{}
+	for _, f := range strings.Fields(string(out)) {
+		embedded[filepath.Base(f)] = true
+	}
+	for _, l := range Languages() {
+		if !embedded[l.Grammar+".bin"] {
+			t.Errorf("a release build does not embed %s.bin; %s files would show whole (embedded: %s)", l.Grammar, l.Name, out)
+		}
+	}
+	if len(embedded) > len(Languages()) {
+		t.Errorf("a release build embeds %d grammars for %d languages: %s", len(embedded), len(Languages()), out)
+	}
+}
+
 func FuzzParse(f *testing.F) {
 	f.Add(string(load(&testing.T{}, "ingest.go")))
 	f.Add("package p\nfunc (")
@@ -195,4 +233,16 @@ func FuzzParse(f *testing.F) {
 		walk(file.Symbols, 0, len(src))
 		_ = file.HTML([]byte(src), 0, len(src))
 	})
+}
+
+// Dedenting a method read out of a type leaves a raw string's own
+// indentation alone.
+func TestHTMLKeepsIndentationInsideStrings(t *testing.T) {
+	src := []byte("type T struct {\n\tA string `tag`\n}\n\nvar _ = func() {\n\tq := `\n\t\tSELECT 1\n\t`\n}\n")
+	f := parse(t, "p.go", src)
+	start := strings.Index(string(src), "q :=")
+	out := html.UnescapeString(tag.ReplaceAllString(f.HTML(src, start, len(src)-3), ""))
+	if !strings.Contains(out, "\n\t\tSELECT 1\n\t`") {
+		t.Errorf("raw string re-indented: %q", out)
+	}
 }
