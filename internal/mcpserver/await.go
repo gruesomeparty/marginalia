@@ -31,7 +31,8 @@ const MaxTimeout = 30 * time.Minute
 // moves when the author edits and stays put when the reviewer comments.
 //
 // A tap on a multiple-choice requester note returns it with reason "answer"
-// and the pick in Choices, ahead of a question.
+// and the pick in Choices. An unanswered question in the same batch wins
+// the reason, so it is never skipped; the choices are reported either way.
 //
 // The wait also returns, with reason "question", as soon as a question sits
 // past the cursor and nobody has replied to it yet: a reviewer who asks the
@@ -63,11 +64,13 @@ func WaitForDone(ctx context.Context, docs []Target, cursor map[string]int, time
 		if done {
 			return true, "review_done", out, nil
 		}
-		if len(Choices(out)) > 0 {
-			return false, "answer", out, nil
-		}
+		// A question outranks a choice: the agent owes it an answer, and
+		// the choices are in the output whichever reason wins.
 		if asked(out) {
 			return false, "question", out, nil
+		}
+		if len(Choices(out)) > 0 {
+			return false, "answer", out, nil
 		}
 		select {
 		case <-ctx.Done():

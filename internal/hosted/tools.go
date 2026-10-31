@@ -81,9 +81,9 @@ type awaitIn struct {
 
 type awaitOut struct {
 	Done   bool                  `json:"done"`
-	Reason string                `json:"reason" jsonschema:"review_done, answer (the reviewer picked an option on one of your multiple-choice notes: it is in choices), question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), timeout or cancelled"`
+	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), answer (the reviewer picked an option on one of your multiple-choice notes; choices lists every pick past the cursor, whatever the reason), timeout or cancelled"`
 	Docs   []mcpserver.DocEvents `json:"docs"`
-	// Choices are the options picked in Docs' events (reason "answer").
+	// Choices are the options picked in Docs' events, whatever the reason.
 	Choices []mcpserver.Choice `json:"choices"`
 }
 

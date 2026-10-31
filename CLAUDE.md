@@ -227,7 +227,7 @@ users are agents, not humans.
   on a protocol event only there, through `Config.CheckAnswer` (the choice
   must be offered). Materialize keeps a block-less requester answer as a
   state for block `""`, first and never orphaned. `await_review_done` returns
-  reason `answer` with `choices` (`mcpserver.Choices`) ahead of `question`.
+  reason `answer` with `choices` (`mcpserver.Choices`); `question` outranks it, and `choices` is filled whatever the reason. `import` admits a block-less `req:` reply.
   An agent cannot tap: its two write tools carry no fields.
 - `internal/review/presets/*.yaml` are framings embedded in the binary
   (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
