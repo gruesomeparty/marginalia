@@ -416,20 +416,30 @@ func (h *Host) recorded(id, rel string, e feedback.Event) {
 		h.logf("marginalia: callback for review %s: %v\n", id, err)
 		return
 	}
-	// The counts now include the event; the cursor is the position before
-	// it, so the agent reads the event it was called about.
-	if since > 0 {
-		since--
-	}
+	// The counts now include the event and anything appended since. The
+	// cursor is the event's own position, found in its log by its id, so
+	// the agent reads the event it was called about even when a second
+	// reviewer's note landed in between.
+	want, after := feedback.NoteID(e), 1
 	cursor := map[string]int{}
 	for _, en := range r.Server.Entries() {
-		if events, err := en.Store.Load(); err == nil {
-			cursor[en.Rel] = len(events)
-			if en.Rel == rel && cursor[en.Rel] > 0 {
-				cursor[en.Rel]--
+		events, err := en.Store.Load()
+		if err != nil {
+			continue
+		}
+		cursor[en.Rel] = len(events)
+		if en.Rel != rel {
+			continue
+		}
+		cursor[en.Rel] = max(len(events)-1, 0)
+		for i := len(events) - 1; i >= 0; i-- {
+			if feedback.NoteID(events[i]) == want {
+				cursor[en.Rel], after = i, len(events)-i
+				break
 			}
 		}
 	}
+	since -= min(since, uint64(after))
 	h.opts.Callbacks.Send(r.Meta.Callback, Callback{
 		Event: e.Type, ReviewID: id, Revision: r.Meta.Revision, Name: rel,
 		Done: done, Cursor: cursor, Since: since,
