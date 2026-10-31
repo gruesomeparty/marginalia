@@ -17,12 +17,13 @@
 #   image       the hosted image: go, plus what builds and smoke-tests it.
 #   cloudflare  the deploy template.
 #   workflows   zizmor: anything under .github/.
-#   deps        dependency review: the module or the template's npm lockfile.
+#   deps        dependency review: the module, the template's npm lockfile,
+#               or the workflows (it checks the actions they pin).
 #   codeql      Go source and the module.
 #   docs_only   every file is documentation a reader reads and no agent
 #               follows: the review loop records a scripted pass instead of
-#               running an agent. Skills, the plugin's commands, agent config,
-#               CLAUDE.md and the PRD are prose that steers agents or the
+#               running an agent. docs/, skills, the plugin's commands, agent
+#               config, CLAUDE.md and the PRD are prose that steers agents or the
 #               project, so they keep their review.
 #
 #   --steers    instead prints the steers pattern, for pick-model.sh.
@@ -41,11 +42,12 @@ ci_itself='^(\.github/workflows/(ci|codeql)\.yml|scripts/ci-changes\.sh)$'
 go_src='(\.go$|^go\.(mod|sum)$|^(internal|cmd)/|^\.golangci)'
 image_src='^(Dockerfile|\.goreleaser\.ya?ml|\.dockerignore|scripts/(image-smoke|trivy-new)\.sh)$'
 cloudflare_src='^deploy/cloudflare/'
-deps_src='^(go\.(mod|sum)|deploy/cloudflare/package(-lock)?\.json)$'
+deps_src='^(go\.(mod|sum)|deploy/cloudflare/package(-lock)?\.json|\.github/(workflows|actions)/.*)$'
 codeql_src='(\.go$|^go\.(mod|sum)$)'
 # Markdown that agents follow (skills, the plugin's commands, agents and
-# hooks) or that the merge gate guards: not docs_only.
-steers='(^(skills|commands|agents|hooks|\.claude|\.claude-plugin|\.github)/|(^|/)(CLAUDE|AGENTS|PRD|SECURITY)\.md$)'
+# hooks, docs/ which CLAUDE.md sends them to) or that the merge gate guards:
+# not docs_only.
+steers='(^(docs|skills|commands|agents|hooks|\.claude|\.claude-plugin|\.github)/|(^|/)(CLAUDE|AGENTS|PRD|SECURITY)\.md$)'
 
 all() {
   for k in "${keys[@]}"; do

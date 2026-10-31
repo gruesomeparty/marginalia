@@ -18,10 +18,9 @@
 # and catches any head the events missed. Drafts wait until they are marked
 # ready; bots (Renovate, release-please) are skipped.
 #
-# Documentation-only PRs (scripts/ci-changes.sh's docs_only: Markdown and
-# docs/, never skills, plugin commands, agent config, CLAUDE.md or the PRD)
-# run no agent. The
-# apply job, from the default branch, confirms the head's files are still
+# Documentation-only PRs (scripts/ci-changes.sh's docs_only: Markdown such as
+# the README, never docs/, skills, plugin commands, agent config, CLAUDE.md or
+# the PRD) run no agent. The apply job, from the default branch, confirms the head's files are still
 # only documentation and records a scripted pass of that head, so the merge
 # gate sees a review of the current commit and its other floors still apply.
 #
@@ -115,7 +114,7 @@ jobs:
           for n in $list; do
             if gh api --paginate "repos/$REPO/pulls/$n/files" \
                 --jq '.[] | .filename, (.previous_filename // empty)' >files.txt \
-              && [ -s files.txt ] && [ "$(wc -l <files.txt)" -lt 3000 ] \
+              && [ -s files.txt ] && [ "$(wc -l <files.txt)" -lt 300 ] \
               && scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null; then
               docs="$docs $n"
             else
@@ -252,20 +251,24 @@ jobs:
           # files were checked here, with this job's own copy of the rule:
           # pick's nomination is a hint, not the decision.
           for n in $(jq -r '.[]' <<<"$DOCS"); do
-            # The REST listing names a rename's old path too; the head is read
-            # on both sides of it, so the files belong to the commit passed.
-            sha="$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)"
-            gh api --paginate "repos/$REPO/pulls/$n/files" \
-              --jq '.[] | .filename, (.previous_filename // empty)' >files.txt || : >files.txt
-            if ! [ -s files.txt ] || [ "$(wc -l <files.txt)" -ge 3000 ] \
-              || ! scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null \
-              || [ "$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)" != "$sha" ]; then
-              echo "::notice::#$n is not documentation only at one head; the next run reviews it"; continue
+            # The files of exactly this commit: the compare API pinned to the
+            # head sha, against the PR's base (three dots, as the PR's own diff),
+            # so a listing that lags a push cannot vouch for the new head. It
+            # names a rename's old path too, and stops at 300 files.
+            view="$(gh pr view "$n" --repo "$REPO" --json headRefOid,baseRefName)"
+            sha="$(jq -r .headRefOid <<<"$view")"; base="$(jq -r .baseRefName <<<"$view")"
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || ! [[ "$base" =~ ^[A-Za-z0-9._/-]+$ ]] || [[ "$base" == *..* ]]; then
+              echo "::warning::#$n: unexpected head or base"; continue
+            fi
+            gh api "repos/$REPO/compare/$base...$sha" \
+              --jq 'select((.files | length) < 300) | .files[] | .filename, (.previous_filename // empty)' >files.txt || : >files.txt
+            if ! [ -s files.txt ] || ! scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null; then
+              echo "::notice::#$n is not documentation only at ${sha:0:7}; the next run reviews it"; continue
             fi
             printf '%s\n' "$sha" >"review/$n.sha"
             jq -n --argjson n "$n" --arg sha "$(head -n1 "review/$n.sha")" '{
               pr: $n, head_sha: $sha, findings: [],
-              summary: "Documentation only (Markdown or docs/), so no agent reviewed it and CI ran no checks.",
+              summary: "Documentation only (Markdown outside docs/, skills and agent prompts), so no agent reviewed it and CI ran no checks.",
               domain: "clear",
               domain_reasons: [{reason: "Only documentation changed: no code, tests, workflows, skills or agent instructions."}],
               agent_notes: "scripted: docs_only"

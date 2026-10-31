@@ -39,7 +39,9 @@ func TestCIChanges(t *testing.T) {
 		want  string // the keys that are true, space-separated
 	}{
 		{"readme", []string{"README.md"}, "docs_only"},
-		{"docs", []string{"docs/hosting.md", "CHANGELOG.md"}, "docs_only"},
+		{"changelog", []string{"CHANGELOG.md", "deploy/cloudflare/README.md"}, "docs_only"},
+		// docs/ is prose agents are sent to: no CI, but an agent review.
+		{"docs", []string{"docs/hosting.md"}, ""},
 		// Prose that steers agents runs no CI, but keeps its agent review.
 		{"claude.md", []string{"CLAUDE.md"}, ""},
 		{"a skill", []string{"skills/review-pr/SKILL.md"}, ""},
@@ -54,11 +56,12 @@ func TestCIChanges(t *testing.T) {
 		{"template", []string{"deploy/cloudflare/src/index.ts"}, "test cloudflare"},
 		{"template lockfile", []string{"deploy/cloudflare/package-lock.json"}, "test cloudflare deps"},
 		{"dockerfile", []string{"Dockerfile"}, "test image"},
-		{"a loop workflow", []string{".github/workflows/review-prs.yml"}, "test workflows"},
+		// Dependency review checks the actions a workflow pins.
+		{"a loop workflow", []string{".github/workflows/review-prs.yml"}, "test workflows deps"},
 		{"a script", []string{"scripts/merge-gate.sh"}, "test"},
 		{"docs and code", []string{"README.md", "cmd/serve.go"}, "test go image codeql"},
 		// A rename names both sides; the old one counts too.
-		{"renamed out of testdata", []string{"docs/a.md", "internal/x/testdata/a.md"}, "test go image"},
+		{"renamed out of testdata", []string{"notes/a.md", "internal/x/testdata/a.md"}, "test go image"},
 		// CI itself, or nothing to go on: everything.
 		{"ci workflow", []string{"README.md", ".github/workflows/ci.yml"}, everything},
 		{"codeql workflow", []string{".github/workflows/codeql.yml"}, everything},
