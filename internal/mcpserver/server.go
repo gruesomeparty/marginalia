@@ -31,6 +31,7 @@ type Server struct {
 	root     string
 	mu       sync.Mutex
 	sessions map[string]*live
+	started  uint64 // sessions started, for live.seq
 	// closing is closed once, by interrupt, when the process is going down.
 	// Every wait selects on it, so a graceful shutdown returns in-flight
 	// awaits as "cancelled" instead of waiting them out.

@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -299,5 +300,18 @@ func TestReadsFollowTheCompletionRule(t *testing.T) {
 	}
 	if ev, _ := EventsSince(target, 0); !ev.Done {
 		t.Error("both reviewers done, the read still says not done")
+	}
+}
+
+func TestNewestSessionsRuleWins(t *testing.T) {
+	s := &Server{sessions: map[string]*live{}}
+	all := review.Completion{Rule: review.CompleteAll}
+	for i, c := range []review.Completion{{Rule: review.CompleteAny}, all} {
+		s.remember(&live{id: fmt.Sprint(i), docs: []string{"/d/spec.md"}, completion: c})
+	}
+	for range 20 { // map order varies; the answer must not
+		if got := s.targetsOf([]string{"/d/spec.md"})[0].Completion; got.Rule != all.Rule {
+			t.Fatalf("rule %q, want the newest session's %q", got.Rule, all.Rule)
+		}
 	}
 }
