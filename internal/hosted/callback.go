@@ -313,6 +313,13 @@ func (c *Callbacks) Flush() {
 			c.last[id] = now
 		}
 	}
+	// A review whose window has passed with nothing waiting needs no entry:
+	// its next question goes at once either way.
+	for id, t := range c.last {
+		if _, waiting := c.pending[id]; !waiting && now.Sub(t) >= c.debounce() {
+			delete(c.last, id)
+		}
+	}
 	c.mu.Unlock()
 	for _, p := range due {
 		c.deliver(p.url, p.body)

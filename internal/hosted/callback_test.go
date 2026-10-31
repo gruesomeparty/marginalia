@@ -248,6 +248,12 @@ func TestQuestionsCallBackDebounced(t *testing.T) {
 	if calls = k.wait(t, 0); len(calls) != 3 {
 		t.Errorf("the question the Done replaced went out anyway: %d calls", len(calls))
 	}
+	cb.mu.Lock()
+	kept := len(cb.last)
+	cb.mu.Unlock()
+	if kept != 0 {
+		t.Errorf("a review past its window still holds debounce state: %d entries", kept)
+	}
 
 	// A republish without a callback keeps the review's.
 	r, err = h.Republish(context.Background(), r.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nmore\n")}}})
