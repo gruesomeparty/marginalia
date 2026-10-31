@@ -320,6 +320,9 @@ body.rail .existing.in-rail.off{display:none}
 .existing .item[data-status="reopened"] .status{background:color-mix(in srgb,var(--bad) var(--tint-weak),transparent);color:var(--bad);border-color:var(--bad)}
 .existing .item[data-status="confirmed"]{opacity:.72}
 /* What the agent says it changed, and the one check we can run on the claim. */
+/* Who said it, once more than one person has (issue 53). */
+.existing .item .by{color:var(--muted);font-size:var(--fs-sm);margin-left:.4rem}
+.existing .item .by.mine{font-weight:600;color:var(--fg)}
 .existing .changed{margin:.35rem 0 0 .2rem;border-left:2px solid var(--accent);padding-left:.6rem}
 .existing .changed .who{font-weight:600;color:var(--muted);font-size:var(--fs-sm);margin-right:.35rem}
 .existing .changed .unclaimed{display:block;margin-top:.2rem;color:var(--bad);font-size:var(--fs-sm)}
@@ -568,22 +571,29 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // Notes come from the server's materialized view: it has compared each
   // event's hash against the block as it now reads, so the page shows what
   // still applies rather than guessing.
-  var res = data.resolution || {states:[]};
-  var byBlock = {};
-  (res.states||[]).forEach(function(st){ if(!st.orphaned) byBlock[st.block] = st.history || []; });
-  // A reply to one of the requester's notes answers the agent's question, so
-  // it is shown under that question and nowhere else: it is not the block's
-  // state, and like any reply it must not move a badge or the header count.
-  var answersOf = {};
-  Object.keys(byBlock).forEach(function(k){
-    byBlock[k] = byBlock[k].filter(function(n){
-      if(!n.answers) return true;
-      (answersOf[n.answers] = answersOf[n.answers] || []).push(n);
-      return false;
+  var res, byBlock, answersOf, unanchored;
+  function index(r){
+    res = r || {states:[]};
+    byBlock = {};
+    (res.states||[]).forEach(function(st){ if(!st.orphaned) byBlock[st.block] = st.history || []; });
+    // A reply to one of the requester's notes answers the agent's question, so
+    // it is shown under that question and nowhere else: it is not the block's
+    // state, and like any reply it must not move a badge or the header count.
+    answersOf = {};
+    Object.keys(byBlock).forEach(function(k){
+      byBlock[k] = byBlock[k].filter(function(n){
+        if(!n.answers) return true;
+        (answersOf[n.answers] = answersOf[n.answers] || []).push(n);
+        return false;
+      });
+      if(!byBlock[k].length) delete byBlock[k];
     });
-    if(!byBlock[k].length) delete byBlock[k];
-  });
-  var unanchored = res.orphaned || 0;
+    unanchored = res.orphaned || 0;
+  }
+  index(data.resolution);
+  // Several reviewers (issue 53): once more than one person has said
+  // something, every note says who, and your own say so.
+  function several(){ return (res.participants || []).length > 1; }
 
   function staleCount(){
     var n=0;
@@ -902,6 +912,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
       if(i === list.length-1) item.classList.add("current");
       var t=document.createElement("span"); t.className="type"; t.textContent=labelOf[e.type] || e.type.replace("_"," ");
       item.appendChild(t);
+      if(several() && e.author){
+        var by=document.createElement("span"); by.className="by";
+        if(e.author === author){ by.classList.add("mine"); by.textContent = e.author + " (you)"; }
+        else by.textContent = e.author;
+        item.appendChild(by);
+      }
       if(note.stale){
         item.classList.add("stale");
         var tag=document.createElement("span"); tag.className="tag";
@@ -2224,6 +2240,63 @@ window.__MARGINALIA__ = {{.DataJSON}};
         })
         .catch(function(){ /* the server went away; the page is still readable */ });
     }, 2000);
+  }
+
+  // Done is per reviewer; the review is done by the requester's rule. When
+  // that rule needs more than one Done, the button says how far it is.
+  var doneBtn = document.getElementById("done"), doneText = doneBtn.textContent;
+  function doneLabel(){
+    var need = res.done_needed || 0;
+    doneBtn.textContent = need > 1 ? doneText + " (" + (res.done_by || 0) + " of " + need + ")" : doneText;
+  }
+  doneLabel();
+  // Other reviewers' notes, as they are saved (issue 53). The log is
+  // append-only, so nothing anyone wrote can be lost; what the page must not
+  // do is keep showing a view that has moved on. It long-polls the server
+  // and, when anything was appended, re-reads the resolution and redraws the
+  // blocks whose notes changed — never one with a reply being typed in it.
+  // Share mode has no server, and a page that cannot reach it keeps working.
+  var shown = {};
+  function sig(id){
+    return JSON.stringify((byBlock[id] || []).map(function(n){
+      return [n.id, n.status, n.stale, (n.replies || []).length, (n.progress || []).length];
+    })) + several();
+  }
+  function busy(el){
+    var box = el.mg_existing;
+    return !!(box && box.isConnected && (box.querySelector("textarea") || box.contains(document.activeElement)));
+  }
+  Object.keys(elOf).forEach(function(id){ shown[id] = sig(id); });
+  function refresh(){
+    return fetch(base + "/api/resolution?doc=" + encodeURIComponent(data.doc.path), {cache: "no-store"})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(next){
+        if(!next) return;
+        index(next);
+        Object.keys(elOf).forEach(function(id){
+          var el = elOf[id], now = sig(id);
+          if(now === shown[id] || busy(el)) return;
+          shown[id] = now;
+          marker(el); renderExisting(el); markSub(el);
+        });
+        count(); doneLabel();
+      });
+  }
+  if(!data.static && window.fetch){
+    var since = null;
+    (function follow(){
+      var q = since === null ? "" : "?since=" + since + "&timeout=25";
+      fetch(base + "/api/wait" + q, {cache: "no-store"})
+        .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(w){
+          var moved = since !== null && w.events !== since;
+          since = w.events;
+          // A finished review answers at once, so it is asked less often.
+          var again = w.done ? 5000 : 250;
+          return (moved ? refresh() : Promise.resolve()).then(function(){ setTimeout(follow, again); });
+        })
+        .catch(function(){ setTimeout(follow, 10000); });
+    })();
   }
 
   var finish = document.getElementById("finish");

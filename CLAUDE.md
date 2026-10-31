@@ -359,7 +359,12 @@ users are agents, not humans.
   (counting this process's Dones), `mcpserver.Target.Completion` (stdio reads
   take it from the live session serving the path, else `any`), the hosted
   tools, inbox status, archiving and `/agent/r/{id}/wait` (this revision's
-  Dones only).
+  Dones only). The page (page script only) names each note's author once a
+  log has more than one participant, marks the reviewer's own "(you)" — the
+  payload's `author` is the request's resolved identity (`Server.authorOf`) —
+  reads "Done (n of m)" when the rule needs more than one Done, and follows
+  `/api/wait`: on any append it re-reads `/api/resolution` and redraws only
+  blocks whose notes changed, never one with a reply being typed.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
