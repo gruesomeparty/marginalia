@@ -62,6 +62,9 @@ notes:                   # your questions, rendered beside the block
     doc: spec.md         # which document — required in a set, optional for one
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
+  - id: db               # no block: a question about the whole document
+    text: Which database should the first release ship with?
+    options: [postgres, sqlite]   # 2 to 4; the reviewer answers in one tap
 ```
 
 The instructions render as a banner above the document, so the framing survives
@@ -70,6 +73,13 @@ coming from the requester, with an **Answer** button. The answer is a `reply`
 event whose `reply_to` is the note's id — `req:batch-cap`, or `req:` plus a hash
 of the document, block and text when you gave no `id` — so it comes back tied to
 the question even when one block carries several.
+
+A note with `options` (two to four, each up to 80 characters) is a
+multiple-choice question: the page shows one button per option, and a tap saves
+a `reply` whose `fields.choice` is the option. The server refuses a choice the
+note did not offer. A note with no `block` is about the whole document and
+heads the page. `await_review_done` wakes with reason `answer` and the pick in
+`choices`, so you can act on the decision before the reviewer is done.
 
 Give each note a `doc` when the review serves a set — block ids are
 per-document, so `1/2` exists in every markdown file and an unnamed note would

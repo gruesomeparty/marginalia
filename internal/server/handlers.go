@@ -327,6 +327,18 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 		if !s.knows(target, e.ReplyTo) {
 			return http.StatusBadRequest, fmt.Errorf("unknown note %q — nothing in this document's log answers to it", e.ReplyTo)
 		}
+		// The one protocol event that carries fields is a tap on a
+		// multiple-choice requester note, and the choice must be one the
+		// agent offered.
+		if len(e.Fields) > 0 {
+			if e.Type != feedback.TypeReply || !strings.HasPrefix(e.ReplyTo, review.RequesterPrefix) {
+				return http.StatusBadRequest, fmt.Errorf("a %s carries no fields", e.Type)
+			}
+			d := s.docOf(target)
+			if err := cfg.CheckAnswer(e.ReplyTo, e.Fields, d.Path, target.Rel); err != nil {
+				return http.StatusBadRequest, err
+			}
+		}
 		// A reply is deliberately not blocked by readonly/skip: a pattern
 		// added after the fact must not strand an open thread. Root
 		// vocabulary on those blocks is still refused, below.

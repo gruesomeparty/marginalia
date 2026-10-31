@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -89,12 +90,30 @@ type Config struct {
 // collide. Derived from the text rather than the note's position on purpose:
 // editing a question orphans its answers, which is honest, whereas inserting
 // a note above it would otherwise hand them to a different question.
+//
+// A note with no Block is about the document as a whole and renders at the
+// top of its page. Options turn a note into a multiple-choice question
+// (issue #215): two to four answers the reviewer picks with one tap, which
+// arrive as a reply whose fields carry {choice: <option>}, checked against
+// this list on the server.
 type Note struct {
-	ID    string `yaml:"id,omitempty" json:"id,omitempty"`
-	Doc   string `yaml:"doc,omitempty" json:"doc,omitempty"`
-	Block string `yaml:"block" json:"block"`
-	Text  string `yaml:"text" json:"text"`
+	ID      string   `yaml:"id,omitempty" json:"id,omitempty"`
+	Doc     string   `yaml:"doc,omitempty" json:"doc,omitempty"`
+	Block   string   `yaml:"block" json:"block"`
+	Text    string   `yaml:"text" json:"text"`
+	Options []string `yaml:"options,omitempty" json:"options,omitempty"`
 }
+
+// ChoiceField is the reply field that carries a multiple-choice answer.
+const ChoiceField = "choice"
+
+// Bounds on a multiple-choice note: enough options to be a real choice, few
+// enough to be one tap, short enough to be a button.
+const (
+	minOptions   = 2
+	maxOptions   = 4
+	maxOptionLen = 80
+)
 
 // RequesterPrefix starts every requester note's id. A log event's id is bare
 // hex, so a reply_to with this prefix names a note in the config, not the log.
@@ -326,11 +345,31 @@ func (c *Config) validate() error {
 		n.Doc = strings.TrimSpace(n.Doc)
 		n.Block = strings.TrimSpace(n.Block)
 		n.Text = strings.TrimSpace(n.Text)
-		if n.Block == "" {
-			return fmt.Errorf("notes: an entry has no block to anchor to")
+		where := n.Block
+		if where == "" {
+			where = "the document"
 		}
 		if n.Text == "" {
-			return fmt.Errorf("notes: the note on %s is empty", n.Block)
+			return fmt.Errorf("notes: the note on %s is empty", where)
+		}
+		if n.Options != nil {
+			if len(n.Options) < minOptions || len(n.Options) > maxOptions {
+				return fmt.Errorf("notes: the question on %s needs %d to %d options, not %d", where, minOptions, maxOptions, len(n.Options))
+			}
+			seenOpt := map[string]bool{}
+			for j, o := range n.Options {
+				o = strings.TrimSpace(o)
+				switch {
+				case o == "":
+					return fmt.Errorf("notes: the question on %s has an empty option", where)
+				case len(o) > maxOptionLen:
+					return fmt.Errorf("notes: option %q on %s is longer than %d characters", o, where, maxOptionLen)
+				case seenOpt[o]:
+					return fmt.Errorf("notes: option %q on %s is listed twice", o, where)
+				}
+				seenOpt[o] = true
+				n.Options[j] = o
+			}
 		}
 		// Validate runs again on a layered config, so an id it already
 		// stored keeps its prefix rather than gaining a second one.
@@ -338,11 +377,11 @@ func (c *Config) validate() error {
 		if id == "" {
 			id = derivedNoteID(*n)
 		} else if !noteID.MatchString(id) {
-			return fmt.Errorf("notes: id %q on %s must be letters, digits, '.', '_' or '-'", id, n.Block)
+			return fmt.Errorf("notes: id %q on %s must be letters, digits, '.', '_' or '-'", id, where)
 		}
 		n.ID = RequesterPrefix + id
 		if seenNote[n.ID] {
-			return fmt.Errorf("notes: id %q is used by two notes (the second is on %s)", id, n.Block)
+			return fmt.Errorf("notes: id %q is used by two notes (the second is on %s)", id, where)
 		}
 		seenNote[n.ID] = true
 	}
@@ -444,6 +483,32 @@ func (c *Config) Requester(id string, doc ...string) (Note, bool) {
 	return Note{}, false
 }
 
+// CheckAnswer is the server's gate on the fields of a reply to requester
+// note id: none for a plain answer, and for a multiple-choice one only
+// {choice: <one of its options>}. A free-text answer to a multiple-choice
+// note is still an answer; a choice the agent never offered is refused.
+func (c *Config) CheckAnswer(id string, fields map[string]string, doc ...string) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	n, ok := c.Requester(id, doc...)
+	if !ok {
+		return fmt.Errorf("unknown requester note %q", id)
+	}
+	for k := range fields {
+		if k != ChoiceField {
+			return fmt.Errorf("an answer carries no field %q", k)
+		}
+	}
+	if len(n.Options) == 0 {
+		return fmt.Errorf("note %s is not a multiple-choice question", id)
+	}
+	if !slices.Contains(n.Options, fields[ChoiceField]) {
+		return fmt.Errorf("%q is not one of the options for %s: %s", fields[ChoiceField], id, strings.Join(n.Options, ", "))
+	}
+	return nil
+}
+
 // Unanchored returns the notes addressed to this document whose block it does
 // not have. A note that names its document and misses is worth surfacing: the
 // agent asked about something that is not there. A note with no document is
@@ -452,7 +517,7 @@ func (c *Config) Requester(id string, doc ...string) (Note, bool) {
 func (c *Config) Unanchored(blocks map[string]bool, doc ...string) []Note {
 	var out []Note
 	for _, n := range c.Notes {
-		if n.Doc != "" && n.addresses(doc) && !blocks[n.Block] {
+		if n.Block != "" && n.Doc != "" && n.addresses(doc) && !blocks[n.Block] {
 			n.ID = n.Key()
 			out = append(out, n)
 		}

@@ -340,6 +340,12 @@ body.rail .existing.in-rail.off{display:none}
 .sidenote .reply .who{display:inline;text-transform:none;letter-spacing:normal;font-weight:600;margin-right:.35rem}
 .existing .replybtn,.sidenote .replybtn{font:inherit;font-size:var(--fs-sm);margin-top:.3rem;padding:.1rem .5rem;border:1px solid var(--rule);border-radius:var(--r-pill);background:transparent;color:var(--muted);cursor:pointer}
 .existing .replybtn:hover,.sidenote .replybtn:hover{color:var(--fg);border-color:var(--accent)}
+/* A multiple-choice requester note: one tap answers it. */
+.sidenote .choices{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-2);white-space:normal}
+.sidenote .choice{font:inherit;font-size:var(--fs-sm);padding:var(--sp-1) var(--sp-3);border:1px solid var(--accent);border-radius:var(--r-pill);background:transparent;color:var(--fg);cursor:pointer}
+.sidenote .choice:hover{background:color-mix(in srgb,var(--accent) var(--tint-weak),transparent)}
+.sidenote .choice[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.sidenote.whole{margin:0 0 var(--sp-4)}
 .existing .replybox,.sidenote .replybox{margin-top:.4rem}
 .existing .replybox textarea,.sidenote .replybox textarea{width:100%;min-height:2.6rem;font:inherit;font-size:var(--fs-base);padding:.4rem;border:1px solid var(--rule);border-radius:var(--r-md);background:var(--bg);color:var(--fg);resize:vertical}
 .existing .replybox .row,.sidenote .replybox .row{display:flex;gap:.4rem;margin-top:.35rem}
@@ -1899,8 +1905,53 @@ window.__MARGINALIA__ = {{.DataJSON}};
       thread.hidden = !thread.childElementCount;
     }
     draw();
+    // An answer is posted the same way whether it was typed or tapped.
+    function post(ev, done){
+      function landed(saved){
+        (answersOf[note.id]=answersOf[note.id]||[]).push({event:saved,id:saved.id,answers:note.id});
+        done(); draw(); paint(); toast("Answer saved");
+      }
+      if(data.static){ landed(keep(ev)); refreshShare(); return; }
+      fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
+        .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
+        .then(landed)
+        .catch(function(err){ toast("Answer failed: "+err.message); });
+    }
+    function answer(text, fields){
+      var blk=blockOf[note.block]||{};
+      var ev={doc:data.doc.path,block:note.block||"",quote:blk.quote||"",hash:blk.hash||"",type:"reply",text:text,reply_to:note.id,author:author};
+      if(fields) ev.fields=fields;
+      return ev;
+    }
+    // Options the agent offered are buttons; the one this reviewer picked
+    // last reads as pressed. Free text stays available below them.
+    var choices=null;
+    function paint(){
+      if(!choices) return;
+      var mine="";
+      (answersOf[note.id]||[]).forEach(function(a){
+        var f=a.event.fields||{};
+        if(f.choice && (a.event.author||"")===author) mine=f.choice;
+      });
+      Array.prototype.forEach.call(choices.children, function(b){ b.setAttribute("aria-pressed", b.dataset.choice===mine ? "true" : "false"); });
+    }
+    if(note.options && note.options.length){
+      choices=document.createElement("div"); choices.className="choices";
+      choices.setAttribute("role","group"); choices.setAttribute("aria-label","Choose an answer");
+      note.options.forEach(function(opt){
+        var b=document.createElement("button"); b.type="button"; b.className="choice";
+        b.textContent=opt; b.dataset.choice=opt;
+        b.addEventListener("click", function(ev){
+          ev.stopPropagation();
+          if(b.getAttribute("aria-pressed")==="true") return;
+          post(answer(opt,{choice:opt}), function(){});
+        });
+        choices.appendChild(b);
+      });
+      paint();
+    }
     var btn=document.createElement("button");
-    btn.type="button"; btn.className="replybtn"; btn.textContent="Answer";
+    btn.type="button"; btn.className="replybtn"; btn.textContent=choices ? "Answer in words" : "Answer";
     btn.setAttribute("aria-expanded","false");
     btn.addEventListener("click", function(ev){
       ev.stopPropagation();
@@ -1915,17 +1966,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       function submit(){
         var text=ta.value.trim();
         if(!text){ ta.focus(); return; }
-        var blk=blockOf[note.block]||{};
-        var ev={doc:data.doc.path,block:note.block,quote:blk.quote||"",hash:blk.hash||"",type:"reply",text:text,reply_to:note.id,author:author};
-        function landed(saved){
-          (answersOf[note.id]=answersOf[note.id]||[]).push({event:saved,id:saved.id,answers:note.id});
-          close(); draw(); toast("Answer saved");
-        }
-        if(data.static){ landed(keep(ev)); refreshShare(); return; }
-        fetch(base+"/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ev)})
-          .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t.trim());}); return res.json(); })
-          .then(landed)
-          .catch(function(err){ toast("Answer failed: "+err.message); });
+        post(answer(text), close);
       }
       send.onclick=submit; cancel.onclick=close;
       ta.addEventListener("keydown", function(e){
@@ -1939,6 +1980,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       ta.focus();
     });
     box.appendChild(thread);
+    if(choices) box.appendChild(choices);
     box.appendChild(btn);
   }
   // The requester's guidance, rendered where it applies. A note whose block
@@ -1946,7 +1988,21 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // agent asked is worth more than tidy markup.
   (function(){
     var stray = [];
+    var whole = [];
     ((data.review && data.review.notes) || []).forEach(function(note){
+      // A note with no block is about the whole document: it heads the
+      // page, in the order the requester wrote them.
+      if(!note.block){
+        var top = document.createElement("aside");
+        top.className = "sidenote whole";
+        var w = document.createElement("span");
+        w.className = "who"; w.textContent = "question about the whole document";
+        top.appendChild(w);
+        top.appendChild(document.createTextNode(note.text));
+        answerable(null, note, top);
+        whole.push(top);
+        return;
+      }
       var el = elOf[note.block];
       if(!el){ stray.push(note); return; }
       var box = document.createElement("aside");
@@ -1958,6 +2014,10 @@ window.__MARGINALIA__ = {{.DataJSON}};
       answerable(el, note, box);
       if(el.tagName === "LI" || el.closest("pre")) attach(el, box); else el.before(box);
     });
+    if(whole.length){
+      var docEl = document.getElementById("doc"), framing = docEl.querySelector(".framing");
+      whole.forEach(function(top){ if(framing) framing.after(top); else docEl.prepend(top); framing = top; });
+    }
     if(!stray.length) return;
     var banner = document.querySelector(".framing") || (function(){
       var s = document.createElement("section"); s.className = "framing";

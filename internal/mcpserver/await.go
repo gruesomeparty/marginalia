@@ -2,9 +2,11 @@ package mcpserver
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
@@ -27,6 +29,9 @@ const MaxTimeout = 30 * time.Minute
 // Why the wait watches the logs rather than GET /api/revision: revision counts
 // document *re-parses* under --watch, which is a different fact entirely — it
 // moves when the author edits and stays put when the reviewer comments.
+//
+// A tap on a multiple-choice requester note returns it with reason "answer"
+// and the pick in Choices, ahead of a question.
 //
 // The wait also returns, with reason "question", as soon as a question sits
 // past the cursor and nobody has replied to it yet: a reviewer who asks the
@@ -57,6 +62,9 @@ func WaitForDone(ctx context.Context, docs []Target, cursor map[string]int, time
 		}
 		if done {
 			return true, "review_done", out, nil
+		}
+		if len(Choices(out)) > 0 {
+			return false, "answer", out, nil
 		}
 		if asked(out) {
 			return false, "question", out, nil
@@ -116,6 +124,32 @@ func asked(docs []DocEvents) bool {
 		}
 	}
 	return false
+}
+
+// Choice is the reviewer's tap on a multiple-choice requester note
+// (issue #215): which note, which option, who.
+type Choice struct {
+	Doc    string `json:"doc"`
+	Note   string `json:"note" jsonschema:"the requester note's id (req:...)"`
+	Choice string `json:"choice"`
+	Author string `json:"author,omitempty"`
+}
+
+// Choices lists the options reviewers picked in these events, oldest first.
+// A choice wakes the wait with reason "answer", so the agent can proceed on
+// the decision without waiting for Done.
+func Choices(docs []DocEvents) []Choice {
+	out := []Choice{} // never null in a tool's output
+	for _, d := range docs {
+		for _, e := range d.Events {
+			c, ok := e.Fields[review.ChoiceField]
+			if e.Type != feedback.TypeReply || !ok || !strings.HasPrefix(e.ReplyTo, review.RequesterPrefix) {
+				continue
+			}
+			out = append(out, Choice{Doc: d.Doc, Note: e.ReplyTo, Choice: c, Author: e.Author})
+		}
+	}
+	return out
 }
 
 // moved reports whether any log's change token differs from the last look,
