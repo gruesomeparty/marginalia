@@ -83,7 +83,8 @@ review's. Delivery is off the request path, with a 5s timeout and one retry.
 It is off unless the operator lists the hosts a callback may name, in
 `MARGINALIA_CALLBACK_HOSTS` (comma-separated, `*.example.com` for a domain's
 subdomains), with `MARGINALIA_CALLBACK_SECRET` (at least 32 characters; each
-review's secret is derived from it and the review id, so nothing secret is
+review's secret is derived from it, the review id and the callback URL, so a
+URL named on a republish gets a secret of its own and nothing secret is
 stored, and rotating it rotates them all). A callback must be https, carry no
 credentials, and name a listed host; the host refuses, at publish time and
 again when it connects, any address that is not public (loopback, private,

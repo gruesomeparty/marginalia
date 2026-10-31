@@ -185,7 +185,7 @@ func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in
 	}
 	out := h.published(r)
 	if in.Callback != "" {
-		out.CallbackSecret = h.opts.Callbacks.ReviewSecret(r.Meta.ID)
+		out.CallbackSecret = h.opts.Callbacks.ReviewSecret(r.Meta.ID, r.Meta.Callback)
 	}
 	return nil, out, nil
 }

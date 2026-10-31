@@ -615,8 +615,9 @@ users are agents, not humans.
   human's `review_done` or `question` (`server.Options.Recorded`, told of
   every appended event): `publish_document`'s `callback_url` lands on
   `Meta.Callback` (inherited by a republish), the body is ids, cursor and
-  event only, signed HMAC-SHA256 under a per-review secret derived from
-  `MARGINALIA_CALLBACK_SECRET` and returned once. Off without
+  event only, signed HMAC-SHA256 under a secret derived from
+  `MARGINALIA_CALLBACK_SECRET`, the review id and the URL (so a republish
+  naming another URL cannot learn it), returned by a publish that names one. Off without
   `MARGINALIA_CALLBACK_HOSTS`; https and listed hosts only, and the dialer
   refuses a non-public address after resolution (no proxy, no redirects).
   Questions debounce per review; a Done is never held.

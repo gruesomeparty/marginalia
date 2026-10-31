@@ -116,12 +116,15 @@ func NewCallbacks(hosts, secret string) (*Callbacks, error) {
 	return &Callbacks{Hosts: list, Secret: []byte(secret)}, nil
 }
 
-// ReviewSecret is the key a review's callbacks are signed with. It is
-// derived, so nothing secret is stored beside the review, and an operator
-// who rotates MARGINALIA_CALLBACK_SECRET rotates every review's.
-func (c *Callbacks) ReviewSecret(id string) string {
+// ReviewSecret is the key a review's callbacks to one URL are signed with.
+// It is derived, so nothing secret is stored beside the review, and an
+// operator who rotates MARGINALIA_CALLBACK_SECRET rotates every review's.
+// The URL is part of it: an agent that republishes a review it knows the id
+// of, naming its own callback, gets a secret of its own and never the one
+// that signs calls to another agent's endpoint.
+func (c *Callbacks) ReviewSecret(id, target string) string {
 	m := hmac.New(sha256.New, c.Secret)
-	m.Write([]byte("marginalia callback\x00" + id))
+	m.Write([]byte("marginalia callback\x00" + id + "\x00" + target))
 	return hex.EncodeToString(m.Sum(nil))
 }
 
@@ -353,7 +356,7 @@ func (c *Callbacks) deliver(target string, cb Callback) {
 	if err != nil {
 		return
 	}
-	sig := Sign(c.ReviewSecret(cb.ReviewID), body)
+	sig := Sign(c.ReviewSecret(cb.ReviewID, target), body)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()

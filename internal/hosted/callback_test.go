@@ -275,6 +275,19 @@ func TestCallbackHostRecheckedAtDelivery(t *testing.T) {
 	}
 }
 
+// A review's secret is bound to the callback URL: an agent that names its
+// own URL on a republish cannot sign calls to another agent's endpoint.
+func TestReviewSecretIsBoundToTheURL(t *testing.T) {
+	c, err := NewCallbacks("example.com", strings.Repeat("s", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := c.ReviewSecret("r1", "https://example.com/a"), c.ReviewSecret("r1", "https://example.com/b")
+	if a == b || a != c.ReviewSecret("r1", "https://example.com/a") || a == c.ReviewSecret("r2", "https://example.com/a") {
+		t.Errorf("secrets: a=%s b=%s", a, b)
+	}
+}
+
 // Without an allow-list the feature is off, and says so; an allow-list
 // without a strong secret does not start.
 func TestCallbacksOffWithoutAnAllowList(t *testing.T) {
