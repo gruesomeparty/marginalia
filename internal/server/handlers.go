@@ -92,6 +92,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, current *Ent
 		Inbox:    s.opts.InboxURL,
 	}
 	setDone := true
+	rule := s.Review().Completion()
 	for i := range s.docs {
 		e := &s.docs[i]
 		events, err := e.Store.Load()
@@ -107,7 +108,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, current *Ent
 			Label:   e.Label,
 			Rel:     e.Rel,
 			Count:   countComments(events),
-			Done:    hasReviewDone(events),
+			Done:    rule.Met(feedback.Reviewers(events)),
 			Current: e == current,
 		}
 		if !nav.Done {
@@ -133,15 +134,6 @@ func countComments(events []feedback.Event) int {
 		}
 	}
 	return n
-}
-
-func hasReviewDone(events []feedback.Event) bool {
-	for _, e := range events {
-		if e.Type == feedback.TypeReviewDone {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {

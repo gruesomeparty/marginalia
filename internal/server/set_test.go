@@ -12,6 +12,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // newSetServer serves three documents, one of them in a subdirectory, the way
@@ -206,6 +207,24 @@ func TestSetNavShowsProgress(t *testing.T) {
 	}
 	if !strings.Contains(body, `<span class="n">1</span>`) {
 		t.Errorf("the commented document should show a count badge")
+	}
+}
+
+// Under complete_when: all, one reviewer's Done does not tick a document:
+// the nav must agree with the resolution and the agent's signals.
+func TestSetNavFollowsTheCompletionRule(t *testing.T) {
+	s, stores := newSetServer(t)
+	cfg := review.Default()
+	cfg.CompleteWhen = review.CompleteAll
+	cfg.Reviewers = []string{"ana", "bo"}
+	s.opts.Review = cfg
+	_ = stores["docs/plan.md"].Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"})
+	if body := get(t, s, "/").Body.String(); strings.Contains(body, "1 done") {
+		t.Error("one of two reviewers' Done ticked the document")
+	}
+	_ = stores["docs/plan.md"].Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "bo"})
+	if body := get(t, s, "/").Body.String(); !strings.Contains(body, "3 documents · 1 done") {
+		t.Error("both reviewers done, the document is still not ticked")
 	}
 }
 

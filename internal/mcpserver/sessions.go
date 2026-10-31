@@ -25,8 +25,11 @@ type live struct {
 	// completion is the review's rule for done, which the reads need and
 	// the disk does not hold.
 	completion review.Completion
-	cancel     context.CancelFunc
-	done       chan error // closed when Serve returns, after its shutdown drain
+	// seq orders sessions by start, so the newest one's rule wins when two
+	// serve the same path.
+	seq    uint64
+	cancel context.CancelFunc
+	done   chan error // closed when Serve returns, after its shutdown drain
 }
 
 func (s *Server) lookup(id string) *live {
@@ -61,6 +64,8 @@ func (s *Server) start(paths []string, opts session.Options) (*live, *server.Ser
 func (s *Server) remember(l *live) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.started++
+	l.seq = s.started
 	s.sessions[l.id] = l
 }
 

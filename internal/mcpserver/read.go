@@ -94,17 +94,21 @@ func TargetOf(path string) Target {
 // Done, as it always did.
 func (s *Server) targetsOf(paths []string) []Target {
 	s.mu.Lock()
-	rules := map[string]review.Completion{}
+	rules := map[string]*live{}
 	for _, l := range s.sessions {
 		for _, d := range l.docs {
-			rules[d] = l.completion
+			if r := rules[d]; r == nil || l.seq > r.seq {
+				rules[d] = l
+			}
 		}
 	}
 	s.mu.Unlock()
 	out := make([]Target, 0, len(paths))
 	for _, p := range paths {
 		t := TargetOf(p)
-		t.Completion = rules[p]
+		if l := rules[p]; l != nil {
+			t.Completion = l.completion
+		}
 		out = append(out, t)
 	}
 	return out

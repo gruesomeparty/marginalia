@@ -2205,9 +2205,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       .then(function(res){ if(!res.ok) return res.text().then(function(t){ throw new Error(t.trim() || ("HTTP " + res.status)); });
         closeSheet();
         sheetNote.value = "";
-        var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
-        if(t) t.hidden = false;
-        refreshSetCount();
+        refresh();
         toast(inSet ? "This file is marked done." : "Review submitted — you can close this tab."); })
       .catch(function(err){
         // The page renders the rule; the server enforces it. If they ever
@@ -2273,6 +2271,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
       .then(function(next){
         if(!next) return;
         index(next);
+        // The tick is the review's rule, not this reviewer's click.
+        var t = tickOf(document.querySelector('.nav a[aria-current="page"]'));
+        if(t && t.hidden === !!res.done){ t.hidden = !res.done; refreshSetCount(); }
         Object.keys(elOf).forEach(function(id){
           var el = elOf[id], now = sig(id);
           if(now === shown[id] || busy(el)) return;
@@ -2304,8 +2305,12 @@ window.__MARGINALIA__ = {{.DataJSON}};
     fetch(base+"/api/session_done",{method:"POST"})
       .then(function(res){ if(!res.ok) return res.text().then(function(t){throw new Error(t);}); return res.json(); })
       .then(function(){
-        Array.prototype.forEach.call(document.querySelectorAll(".nav .tick"), function(t){ t.hidden = false; });
-        refreshSetCount();
+        // One Done each only finishes the set when the rule needs one.
+        if((res.done_needed || 0) > 1) refresh();
+        else {
+          Array.prototype.forEach.call(document.querySelectorAll(".nav .tick"), function(t){ t.hidden = false; });
+          refreshSetCount();
+        }
         finish.textContent = "Finish review set \u2713";
         toast("Review set marked done — you can close this tab."); })
       .catch(function(err){ toast(err.message || "Failed"); });
