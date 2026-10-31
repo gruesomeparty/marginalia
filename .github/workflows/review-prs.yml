@@ -19,7 +19,8 @@
 # ready; bots (Renovate, release-please) are skipped.
 #
 # Documentation-only PRs (scripts/ci-changes.sh's docs_only: Markdown and
-# docs/, never skills, agent config, CLAUDE.md or the PRD) run no agent. The
+# docs/, never skills, plugin commands, agent config, CLAUDE.md or the PRD)
+# run no agent. The
 # apply job, from the default branch, confirms the head's files are still
 # only documentation and records a scripted pass of that head, so the merge
 # gate sees a review of the current commit and its other floors still apply.
@@ -108,12 +109,13 @@ jobs:
                     | .number] | sort | .[]' | tr '\n' ' ')"
           fi
           # Documentation-only PRs need no agent, and do not count toward
-          # MAX_PRS. gh lists at most 100 files; a PR that long is reviewed.
+          # MAX_PRS. The same REST listing apply re-checks with (a rename's
+          # old path included), so a PR apply would refuse is never nominated.
           agent=""; docs=""
           for n in $list; do
-            if gh pr view "$n" --repo "$REPO" --json files \
-                --jq 'select((.files | length) < 100) | .files[].path' >files.txt \
-              && [ -s files.txt ] \
+            if gh api --paginate "repos/$REPO/pulls/$n/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)' >files.txt \
+              && [ -s files.txt ] && [ "$(wc -l <files.txt)" -lt 3000 ] \
               && scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null; then
               docs="$docs $n"
             else

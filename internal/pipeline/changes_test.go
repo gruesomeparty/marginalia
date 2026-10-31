@@ -44,6 +44,7 @@ func TestCIChanges(t *testing.T) {
 		{"claude.md", []string{"CLAUDE.md"}, ""},
 		{"a skill", []string{"skills/review-pr/SKILL.md"}, ""},
 		{"prd", []string{"PRD.md"}, ""},
+		{"a plugin command", []string{"commands/review-doc.md"}, ""},
 		{"homepage", []string{"site/index.html"}, ""},
 		// Tests read testdata, Markdown included.
 		{"testdata", []string{"internal/document/testdata/list.md"}, "test go image"},

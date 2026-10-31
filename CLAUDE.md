@@ -779,7 +779,7 @@ line of that block.
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
 Drafts and bots are skipped. A documentation-only PR (`scripts/ci-changes.sh`'s
-`docs_only`: Markdown and `docs/`, never skills, `.claude/`, CLAUDE.md or the
+`docs_only`: Markdown and `docs/`, never skills, `commands/`, `.claude/`, CLAUDE.md or the
 PRD) runs no agent: the apply job re-checks the head's files and records a
 scripted `review:pass`, domain `clear`, so the merge gate still sees a review
 of the current head. It never approves, requests changes or blocks a

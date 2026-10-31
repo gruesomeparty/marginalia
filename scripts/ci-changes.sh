@@ -21,9 +21,11 @@
 #   codeql      Go source and the module.
 #   docs_only   every file is documentation a reader reads and no agent
 #               follows: the review loop records a scripted pass instead of
-#               running an agent. Skills, agent config, CLAUDE.md and the PRD
-#               are prose that steers agents or the project, so they keep
-#               their review.
+#               running an agent. Skills, the plugin's commands, agent config,
+#               CLAUDE.md and the PRD are prose that steers agents or the
+#               project, so they keep their review.
+#
+#   --steers    instead prints the steers pattern, for pick-model.sh.
 #
 # Fails open: no paths, or a change to CI itself (its workflows or this
 # script), means every check runs. Documentation is a Markdown file or docs/,
@@ -33,25 +35,6 @@ set -euo pipefail
 
 keys=(test go image cloudflare workflows deps codeql docs_only)
 
-all() {
-  for k in "${keys[@]}"; do
-    if [ "$k" = docs_only ]; then echo "$k=false"; else echo "$k=true"; fi
-  done
-  exit 0
-}
-
-[ "${1:-}" = --all ] && all
-[ $# -eq 0 ] || {
-  echo "usage: $0 [--all] <paths" >&2
-  exit 2
-}
-
-paths=()
-while IFS= read -r p || [ -n "$p" ]; do
-  [ -n "$p" ] && paths+=("$p")
-done
-[ ${#paths[@]} -gt 0 ] || all
-
 inert='(\.md$|^docs/|^site/)'
 testdata='/testdata/'
 ci_itself='^(\.github/workflows/(ci|codeql)\.yml|scripts/ci-changes\.sh)$'
@@ -60,8 +43,29 @@ image_src='^(Dockerfile|\.goreleaser\.ya?ml|\.dockerignore|scripts/(image-smoke|
 cloudflare_src='^deploy/cloudflare/'
 deps_src='^(go\.(mod|sum)|deploy/cloudflare/package(-lock)?\.json)$'
 codeql_src='(\.go$|^go\.(mod|sum)$)'
-# Markdown that agents follow or that the merge gate guards: not docs_only.
-steers='(^(skills|\.claude|\.claude-plugin|\.github)/|(^|/)(CLAUDE|AGENTS|PRD|SECURITY)\.md$)'
+# Markdown that agents follow (skills, the plugin's commands, agents and
+# hooks) or that the merge gate guards: not docs_only.
+steers='(^(skills|commands|agents|hooks|\.claude|\.claude-plugin|\.github)/|(^|/)(CLAUDE|AGENTS|PRD|SECURITY)\.md$)'
+
+all() {
+  for k in "${keys[@]}"; do
+    if [ "$k" = docs_only ]; then echo "$k=false"; else echo "$k=true"; fi
+  done
+  exit 0
+}
+
+[ "${1:-}" = --all ] && all
+if [ "${1:-}" = --steers ]; then echo "$steers"; exit 0; fi
+[ $# -eq 0 ] || {
+  echo "usage: $0 [--all|--steers] <paths" >&2
+  exit 2
+}
+
+paths=()
+while IFS= read -r p || [ -n "$p" ]; do
+  [ -n "$p" ] && paths+=("$p")
+done
+[ ${#paths[@]} -gt 0 ] || all
 
 # One variable per key (no associative arrays: macOS ships bash 3).
 for k in "${keys[@]}"; do printf -v "on_$k" false; done
