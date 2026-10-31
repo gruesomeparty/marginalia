@@ -365,6 +365,9 @@ users are agents, not humans.
   reads "Done (n of m)" when the rule needs more than one Done, and follows
   `/api/wait`: on any append it re-reads `/api/resolution` and redraws only
   blocks whose notes changed, never one with a reply being typed.
+  A set's nav tick and "Finish" state follow the rule too (`rule.Met` in
+  `renderPage`; the page re-reads the resolution after Done rather than
+  ticking on the click).
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
