@@ -86,7 +86,9 @@ type Callback struct {
 	// leaves others to finish is false.
 	Done bool `json:"done"`
 	// Cursor is the events per document name to pass to feedback_since or
-	// await_review_done; Since is the count for GET /agent/r/{id}/wait.
+	// await_review_done, and Since the count for GET /agent/r/{id}/wait,
+	// both taken just before the event: reading from them returns it (and,
+	// for a collapsed burst, every question it stands for).
 	Cursor map[string]int `json:"cursor"`
 	Since  uint64         `json:"since"`
 	At     string         `json:"at"`
@@ -171,15 +173,32 @@ func (c *Callbacks) allowed(host string) bool {
 	return false
 }
 
-// cgnat is 100.64.0.0/10: shared address space, a Tailscale tailnet among
-// others, and never a public endpoint.
-var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+// internalRanges are global-unicast-looking ranges that are not public
+// endpoints: shared address space (a Tailscale tailnet among others), "this
+// network", benchmarking, reserved, and the IPv6 prefixes that translate to
+// an IPv4 address (NAT64, 6to4), which could reach an internal one.
+var internalRanges = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2002::/16"),
+}
 
 // public reports whether ip is an address on the public internet.
 func public(ip netip.Addr) bool {
 	ip = ip.Unmap()
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() &&
-		!ip.IsLinkLocalUnicast() && !cgnat.Contains(ip)
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+		return false
+	}
+	for _, p := range internalRanges {
+		if p.Contains(ip) {
+			return false
+		}
+	}
+	return true
 }
 
 // refuseInternal is the dialer's Control: it sees the resolved address of
@@ -260,6 +279,11 @@ func (c *Callbacks) Send(target string, cb Callback) {
 		c.pending = map[string]pendingCall{}
 	}
 	now := c.now()
+	// A call that takes a waiting one's place keeps that one's cursor, the
+	// earlier: reading from it returns every event the burst stood for.
+	if p, ok := c.pending[cb.ReviewID]; ok {
+		cb.Cursor, cb.Since = p.body.Cursor, p.body.Since
+	}
 	if last, sent := c.last[cb.ReviewID]; sent && cb.Event == feedback.TypeQuestion && now.Sub(last) < c.debounce() {
 		c.pending[cb.ReviewID] = pendingCall{url: target, body: cb}
 		c.mu.Unlock()
@@ -383,10 +407,18 @@ func (h *Host) recorded(id, rel string, e feedback.Event) {
 		h.logf("marginalia: callback for review %s: %v\n", id, err)
 		return
 	}
+	// The counts now include the event; the cursor is the position before
+	// it, so the agent reads the event it was called about.
+	if since > 0 {
+		since--
+	}
 	cursor := map[string]int{}
 	for _, en := range r.Server.Entries() {
 		if events, err := en.Store.Load(); err == nil {
 			cursor[en.Rel] = len(events)
+			if en.Rel == rel && cursor[en.Rel] > 0 {
+				cursor[en.Rel]--
+			}
 		}
 	}
 	h.opts.Callbacks.Send(r.Meta.Callback, Callback{

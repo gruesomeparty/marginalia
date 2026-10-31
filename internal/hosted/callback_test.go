@@ -140,8 +140,20 @@ func TestDoneCallsTheAgentBack(t *testing.T) {
 	if err := json.Unmarshal(got.body, &cb); err != nil {
 		t.Fatal(err)
 	}
-	if cb.Event != feedback.TypeReviewDone || cb.ReviewID != out.ReviewID || cb.Name != "plan.md" || cb.Revision != 1 || !cb.Done || cb.Cursor["plan.md"] != 2 || cb.Since != 2 {
+	if cb.Event != feedback.TypeReviewDone || cb.ReviewID != out.ReviewID || cb.Name != "plan.md" || cb.Revision != 1 || !cb.Done || cb.Cursor["plan.md"] != 1 || cb.Since != 1 {
 		t.Errorf("callback = %+v", cb)
+	}
+	// Reading from the cursor returns the Done the call is about.
+	var read struct {
+		Docs []struct {
+			Events []feedback.Event `json:"events"`
+		} `json:"docs"`
+	}
+	if err := call(t, cs, "feedback_since", map[string]any{"review_id": out.ReviewID, "cursor": cb.Cursor}, &read); err != nil {
+		t.Fatal(err)
+	}
+	if len(read.Docs) != 1 || len(read.Docs[0].Events) != 1 || read.Docs[0].Events[0].Type != feedback.TypeReviewDone {
+		t.Errorf("feedback_since from the callback's cursor = %+v, want the Done", read)
 	}
 	for _, leak := range []string{"CORRELATION", "launch code", "Launch plan"} {
 		if strings.Contains(string(got.body), leak) {
@@ -214,7 +226,8 @@ func TestQuestionsCallBackDebounced(t *testing.T) {
 	calls := k.wait(t, 1)
 	var last Callback
 	_ = json.Unmarshal(calls[1].body, &last)
-	if last.Event != feedback.TypeQuestion || last.Cursor["spec.md"] != 3 || last.Done {
+	// The burst's cursor is its first question's: reading from it returns both.
+	if last.Event != feedback.TypeQuestion || last.Cursor["spec.md"] != 1 || last.Done {
 		t.Errorf("the collapsed call = %+v", last)
 	}
 	clock = clock.Add(time.Second)
@@ -225,7 +238,9 @@ func TestQuestionsCallBackDebounced(t *testing.T) {
 	calls = k.wait(t, 1) // the Done went at once and took the question's place
 	var done Callback
 	_ = json.Unmarshal(calls[2].body, &done)
-	if done.Event != feedback.TypeReviewDone || done.Cursor["spec.md"] != 5 {
+	// It took the waiting question's place, and its cursor: reading from it
+	// returns the question and the Done.
+	if done.Event != feedback.TypeReviewDone || done.Cursor["spec.md"] != 3 {
 		t.Errorf("done call = %+v", done)
 	}
 	clock = clock.Add(time.Hour)
@@ -265,6 +280,7 @@ func TestTheDialerRefusesInternalAddresses(t *testing.T) {
 		"127.0.0.1": false, "10.1.2.3": false, "192.168.1.1": false, "172.16.0.1": false,
 		"169.254.169.254": false, "100.100.1.1": false, "::1": false, "fd00::1": false,
 		"0.0.0.0": false, "::ffff:127.0.0.1": false, "fe80::1": false,
+		"0.1.2.3": false, "198.18.0.1": false, "240.0.0.1": false, "64:ff9b::a00:1": false, "2002:a00:1::1": false,
 	} {
 		if got := public(netip.MustParseAddr(addr)); got != want {
 			t.Errorf("public(%s) = %v, want %v", addr, got, want)
