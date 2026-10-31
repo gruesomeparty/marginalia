@@ -122,6 +122,16 @@ type Meta struct {
 	// Assets is every image the current revision serves, by name, with the
 	// revision whose blob holds it (reviews/<id>/asset/<rev>/<name>).
 	Assets map[string]AssetMeta `json:"assets,omitempty"`
+	// Rounds is how many earlier revisions a reviewer finished, counted at
+	// each republish, so the stats page can say how many rounds a review
+	// took without keeping every revision's metadata in memory. Metadata
+	// written before it existed reads as zero.
+	Rounds int `json:"rounds,omitempty"`
+	// Baseline is, per document, the last revision the reviewer finished
+	// before this one: what the page's changes are measured from (issue
+	// #214). Absent for a document nobody has finished yet, which marks
+	// nothing as changed.
+	Baseline map[string]int `json:"baseline,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

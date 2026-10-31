@@ -58,3 +58,40 @@ func TestAnswerARequesterNote(t *testing.T) {
 		t.Errorf("the answer also rendered as a block note (%d .existing)", existing)
 	}
 }
+
+// A multiple-choice question about the whole document (#215) heads the
+// page; one tap saves one reply carrying the choice, and the pick survives
+// a reload as the pressed option.
+func TestTapAChoice(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "review.yaml")
+	body := "notes:\n  - id: db\n    text: Which database?\n    options: [postgres, sqlite]\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := serve(t, "plan.md", prose, session.Options{Config: cfg})
+	ctx := browser(t)
+
+	do(t, ctx,
+		chromedp.Navigate(r.URL),
+		chromedp.WaitVisible(chromedp.CSS(".sidenote.whole .choice")),
+	)
+	first := get(t, ctx, chromedp.Evaluate[bool](`document.querySelector("#doc .sidenote") === document.querySelector(".sidenote.whole")`))
+	if !first {
+		t.Error("the document-level question does not head the page")
+	}
+	do(t, ctx,
+		chromedp.Click(chromedp.CSS(`.sidenote.whole .choice[data-choice="sqlite"]`)),
+		chromedp.WaitVisible(chromedp.CSS(`.sidenote.whole .choice[data-choice="sqlite"][aria-pressed="true"]`)),
+	)
+	evs := r.events(t, 1)
+	if ev := evs[0]; ev.Type != "reply" || ev.ReplyTo != "req:db" || ev.Fields["choice"] != "sqlite" || ev.Block != "" {
+		t.Errorf("saved %+v, want one reply to req:db choosing sqlite", ev)
+	}
+	do(t, ctx,
+		chromedp.Navigate(r.URL),
+		chromedp.WaitVisible(chromedp.CSS(`.sidenote.whole .choice[data-choice="sqlite"][aria-pressed="true"]`)),
+	)
+	if n := get(t, ctx, chromedp.Evaluate[int](`document.querySelectorAll(".existing, .orphans").length`)); n != 0 {
+		t.Errorf("the answer also rendered as a note (%d)", n)
+	}
+}
