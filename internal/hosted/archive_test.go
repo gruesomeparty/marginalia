@@ -50,6 +50,24 @@ func TestArchiveAndRestoreFromTheInbox(t *testing.T) {
 			if code, _ := get(t, ts.URL+"/r/"+id+"/"); code != http.StatusNotFound {
 				t.Errorf("an archived review is still served: %d", code)
 			}
+			// Back and away again in the same process: the write-through
+			// cache and the byte meter both follow the moves.
+			before := h.use.stored
+			if _, err := h.Restore(context.Background(), id, "test"); err != nil {
+				t.Fatal(err)
+			}
+			if code, page := get(t, ts.URL+"/r/"+id+"/api/feedback?doc=spec.md"); code != 200 || !strings.Contains(page, "keep me") {
+				t.Fatalf("restored in-process without its notes: %d %s", code, page)
+			}
+			if h.use.stored <= before {
+				t.Errorf("a restore did not count the review's bytes again: %d → %d", before, h.use.stored)
+			}
+			if err := h.Archive(context.Background(), id, "test"); err != nil {
+				t.Fatal(err)
+			}
+			if h.use.stored != before {
+				t.Errorf("archiving again left %d bytes counted, want %d", h.use.stored, before)
+			}
 			if _, body := get(t, ts.URL+"/"); strings.Contains(body, id) {
 				t.Error("an archived review is still in the default tab")
 			}
@@ -94,7 +112,7 @@ func TestArchiveRefusesCrossSiteAndForeignRedirects(t *testing.T) {
 	if h.Review(r.Meta.ID) == nil {
 		t.Fatal("a cross-site post archived the review")
 	}
-	for _, back := range []string{"//evil.example/", "https://evil.example/", "/\\evil.example", "inbox"} {
+	for _, back := range []string{"//evil.example/", "https://evil.example/", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "inbox"} {
 		if got := localBack(back); got != "/" {
 			t.Errorf("localBack(%q) = %q, want /", back, got)
 		}

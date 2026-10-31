@@ -71,7 +71,8 @@ never marked done after `--retain-open` (90 days): the whole review moves
 under `archive/`, out of the inbox, nothing edited or deleted. The sweep
 runs at startup and hourly. The reviewer can also archive any review from
 its inbox row and bring one back from the **Archived** tab (a restore counts
-as activity, so the sweep leaves it alone), and an agent can take back a
+as activity, so the sweep leaves it alone; like a note, a restore is never
+refused by a cap, even past the open-reviews or stored-bytes limit), and an agent can take back a
 review it published with `withdraw_review` while the reviewer has not
 written anything on it. Marginalia itself never deletes: to remove archived
 reviews for good, put a lifecycle rule on the store's `archive/` prefix (on

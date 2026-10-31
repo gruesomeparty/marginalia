@@ -3,6 +3,7 @@ package hosted
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gruesomeparty/marginalia/internal/identity"
+	"github.com/gruesomeparty/marginalia/internal/storage"
 )
 
 // Archiving on demand. The sweep (limits.go) archives what has gone quiet;
@@ -55,6 +57,12 @@ func (h *Host) loadArchived(ctx context.Context) error {
 		}
 	}
 	for id, n := range latest {
+		if h.reviews[id] != nil {
+			// A move interrupted halfway leaves the id in both trees. It is
+			// open, so it is not also listed as archived; the next archive
+			// or restore of it finishes the move.
+			continue
+		}
 		key := prefixArchive + strings.TrimPrefix(metaKey(id, n), prefixReviews)
 		raw, err := h.store.GetBlob(ctx, key)
 		if err != nil {
@@ -98,7 +106,7 @@ func (h *Host) ArchivedReviews() []*Archived {
 func (h *Host) archiveLocked(ctx context.Context, r *Review, by string) error {
 	id := r.Meta.ID
 	now := h.opts.Now().UTC()
-	if err := h.store.PutBlob(ctx, markKey(prefixReviews, id, markArchived, now), []byte(by)); err != nil {
+	if err := h.mark(ctx, markKey(prefixReviews, id, markArchived, now), by); err != nil {
 		return fmt.Errorf("hosted: archiving %s: %w", id, err)
 	}
 	if err := h.store.Move(ctx, prefixReviews+id+"/", prefixArchive+id+"/"); err != nil {
@@ -112,6 +120,15 @@ func (h *Host) archiveLocked(ctx context.Context, r *Review, by string) error {
 	// metering layer, as the move went through it.
 	h.recordStored(-r.Meta.Bytes)
 	h.logf("marginalia: review %s archived by %s (last activity %s)\n", id, by, lastActivity(r).Format(time.RFC3339))
+	return nil
+}
+
+// mark writes a marker. One already at that key records the same moment,
+// which is all a marker says, so it stands.
+func (h *Host) mark(ctx context.Context, key, by string) error {
+	if err := h.store.PutBlob(ctx, key, []byte(by)); err != nil && !errors.Is(err, storage.ErrExists) {
+		return err
+	}
 	return nil
 }
 
@@ -164,7 +181,7 @@ func (h *Host) Restore(ctx context.Context, id, by string) (*Review, error) {
 		return nil, fmt.Errorf("no archived review %q here", id)
 	}
 	now := h.opts.Now().UTC()
-	if err := h.store.PutBlob(ctx, markKey(prefixArchive, id, markRestored, now), []byte(by)); err != nil {
+	if err := h.mark(ctx, markKey(prefixArchive, id, markRestored, now), by); err != nil {
 		return nil, fmt.Errorf("hosted: restoring %s: %w", id, err)
 	}
 	if err := h.store.Move(ctx, prefixArchive+id+"/", prefixReviews+id+"/"); err != nil {
@@ -236,8 +253,15 @@ func (h *Host) answerAction(w http.ResponseWriter, r *http.Request, id, state st
 // Anything that could leave the origin — a scheme, "//host", a backslash
 // some browsers read as a slash — is refused.
 func localBack(back string) string {
-	if back == "" || back[0] != '/' || (len(back) > 1 && (back[1] == '/' || back[1] == '\\')) || strings.ContainsAny(back, "\\\r\n") {
+	if back == "" || back[0] != '/' || (len(back) > 1 && (back[1] == '/' || back[1] == '\\')) || strings.ContainsRune(back, '\\') {
 		return "/"
+	}
+	// A browser drops tabs and newlines from a URL before reading it, so
+	// "/\t/host" would become "//host": no control byte gets through.
+	for i := 0; i < len(back); i++ {
+		if back[i] < 0x20 || back[i] == 0x7f {
+			return "/"
+		}
 	}
 	return back
 }
