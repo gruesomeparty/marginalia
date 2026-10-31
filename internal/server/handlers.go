@@ -45,8 +45,8 @@ func (s *Server) lookup(key string) *Entry {
 	return nil
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, &s.docs[0])
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	s.renderPage(w, r, &s.docs[0])
 }
 
 func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.renderPage(w, e)
+	s.renderPage(w, r, e)
 }
 
 // resolution materializes a document's log against the document as it now
@@ -77,12 +77,12 @@ func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resoluti
 // done ticks true on every load. The page is rendered into memory first: once
 // bytes are on the wire the status is already sent, and a half-written
 // document under a 200 is worse than an honest 500.
-func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
+func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, current *Entry) {
 	page := web.Page{
 		Doc:      s.docOf(current),
 		Watch:    s.opts.Watch,
 		Revision: s.Revision(),
-		Author:   s.opts.Author,
+		Author:   s.authorOf(r),
 		Title:    s.opts.Title,
 		Nested:   s.opts.Nested,
 		Review:   s.opts.Review,
@@ -92,6 +92,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 		Inbox:    s.opts.InboxURL,
 	}
 	setDone := true
+	rule := s.Review().Completion()
 	for i := range s.docs {
 		e := &s.docs[i]
 		events, err := e.Store.Load()
@@ -107,7 +108,7 @@ func (s *Server) renderPage(w http.ResponseWriter, current *Entry) {
 			Label:   e.Label,
 			Rel:     e.Rel,
 			Count:   countComments(events),
-			Done:    hasReviewDone(events),
+			Done:    rule.Met(feedback.Reviewers(events)),
 			Current: e == current,
 		}
 		if !nav.Done {
@@ -135,15 +136,6 @@ func countComments(events []feedback.Event) int {
 	return n
 }
 
-func hasReviewDone(events []feedback.Event) bool {
-	for _, e := range events {
-		if e.Type == feedback.TypeReviewDone {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	e := s.entry(r)
 	if e == nil {
@@ -161,7 +153,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"doc":        s.docOf(e),
 		"events":     events,
-		"author":     s.opts.Author,
+		"author":     s.authorOf(r),
 		"docs":       s.docList(),
 		"resolution": s.resolution(e, events),
 		// The vocabulary is part of the answer: an agent reading `blocker`
@@ -464,6 +456,16 @@ func (s *Server) handleSessionDone(w http.ResponseWriter, r *http.Request) {
 		written = append(written, event)
 	}
 	writeJSON(w, http.StatusCreated, written)
+}
+
+// authorOf is who a request writes as: the resolved identity when there is
+// one, which is how the page tells a reviewer's own notes from everyone
+// else's, and otherwise the configured author.
+func (s *Server) authorOf(r *http.Request) string {
+	if s.opts.AuthorOf != nil {
+		return s.opts.AuthorOf(r)
+	}
+	return s.opts.Author
 }
 
 // append fills in what the page left out and writes the event to that

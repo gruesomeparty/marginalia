@@ -380,3 +380,12 @@ notes:
 		t.Errorf("stray notes = %v, want [gone.md] once", got)
 	}
 }
+
+func hasReviewDone(events []feedback.Event) bool {
+	for _, e := range events {
+		if e.Type == feedback.TypeReviewDone {
+			return true
+		}
+	}
+	return false
+}
