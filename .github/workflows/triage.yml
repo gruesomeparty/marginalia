@@ -17,7 +17,8 @@
 # re-triages it, so a question the loop asked is picked up once it is
 # answered. Only a human's answer counts — scripts/comment-from.sh tells one
 # from an agent's (same account; agents mark what they write) and from a
-# stranger's, whose comment must not start a paid run.
+# stranger's, whose comment must not start a paid run. The sweep also picks
+# up an answer the comment trigger missed (scripts/answered-issues.sh).
 #
 # Repository variables:
 #   TRIAGE_AUTO_APPROVE=true  let triage add approved-for-agent to a ready,
@@ -40,7 +41,7 @@ on:
   workflow_dispatch:
     inputs:
       issues:
-        description: "Issue numbers, space-separated (blank: open issues without the triaged label)"
+        description: "Issue numbers, space-separated (blank: untriaged open issues, plus waiting ones a human has answered)"
         required: false
         type: string
 permissions: {}
@@ -106,6 +107,16 @@ jobs:
           else
             list="$(gh issue list --repo "$REPO" --state open --limit 200 --json number,labels \
               --jq '[.[] | select([.labels[].name] | index("triaged") | not) | .number] | sort | .[]' | tr '\n' ' ')"
+            # And any issue whose question was answered while nothing was
+            # listening (an answer older than the comment trigger, a failed run).
+            waiting="$(for l in needs-info needs-decision; do
+              gh issue list --repo "$REPO" --state open --label "$l" --limit 100 --json number,labels,body,comments
+            done | jq -sc 'add // [] | unique_by(.number)')"
+            answered="$(jq -n --argjson issues "$waiting" \
+              --argjson trusted "$(xargs -n1 <<<"$TRUSTED" | jq -R . | jq -sc .)" \
+              '{issues: $issues, trusted: $trusted}' | scripts/answered-issues.sh | tr '\n' ' ')"
+            if [ -n "${answered// /}" ]; then echo "answered while waiting: $answered"; fi
+            list="$list $answered"
           fi
           list="$(xargs -n1 <<<"$list" | head -n "$MAX_ISSUES" | xargs || true)"
           echo "issues: ${list:-none}"
@@ -196,7 +207,7 @@ jobs:
             if [ ! -f "$f" ]; then echo "::warning::#$n: no verdict written"; failed=1; continue; fi
             issue="$(gh issue view "$n" --repo "$REPO" --json number,body,labels,author)"
             if ! edits="$(jq -n --argjson issue "$issue" --slurpfile triage "$f" \
-                  --argjson auto_approve "$AUTO" --argjson trusted "$trusted" --arg now "$(date -u +%F)" \
+                  --argjson auto_approve "$AUTO" --argjson trusted "$trusted" --arg now "$(date -u +%FT%TZ)" \
                   '{issue: $issue, triage: $triage[0], auto_approve: $auto_approve, trusted: $trusted, now: $now}' \
                 | scripts/apply-triage.sh)"; then
               echo "::warning::#$n: verdict refused"; failed=1; continue

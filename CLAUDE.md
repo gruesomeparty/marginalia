@@ -740,7 +740,10 @@ Claude Code") or any `<!-- agent:… -->` block. `scripts/comment-from.sh`
 (tested in `internal/pipeline`) reads that mark — bot or marked is `agent`,
 unmarked by a trusted login is `human`, anyone else `other` — and `triage.yml`
 re-triages an issue labelled `needs-info`/`needs-decision` when a `human`
-comments on it, so an answer to the loop's question is picked up. No Claude session or project links in commits, PRs or comments.
+comments on it, so an answer to the loop's question is picked up; the
+six-hourly sweep also picks one the trigger missed
+(`scripts/answered-issues.sh`: the latest comment is a `human`'s and newer
+than the triage block's `updated:` stamp, now a full UTC timestamp). No Claude session or project links in commits, PRs or comments.
 
 Triage is `skills/triage-issues/SKILL.md`, run by `.github/workflows/triage.yml`
 on every opened/reopened issue and a six-hourly sweep. The agent there **only
