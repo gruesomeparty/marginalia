@@ -5,8 +5,54 @@ on:
   pull_request:
 permissions:
   contents: read
+# A newer push to the same PR makes the running checks moot.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  # Which checks this PR's files need (scripts/ci-changes.sh): a README edit
+  # runs none of them, a template edit runs only its own. A job skipped by its
+  # `if` reports success, so the ruleset's required checks still pass; the
+  # test matrix runs every leg and skips its steps instead, because a skipped
+  # matrix job does not report under the per-leg names the ruleset requires.
+  # A push to main runs everything, and so does every job if this one fails.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      test: ${{ steps.paths.outputs.test }}
+      go: ${{ steps.paths.outputs.go }}
+      image: ${{ steps.paths.outputs.image }}
+      cloudflare: ${{ steps.paths.outputs.cloudflare }}
+      workflows: ${{ steps.paths.outputs.workflows }}
+      deps: ${{ steps.paths.outputs.deps }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci-changes.sh
+          sparse-checkout-cone-mode: false
+      - id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # A listing that fails or is cut short (the API stops at 3000 files)
+          # runs everything.
+          if [ -n "$PR" ] && files="$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)')" \
+              && [ "$(wc -l <<<"$files")" -lt 3000 ]; then
+            scripts/ci-changes.sh <<<"$files" | tee -a "$GITHUB_OUTPUT"
+          else
+            scripts/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"
+          fi
   lint:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.go == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,36 +72,47 @@ jobs:
           # result you can trust is worth more than the cache.
           skip-cache: true
   test:
+    needs: changes
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # A leg with nothing to test still reports, on the cheapest runner.
+    runs-on: ${{ (needs.changes.result != 'success' || needs.changes.outputs.test == 'true') && matrix.os || 'ubuntu-latest' }}
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      RUN: ${{ needs.changes.result != 'success' || needs.changes.outputs.test == 'true' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: env.RUN != 'true'
+        run: echo "Nothing this PR changed needs the tests."
+      - if: env.RUN == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - if: env.RUN == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
       - name: Test
+        if: env.RUN == 'true'
         # The browser suite skips without Chrome; on ubuntu, which ships one,
         # a skip would mean it silently tested nothing.
         env:
           MARGINALIA_BROWSER: ${{ matrix.os == 'ubuntu-latest' && 'require' || '' }}
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Coverage gate + summary
-        if: matrix.os == 'ubuntu-latest'
+        if: env.RUN == 'true' && matrix.os == 'ubuntu-latest'
         run: ./scripts/coverage.sh 80
       - name: Upload to Codecov
-        if: matrix.os == 'ubuntu-latest' && env.CODECOV_TOKEN != ''
+        if: env.RUN == 'true' && matrix.os == 'ubuntu-latest' && env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
   build:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.go == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,6 +127,8 @@ jobs:
   # no volume, a file:///tmp store, secrets from the environment, as a
   # non-root user. It has to answer the health check and take a publish.
   image:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.image == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -159,6 +218,8 @@ jobs:
   # version whose image is only published once that PR is merged, and the
   # tag itself is pinned to the release by deploy_template_test.go.
   cloudflare-template:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cloudflare == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -179,6 +240,8 @@ jobs:
   # text, credentials left on disk, broad tokens, unpinned actions. Agents run
   # here with write tokens on a public repository, so a finding is a hole.
   workflows:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.workflows == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -196,7 +259,8 @@ jobs:
   # vulnerability or a licence an MIT project cannot ship. Agents open PRs
   # here, and so does Renovate, which merges its own on green.
   dependency-review:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && (needs.changes.result != 'success' || needs.changes.outputs.deps == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

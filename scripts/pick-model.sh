@@ -9,7 +9,7 @@
 #   triage     Haiku: priority and labels.
 #   review     Sonnet; Opus when the PR touches a design-heavy area (storage,
 #              identity, MCP, hosted, review protocol, server, deploy, PRD) or
-#              changes more than 300 lines.
+#              changes more than 300 lines (docs and testdata not counted).
 #   implement  Opus; Sonnet for an issue triage sized size:s. An unknown issue
 #              (the agent picks it) gets Opus.
 #
@@ -36,7 +36,8 @@ done
 
 case "$loop" in
   review)
-    lines="$(jq '[.files[]? | .additions + .deletions] | add // 0' <<<"$json")"
+    lines="$(jq '[.files[]? | select(.path | test("(\\.md$|^docs/|/testdata/)") | not)
+      | .additions + .deletions] | add // 0' <<<"$json")"
     deep="$(jq -r '.files[]?.path' <<<"$json" |
       grep -cE '^(internal/(storage|identity|mcpserver|hosted|review|server|feedback)/|deploy/|PRD\.md$)' || true)"
     count="$(jq '[.files[]?] | length' <<<"$json")"

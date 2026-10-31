@@ -18,6 +18,12 @@
 # and catches any head the events missed. Drafts wait until they are marked
 # ready; bots (Renovate, release-please) are skipped.
 #
+# Documentation-only PRs (scripts/ci-changes.sh's docs_only: Markdown and
+# docs/, never skills, agent config, CLAUDE.md or the PRD) run no agent. The
+# apply job, from the default branch, confirms the head's files are still
+# only documentation and records a scripted pass of that head, so the merge
+# gate sees a review of the current commit and its other floors still apply.
+#
 # Credentials: a CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY repository
 # secret, the same as the other loops. Without either, runs skip with a notice.
 name: Review PRs
@@ -44,11 +50,19 @@ jobs:
   pick:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       prs: ${{ steps.pick.outputs.prs }}
+      docs: ${{ steps.pick.outputs.docs }}
       ready: ${{ steps.creds.outputs.ready }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: scripts/ci-changes.sh
+          sparse-checkout-cone-mode: false
       - id: creds
         env:
           OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -93,9 +107,23 @@ jobs:
                         and (.body | startswith("<!-- agent:review v1\nsha: " + $sha)))] | length == 0)
                     | .number] | sort | .[]' | tr '\n' ' ')"
           fi
-          list="$(xargs -n1 <<<"$list" | head -n "$MAX_PRS" | xargs || true)"
-          echo "prs: ${list:-none}"
-          echo "prs=$(xargs -n1 <<<"$list" | jq -R 'select(length > 0) | tonumber' | jq -sc .)" >>"$GITHUB_OUTPUT"
+          # Documentation-only PRs need no agent, and do not count toward
+          # MAX_PRS. gh lists at most 100 files; a PR that long is reviewed.
+          agent=""; docs=""
+          for n in $list; do
+            if gh pr view "$n" --repo "$REPO" --json files \
+                --jq 'select((.files | length) < 100) | .files[].path' >files.txt \
+              && [ -s files.txt ] \
+              && scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null; then
+              docs="$docs $n"
+            else
+              agent="$agent $n"
+            fi
+          done
+          agent="$(xargs -n1 <<<"$agent" | head -n "$MAX_PRS" | xargs || true)"
+          echo "prs: ${agent:-none}; documentation only: ${docs:-none}"
+          echo "prs=$(xargs -n1 <<<"$agent" | jq -R 'select(length > 0) | tonumber' | jq -sc .)" >>"$GITHUB_OUTPUT"
+          echo "docs=$(xargs -n1 <<<"$docs" | jq -R 'select(length > 0) | tonumber' | jq -sc .)" >>"$GITHUB_OUTPUT"
 
   review:
     needs: pick
@@ -188,7 +216,9 @@ jobs:
 
   apply:
     needs: [pick, review]
-    if: always() && needs.review.result != 'skipped' && needs.pick.outputs.prs != '[]'
+    if: >-
+      always() && needs.pick.result == 'success'
+      && ((needs.review.result != 'skipped' && needs.pick.outputs.prs != '[]') || needs.pick.outputs.docs != '[]')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -199,7 +229,8 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - if: needs.review.result != 'skipped'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: review-*
           path: review/
@@ -208,11 +239,37 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PRS: ${{ needs.pick.outputs.prs }}
+          PRS: ${{ needs.review.result != 'skipped' && needs.pick.outputs.prs || '[]' }}
+          DOCS: ${{ needs.pick.outputs.docs }}
         run: |
           set -euo pipefail
           scripts/setup-labels.sh
+          mkdir -p review
           failed=0
+          # A scripted pass for each documentation-only PR, of the head whose
+          # files were checked here, with this job's own copy of the rule:
+          # pick's nomination is a hint, not the decision.
+          for n in $(jq -r '.[]' <<<"$DOCS"); do
+            # The REST listing names a rename's old path too; the head is read
+            # on both sides of it, so the files belong to the commit passed.
+            sha="$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)"
+            gh api --paginate "repos/$REPO/pulls/$n/files" \
+              --jq '.[] | .filename, (.previous_filename // empty)' >files.txt || : >files.txt
+            if ! [ -s files.txt ] || [ "$(wc -l <files.txt)" -ge 3000 ] \
+              || ! scripts/ci-changes.sh <files.txt | grep -x 'docs_only=true' >/dev/null \
+              || [ "$(gh pr view "$n" --repo "$REPO" --json headRefOid --jq .headRefOid)" != "$sha" ]; then
+              echo "::notice::#$n is not documentation only at one head; the next run reviews it"; continue
+            fi
+            printf '%s\n' "$sha" >"review/$n.sha"
+            jq -n --argjson n "$n" --arg sha "$(head -n1 "review/$n.sha")" '{
+              pr: $n, head_sha: $sha, findings: [],
+              summary: "Documentation only (Markdown or docs/), so no agent reviewed it and CI ran no checks.",
+              domain: "clear",
+              domain_reasons: [{reason: "Only documentation changed: no code, tests, workflows, skills or agent instructions."}],
+              agent_notes: "scripted: docs_only"
+            }' >"review/$n.json"
+            PRS="$(jq -c --argjson n "$n" '. + [$n] | unique' <<<"$PRS")"
+          done
           for n in $(jq -r '.[]' <<<"$PRS"); do
             # Only the PRs this run picked; anything else in the artifacts is ignored.
             f="review/$n.json"

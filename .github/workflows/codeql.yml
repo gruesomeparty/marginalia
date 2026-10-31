@@ -8,12 +8,51 @@ on:
     - cron: '27 3 * * 1'
 permissions:
   contents: read
-  security-events: write
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  # analyze is a required check, so the workflow always runs and the job
+  # skips (which reports success) when a PR changes no Go: see ci.yml.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      codeql: ${{ steps.paths.outputs.codeql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci-changes.sh
+          sparse-checkout-cone-mode: false
+      - id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if files="$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)')" \
+              && [ "$(wc -l <<<"$files")" -lt 3000 ]; then
+            scripts/ci-changes.sh <<<"$files" | tee -a "$GITHUB_OUTPUT"
+          else
+            scripts/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"
+          fi
   analyze:
+    needs: changes
     # Code scanning upload requires GitHub Advanced Security on private repos.
     # Skip (green) while private; auto-activates on push/PR once the repo is public.
-    if: ${{ github.event.repository.private == false }}
+    # Runs on a push or schedule (changes skipped), and on a PR that touches Go.
+    if: >-
+      ${{ !cancelled() && github.event.repository.private == false
+        && (needs.changes.result != 'success' || needs.changes.outputs.codeql == 'true') }}
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

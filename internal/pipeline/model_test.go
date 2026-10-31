@@ -29,6 +29,7 @@ func TestPickModel(t *testing.T) {
 		{"triage", "triage", "", haiku},
 		{"small review", "review", `{"labels":[],"files":[{"path":"internal/web/page.go","additions":20,"deletions":5}]}`, sonnet},
 		{"large review", "review", `{"labels":[],"files":[{"path":"internal/web/page.go","additions":250,"deletions":60}]}`, opus},
+		{"long docs review", "review", `{"labels":[],"files":[{"path":"README.md","additions":400,"deletions":0},{"path":"internal/x/testdata/a.json","additions":400,"deletions":0}]}`, sonnet},
 		{"design-heavy review", "review", `{"labels":[],"files":[{"path":"internal/storage/r2.go","additions":3,"deletions":1}]}`, opus},
 		{"deploy review", "review", `{"files":[{"path":"deploy/cloudflare/src/index.ts","additions":1,"deletions":1}]}`, opus},
 		{"mcp review", "review", `{"files":[{"path":"internal/mcpserver/tools.go","additions":1,"deletions":0}]}`, opus},
