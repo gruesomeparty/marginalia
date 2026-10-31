@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,11 +15,13 @@ import (
 )
 
 // sharedReview is what the share-mode page exports: the document it was
-// reviewing and the events the reviewer wrote. A bare array of events is
+// reviewing, the sha256 of the file it was exported from, and the events the
+// reviewer wrote. A bare array of events is
 // accepted too — someone will hand-edit one, and refusing it would be
 // pedantry.
 type sharedReview struct {
 	Doc    string           `json:"doc"`
+	Source string           `json:"source,omitempty"`
 	Events []feedback.Event `json:"events"`
 }
 
@@ -44,6 +47,12 @@ func readShared(path string) (*sharedReview, error) {
 // is skipped rather than duplicated, so importing the same file twice is
 // safe — which matters, because someone will.
 func importReview(path, doc string) (added, skipped int, target string, err error) {
+	return importFrom(path, doc, io.Discard)
+}
+
+// importFrom is importReview, saying on warn when the reply was written
+// against another revision of the document than the one now on disk.
+func importFrom(path, doc string, warn io.Writer) (added, skipped int, target string, err error) {
 	shared, err := readShared(path)
 	if err != nil {
 		return 0, 0, "", err
@@ -54,8 +63,18 @@ func importReview(path, doc string) (added, skipped int, target string, err erro
 	if doc == "" {
 		return 0, 0, "", fmt.Errorf("%s does not say which document it reviews — pass --doc <doc>", path)
 	}
+	// --doc may say where a document moved to, not swap it for another: the
+	// block ids of one file mean nothing in the next.
+	if shared.Doc != "" && filepath.Base(shared.Doc) != filepath.Base(doc) {
+		return 0, 0, "", fmt.Errorf("%s reviews %s, not %s — it would anchor notes to the wrong document", path, shared.Doc, doc)
+	}
 	if _, err := os.Stat(doc); err != nil {
 		return 0, 0, "", fmt.Errorf("%s: %w (pass --doc if the document moved)", doc, err)
+	}
+	if shared.Source != "" {
+		if now, err := sourceHash(doc); err == nil && now != shared.Source {
+			_, _ = fmt.Fprintf(warn, "marginalia: %s was written against an earlier revision of %s; merging anyway — notes on blocks that changed since will read as stale\n", path, doc)
+		}
 	}
 	for i, e := range shared.Events {
 		if e.Type == "" {
@@ -141,7 +160,7 @@ func newImportCmd() *cobra.Command {
 			var report strings.Builder
 			total, skippedAll := 0, 0
 			for _, path := range args {
-				added, skipped, target, err := importReview(path, doc)
+				added, skipped, target, err := importFrom(path, doc, cmd.ErrOrStderr())
 				if err != nil {
 					return err
 				}

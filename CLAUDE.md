@@ -104,6 +104,16 @@ users are agents, not humans.
   only writes to documents in the served set — a stale page must not be able to
   append elsewhere. Per-document `review_done` comes from the page's Done
   button; `session_done` writes one to every log with `text: "session"`.
+- `serve` has an opt-in token (issue #54, `internal/server/token.go`):
+  `MARGINALIA_SERVE_TOKEN`, env only, makes `Handler()` refuse any request
+  without it (bearer header, or the HttpOnly, SameSite=Lax cookie (a digest of the token, named per port) a one-time `?token=`
+  sets before redirecting the token out of the URL; a refused page gets a
+  one-field form), compared by digest in constant time, and pins every
+  event's author to `--author` through `Options.AuthorOf`. No variable, no
+  change. `export` writes the source file's sha256 into the page, the
+  share JSON carries it back as `source`, and `import` refuses a reply
+  whose `doc` names another file (by base name, so `--doc` can follow a
+  move) and warns, then merges, when the hash differs.
 - HTML template embedded via `go:embed`; one template feeds both server and
   static modes. The page's `window.__MARGINALIA__` payload is a *projection*
   (`web.project`), not the whole `Document`: ids, anchors, text, parent and

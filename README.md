@@ -423,6 +423,23 @@ Tailscale interface and open the same URL:
 marginalia serve doc.md --host 100.x.y.z
 ```
 
+Know what that means: `serve` has no login. Anyone who can reach the port can
+read the document and write notes under any name. On loopback that is only you.
+On a tailnet it is everyone on the tailnet. When the network is not the boundary
+you want, set a token. It comes from the environment, never a flag, because flags
+show up in process lists:
+
+```bash
+export MARGINALIA_SERVE_TOKEN="$(openssl rand -hex 16)"
+marginalia serve doc.md --host 100.x.y.z
+# open http://100.x.y.z:8787/?token=<the token> once per browser
+```
+
+Every request then needs the token. A browser passes it once as `?token=`, which
+leaves a cookie and drops the token from the address bar; a script sends it as
+`Authorization: Bearer`. Every note is written under `--author` (default
+`$USER`), whatever the page says. Without the variable, nothing changes.
+
 ---
 
 ## Framing a review
@@ -761,6 +778,12 @@ nor the existing log is refused too — that is the last moment the mismatch can
 be reported to someone who still has the review it answers. Feedback already on
 disk travels with the exported page, so a second round shows the thread so far.
 
+What the reviewer sends back names the document and the sha256 of the file it
+was exported from. `import --doc` can say where a document moved to, but a reply
+to a different document is refused, naming both. A reply to an earlier revision
+of the same document is merged with a warning: its notes re-anchor, and those on
+blocks that changed read as stale.
+
 ---
 
 ## Reference
@@ -815,6 +838,7 @@ disk travels with the exported page, so a second round shows the thread so far.
 | | |
 |---|---|
 | `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
+| `MARGINALIA_SERVE_TOKEN` | Opt-in token `serve` then requires on every request; notes are written under `--author` |
 | `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
 | `MARGINALIA_STORE` | Default `--store` for `host` |
 | `MARGINALIA_PUBLIC_URL` | Default `--public-url` for `host` |
@@ -979,23 +1003,16 @@ Marginalia is a local tool. You run it on your machine and hand the URL to
 someone who can reach your machine — usually you, sometimes a colleague on the
 same Tailnet, and otherwise through `export`, which needs no server at all.
 
-Everything that would follow from *hosting* a review instead — authentication
-and provenance ([#54](https://github.com/gruesomeparty/marginalia/issues/54)),
-more than one reviewer on one document
-([#53](https://github.com/gruesomeparty/marginalia/issues/53)) — is downstream
-of a decision that has not been made and may never be. So they are not on the
-list above, and their absence is a scope choice rather than a gap:
+`serve` stays that local tool. Hosted mode is where review that crosses
+machines lives, with real identities. What `serve` has is an opt-in token
+(`MARGINALIA_SERVE_TOKEN`, see [Reviewing on your phone](#reviewing-on-your-phone))
+for when the network should not be the only boundary, and `import` checks that a
+shared reply belongs to the document it is merged into. Without the token,
+anyone who can reach the URL can write to the log under any name, which is fine
+for `127.0.0.1` and for a tailnet you trust.
 
-- There is **no authentication**. Anyone who can reach the URL can write to the
-  log, and `author` is whatever the client says it is. That is fine for
-  `127.0.0.1` and for a Tailnet; it is not fine on an untrusted network, and
-  Marginalia will not pretend otherwise by growing a token flag.
-- There is **one reviewer**. Two people on one document write to one log with no
-  identity and no conflict story.
-
-If remote review ever becomes the point, both become real work. Until then,
-building auth for a threat model nobody has would be the expensive kind of
-speculation — and share mode already covers the case it would serve.
+There is still **one reviewer** per document: two people write to one log with
+no conflict story ([#53](https://github.com/gruesomeparty/marginalia/issues/53)).
 
 ### How work gets picked up
 

@@ -24,6 +24,7 @@ type Options struct {
 	Open   bool
 	Watch  bool
 	Author string
+	Token  string // required on every request when set (server.Options.Token)
 	Config string // review config file, "" for the default review
 	Review string // shipped preset name, "" for none
 	Theme  string // palette name, "" for the default
@@ -84,6 +85,7 @@ func Build(paths []string, opts Options) (*server.Server, error) {
 		Theme:    theme,
 		Diagrams: drawer,
 		Author:   author,
+		Token:    opts.Token,
 		Host:     opts.Host,
 		Port:     opts.Port,
 		Open:     opts.Open,
