@@ -2,6 +2,7 @@ package hosted
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,14 +34,23 @@ type publishDoc struct {
 	Content string `json:"content" jsonschema:"the document's text"`
 }
 
+type publishAsset struct {
+	Name          string `json:"name" jsonschema:"file name a document links to, e.g. mock.png for ![mock](mock.png)"`
+	ContentBase64 string `json:"content_base64" jsonschema:"the image's bytes, base64 (standard alphabet)"`
+	Type          string `json:"type,omitempty" jsonschema:"media type: image/png, image/jpeg, image/webp or image/svg+xml; read from the extension when omitted"`
+}
+
 type publishIn struct {
-	Documents []publishDoc `json:"documents" jsonschema:"one or more documents to review together"`
-	Title     string       `json:"title,omitempty" jsonschema:"what the review is called in the inbox"`
-	Review    string       `json:"review,omitempty" jsonschema:"shipped framing to use: adr, copy, schema, security"`
-	Config    string       `json:"config,omitempty" jsonschema:"review config YAML, layered over the framing (same schema as --config)"`
-	Theme     string       `json:"theme,omitempty" jsonschema:"page palette"`
-	ReviewID  string       `json:"review_id,omitempty" jsonschema:"an existing review to publish a new revision of; omit for a new review"`
-	Callback  string       `json:"callback_url,omitempty" jsonschema:"https URL to POST a signed, content-free notice to when the reviewer submits Done or asks a question, so a job can stop instead of waiting; the host must allow its domain. Verify X-Marginalia-Signature (sha256=HMAC-SHA256 of the body under callback_secret). A revision without it keeps the review's"`
+	Documents []publishDoc   `json:"documents" jsonschema:"one or more documents to review together"`
+	Assets    []publishAsset `json:"assets,omitempty" jsonschema:"images the documents show (PNG, JPEG, WebP, SVG); a markdown image or link naming one resolves to it. A revision keeps earlier assets it does not resend"`
+	Title     string         `json:"title,omitempty" jsonschema:"what the review is called in the inbox"`
+	Review    string         `json:"review,omitempty" jsonschema:"shipped framing to use: adr, copy, schema, security"`
+	Config    string         `json:"config,omitempty" jsonschema:"review config YAML, layered over the framing (same schema as --config)"`
+	Theme     string         `json:"theme,omitempty" jsonschema:"page palette"`
+	ReviewID  string         `json:"review_id,omitempty" jsonschema:"an existing review to publish a new revision of; omit for a new review"`
+	Blocking  bool           `json:"blocking,omitempty" jsonschema:"true when you cannot go on until the reviewer answers: the inbox lists it first and the reviewer is notified at once. Each revision states its own"`
+	DueBy     string         `json:"due_by,omitempty" jsonschema:"when you need the answer, RFC 3339 (2026-11-01T17:00:00Z); past it the inbox marks the review overdue"`
+	Callback  string         `json:"callback_url,omitempty" jsonschema:"https URL to POST a signed, content-free notice to when the reviewer submits Done or asks a question, so a job can stop instead of waiting; the host must allow its domain. Verify X-Marginalia-Signature (sha256=HMAC-SHA256 of the body under callback_secret). A revision without it keeps the review's"`
 }
 
 type publishedDoc struct {
@@ -86,8 +96,10 @@ type awaitIn struct {
 
 type awaitOut struct {
 	Done   bool                  `json:"done"`
-	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), timeout or cancelled"`
+	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), answer (the reviewer picked an option on one of your multiple-choice notes; choices lists every pick past the cursor, whatever the reason), timeout or cancelled"`
 	Docs   []mcpserver.DocEvents `json:"docs"`
+	// Choices are the options picked in Docs' events, whatever the reason.
+	Choices []mcpserver.Choice `json:"choices"`
 }
 
 type replyIn struct {
@@ -112,7 +124,7 @@ func (h *Host) tools() {
 	srv := h.mcp
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "publish_document",
-		Description: "Publish one or more documents for block-anchored human review and get back the URL to give the human, plus the vocabulary you will read back. Send the content, not a path: this instance shares no filesystem with you. Pass review_id to publish a new revision of an existing review — earlier revisions are kept, and the reviewer's notes re-anchor against the new text (stale where a block changed, orphaned where it is gone). A revision replaces the whole document set, so send every document again. Pick a framing with `review` (" + session.PresetList() + ").",
+		Description: "Publish one or more documents for block-anchored human review and get back the URL to give the human, plus the vocabulary you will read back. Send the content, not a path: this instance shares no filesystem with you. Pass review_id to publish a new revision of an existing review — earlier revisions are kept, and the reviewer's notes re-anchor against the new text (stale where a block changed, orphaned where it is gone). A revision replaces the whole document set, so send every document again. Images the documents show go in `assets` and are kept across revisions. Pick a framing with `review` (" + session.PresetList() + ").",
 	}, h.publishDocument)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "feedback_since",
@@ -141,9 +153,23 @@ func (h *Host) tools() {
 }
 
 func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in publishIn) (*mcp.CallToolResult, publishOut, error) {
-	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme, Callback: in.Callback}
+	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme, Blocking: in.Blocking, Callback: in.Callback}
+	if in.DueBy != "" {
+		due, err := time.Parse(time.RFC3339, in.DueBy)
+		if err != nil {
+			return nil, publishOut{}, fmt.Errorf("due_by %q is not an RFC 3339 time (2026-11-01T17:00:00Z): %w", in.DueBy, err)
+		}
+		p.DueBy = due
+	}
 	for _, d := range in.Documents {
 		p.Docs = append(p.Docs, Document{Name: d.Name, Content: []byte(d.Content)})
+	}
+	for _, a := range in.Assets {
+		raw, err := base64.StdEncoding.DecodeString(a.ContentBase64)
+		if err != nil {
+			return nil, publishOut{}, fmt.Errorf("asset %q: content_base64 is not base64: %w", a.Name, err)
+		}
+		p.Assets = append(p.Assets, Asset{Name: a.Name, Type: a.Type, Content: raw})
 	}
 	var (
 		r   *Review
@@ -218,6 +244,12 @@ func (h *Host) target(r *Review, e server.Entry) mcpserver.Target {
 		},
 		Store:      e.Store,
 		Completion: r.Server.Review().Completion(),
+		Base: func() *document.Document {
+			if cur := h.Review(id); cur != nil {
+				return cur.Server.BaseOf(e.Rel)
+			}
+			return nil
+		},
 	}
 }
 
@@ -297,7 +329,7 @@ func (h *Host) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in a
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
-	return nil, awaitOut{Done: done, Reason: reason, Docs: events}, nil
+	return nil, awaitOut{Done: done, Reason: reason, Docs: events, Choices: mcpserver.Choices(events)}, nil
 }
 
 func (h *Host) closeReview(_ context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, closeOut, error) {

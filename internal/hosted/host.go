@@ -135,6 +135,9 @@ func (h *Host) untilClosed(ctx context.Context) (context.Context, context.Cancel
 type Review struct {
 	Meta   Meta
 	Server *server.Server
+	// assets is every asset's bytes (Meta.Assets), held from publish or
+	// startup on so serving one never reads the store.
+	assets map[string][]byte
 }
 
 // Open loads every review in opts.Store and returns a host serving them. A
@@ -223,22 +226,44 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 		if err != nil {
 			return nil, err
 		}
-		doc, err := document.ParseBytes(name, src)
+		doc, err := document.ParseBytesWith(name, src, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		docs = append(docs, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, name)), Label: name, Rel: name})
+		e := server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, name)), Label: name, Rel: name}
+		// Warm the log: a read through now is the last time the backend
+		// sees a read for it.
+		events, err := e.Store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", e.Store.Path(), err)
+		}
+		// What changes are measured from: this revision if the reviewer
+		// already finished it, else the last one they did.
+		switch b := meta.Baseline[name]; {
+		case finishedSince(events, meta.From[name]):
+			e.Base = doc
+		case b > 0:
+			old, err := h.store.GetBlob(ctx, revKey(id, b, name))
+			if err != nil {
+				return nil, err
+			}
+			if e.Base, err = document.ParseBytes(name, old); err != nil {
+				return nil, fmt.Errorf("%s revision %d: %w", name, b, err)
+			}
+		}
+		docs = append(docs, e)
 	}
 	r, err := h.build(meta, docs)
 	if err != nil {
 		return nil, err
 	}
-	// Warm the logs: a read through now is the last time the backend sees a
-	// read for them.
-	for _, e := range docs {
-		if _, err := e.Store.Load(); err != nil {
-			return nil, fmt.Errorf("%s: %w", e.Store.Path(), err)
+	r.assets = make(map[string][]byte, len(meta.Assets))
+	for name, a := range meta.Assets {
+		raw, err := h.store.GetBlob(ctx, assetKey(id, a.Rev, name))
+		if err != nil {
+			return nil, fmt.Errorf("asset %s: %w", name, err)
 		}
+		r.assets[name] = raw
 	}
 	return r, nil
 }
@@ -312,6 +337,13 @@ type Publish struct {
 	// allow-list before anything is written. A republish without one keeps
 	// the review's.
 	Callback string
+	// Blocking and DueBy are the agent's urgency for this revision; a
+	// republish states its own, so an answered question stops being urgent.
+	Blocking bool
+	DueBy    time.Time
+	// Assets are images published beside the documents. A republish adds
+	// or replaces the ones it sends and keeps the rest.
+	Assets []Asset
 }
 
 // Publish stores a new review — revision 1 of every document, then its
@@ -327,7 +359,8 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 		Review: p.Review, Config: p.Config, Theme: p.Theme, Callback: p.Callback,
 		Created: now, Updated: now,
 	}
-	return h.publish(ctx, meta, p)
+	meta.Blocking, meta.DueBy = urgency(p)
+	return h.publish(ctx, meta, p, nil)
 }
 
 // Republish stores revision n+1 of an existing review and serves it. Earlier
@@ -361,6 +394,14 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 	if p.Callback != "" {
 		meta.Callback = p.Callback
 	}
+	meta.Blocking, meta.DueBy = urgency(p)
+	finished, err := revisionFinished(prev)
+	if err != nil {
+		return nil, err
+	}
+	if finished {
+		meta.Rounds++
+	}
 	meta.Docs = nil
 	// A document this revision drops keeps its events in the wait's count;
 	// one it brings back is counted live again.
@@ -385,14 +426,50 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 		retired = nil
 	}
 	meta.Retired = retired
-	return h.publish(ctx, meta, p)
+	// Each document the new revision keeps is compared with the revision
+	// the reviewer last finished: this one if they did, else whatever this
+	// one was compared with.
+	meta.Baseline = nil
+	bases := map[string]*document.Document{}
+	for _, e := range prev.Server.Entries() {
+		if !slices.ContainsFunc(p.Docs, func(d Document) bool { return d.Name == e.Rel }) {
+			continue
+		}
+		events, err := e.Store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+		}
+		b, base := prev.Meta.Baseline[e.Rel], prev.Server.BaseOf(e.Rel)
+		if finishedSince(events, prev.Meta.From[e.Rel]) {
+			b, base = prev.Meta.Revision, prev.Server.DocOf(e.Rel)
+		}
+		if b > 0 && base != nil {
+			if meta.Baseline == nil {
+				meta.Baseline = map[string]int{}
+			}
+			meta.Baseline[e.Rel] = b
+			bases[e.Rel] = base
+		}
+	}
+	return h.publish(ctx, meta, p, bases)
+}
+
+// finishedSince reports whether a log holds a review_done at or after index
+// from: the reviewer finished the revision that started there.
+func finishedSince(events []feedback.Event, from int) bool {
+	for _, e := range events[min(from, len(events)):] {
+		if e.Type == feedback.TypeReviewDone {
+			return true
+		}
+	}
+	return false
 }
 
 // publish validates everything, then writes the revision's blobs and the new
 // metadata version, then swaps the served review. The order is the point: a
 // refusal happens before the first write, and the page only changes once
 // every byte of the revision is in the store.
-func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, error) {
+func (h *Host) publish(ctx context.Context, meta Meta, p Publish, bases map[string]*document.Document) (*Review, error) {
 	if len(p.Docs) == 0 {
 		return nil, errors.New("nothing to publish — send at least one document")
 	}
@@ -411,6 +488,30 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	for _, d := range p.Docs {
 		docBytes += int64(len(d.Content))
 	}
+	// Assets: the earlier revision's carry over, the ones sent now are
+	// added or replace them, and only the new bytes count as stored.
+	meta.Assets = maps.Clone(meta.Assets)
+	assets := map[string][]byte{}
+	if prev := h.Review(id); prev != nil {
+		maps.Copy(assets, prev.assets)
+	}
+	sent := map[string]bool{}
+	for _, a := range p.Assets {
+		typ, err := checkAsset(a)
+		if err != nil {
+			return nil, err
+		}
+		if sent[a.Name] {
+			return nil, fmt.Errorf("asset %q is listed twice", a.Name)
+		}
+		sent[a.Name] = true
+		if meta.Assets == nil {
+			meta.Assets = map[string]AssetMeta{}
+		}
+		meta.Assets[a.Name] = AssetMeta{Rev: n, Type: typ, Bytes: int64(len(a.Content))}
+		assets[a.Name] = a.Content
+		docBytes += int64(len(a.Content))
+	}
 	meta.Bytes += docBytes
 	seen := map[string]bool{}
 	entries := make([]server.Entry, 0, len(p.Docs))
@@ -428,11 +529,11 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 		if document.FormatFor(d.Name) == "" {
 			return nil, session.UnsupportedInput(filepath.Ext(d.Name))
 		}
-		doc, err := document.ParseBytes(d.Name, d.Content)
+		doc, err := document.ParseBytesWith(d.Name, d.Content, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
-		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name})
+		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name, Base: bases[d.Name]})
 		meta.Docs = append(meta.Docs, d.Name)
 	}
 	// Where this revision starts in each log, so a wait can tell this
@@ -457,9 +558,15 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	if err != nil {
 		return nil, err
 	}
+	r.assets = assets
 	for _, d := range p.Docs {
 		if err := h.store.PutBlob(ctx, revKey(id, n, d.Name), d.Content); err != nil {
 			return nil, fmt.Errorf("hosted: storing %s: %w", d.Name, err)
+		}
+	}
+	for _, a := range p.Assets {
+		if err := h.store.PutBlob(ctx, assetKey(id, n, a.Name), a.Content); err != nil {
+			return nil, fmt.Errorf("hosted: storing asset %s: %w", a.Name, err)
 		}
 	}
 	raw, err := json.Marshal(meta)
@@ -531,6 +638,9 @@ func (h *Host) routes() {
 	// the other.
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
+	mux.Handle("GET /r/{id}/assets/{rev}/{name}", h.requireHuman(http.HandlerFunc(h.handleAsset)))
+	mux.Handle("GET /stats", h.requireHuman(http.HandlerFunc(h.handleStats)))
+	mux.Handle("GET /api/stats", h.requireHuman(http.HandlerFunc(h.handleAPIStats)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {
@@ -563,8 +673,15 @@ func (h *Host) handleReview(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Images come from this host or nowhere: a published asset is served
+	// here, and an image a document links elsewhere is not fetched.
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	http.StripPrefix("/r/"+id, rv.Server.Handler()).ServeHTTP(w, r)
 }
+
+// pageCSP is the policy on a hosted review page. It restricts images only;
+// the page's own script and styles are inline, and it makes no other request.
+const pageCSP = "img-src 'self' data:"
 
 // Handler is the whole listener's mux.
 func (h *Host) Handler() http.Handler { return h.mux }
@@ -646,4 +763,12 @@ func (h *Host) out() io.Writer {
 
 func (h *Host) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(h.out(), format, args...)
+}
+
+// urgency is how a publish's urgency is recorded on its metadata.
+func urgency(p Publish) (bool, string) {
+	if p.DueBy.IsZero() {
+		return p.Blocking, ""
+	}
+	return p.Blocking, p.DueBy.UTC().Format(time.RFC3339)
 }

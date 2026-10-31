@@ -7,6 +7,7 @@
 //	reviews/<id>/meta/<n>.json   versioned metadata; the highest n wins
 //	reviews/<id>/rev/<n>/<name>  revision n of each document, immutable
 //	reviews/<id>/log/<name>      the document's append-only feedback log
+//	reviews/<id>/asset/<n>/<name> an image published with revision n, immutable
 //
 // Startup lists that prefix once and rebuilds every review in memory; from
 // then on the process is the single writer, logs are served from memory and
@@ -121,6 +122,25 @@ type Meta struct {
 	// Callback is where the agent asked to be called back (callback.go).
 	// The URL only: the signing secret is derived, never stored.
 	Callback string `json:"callback,omitempty"`
+	// Blocking and DueBy are the agent's word on urgency for this revision
+	// (issue #220): it is stopped until the reviewer answers, and by when it
+	// needs the answer (RFC 3339). A presentation hint for the inbox and the
+	// notification, never a verdict; each publish states its own.
+	Blocking bool   `json:"blocking,omitempty"`
+	DueBy    string `json:"due_by,omitempty"`
+	// Assets is every image the current revision serves, by name, with the
+	// revision whose blob holds it (reviews/<id>/asset/<rev>/<name>).
+	Assets map[string]AssetMeta `json:"assets,omitempty"`
+	// Rounds is how many earlier revisions a reviewer finished, counted at
+	// each republish, so the stats page can say how many rounds a review
+	// took without keeping every revision's metadata in memory. Metadata
+	// written before it existed reads as zero.
+	Rounds int `json:"rounds,omitempty"`
+	// Baseline is, per document, the last revision the reviewer finished
+	// before this one: what the page's changes are measured from (issue
+	// #214). Absent for a document nobody has finished yet, which marks
+	// nothing as changed.
+	Baseline map[string]int `json:"baseline,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

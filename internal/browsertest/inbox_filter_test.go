@@ -37,8 +37,10 @@ func TestInboxFilterAppliesOnChange(t *testing.T) {
 	do(t, ctx,
 		chromedp.Navigate(ts.URL+"/?tab=all"),
 		chromedp.WaitVisible(chromedp.CSS(".filters")),
-		chromedp.SetValue(chromedp.CSS(`select[name="agent"]`), "agent:b"),
-		chromedp.Evaluate[chromedp.Void](`document.querySelector('select[name="agent"]').dispatchEvent(new Event("change",{bubbles:true}))`),
+		// One script sets the value and fires the change: a separate SetValue
+		// can itself trigger the submit, and the page is gone by the time a
+		// second step looks for the select.
+		chromedp.Evaluate[chromedp.Void](`(function(s){s.value="agent:b";s.dispatchEvent(new Event("change",{bubbles:true}))})(document.querySelector('select[name="agent"]'))`),
 		chromedp.WaitVisible(chromedp.CSS(".filters .clear")),
 	)
 	url := get(t, ctx, chromedp.Location())

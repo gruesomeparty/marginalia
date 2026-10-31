@@ -57,8 +57,13 @@ users are agents, not humans.
   all three of: the suggestion is the note that stands for its block, its hash
   matches the block now, and it has a hash at all — `Materialize` treats a
   hash-less note as not-stale, which is right for reading and not good enough
-  for editing. The tool never applies anything: *never mutate the source
-  document*.
+  for editing. A suggestion with `sub` (issue #218) is judged by its
+  sentence instead: applicable while `Locate` still finds it (`At` says
+  where), superseded only by a later note on the whole block or an
+  overlapping sentence, so one paragraph can carry several. The page
+  starts a selection's suggestion from the sentence and draws it as a
+  redline (word diff in page script, text nodes only). The tool never
+  applies anything: *never mutate the source document*.
 - `internal/mcpserver` is the agent-facing surface (`marginalia mcp`, stdio):
   `review_document`, `feedback_since`, `review_status`, `reply_to_note`,
   `mark_addressed`, `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the
@@ -221,6 +226,14 @@ users are agents, not humans.
   is outstanding work for the agent, counted in `Replies` and not `Comments`;
   the page shows it under the sidenote and not in the block's notes. `import`
   lets a `req:` reply through, since no log holds the question.
+  A note may carry 2–4 `options` and may have no `block` (issue #215): the
+  page heads itself with block-less notes and draws one button per option;
+  a tap is that same `reply` with `fields.choice`, and `check()` admits fields
+  on a protocol event only there, through `Config.CheckAnswer` (the choice
+  must be offered). Materialize keeps a block-less requester answer as a
+  state for block `""`, first and never orphaned. `await_review_done` returns
+  reason `answer` with `choices` (`mcpserver.Choices`); `question` outranks it, and `choices` is filled whatever the reason. `import` admits a block-less `req:` reply.
+  An agent cannot tap: its two write tools carry no fields.
 - `internal/review/presets/*.yaml` are framings embedded in the binary
   (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
   than inventing one and the events compare across runs. `Config.Overlay`
@@ -371,6 +384,22 @@ users are agents, not humans.
   A set's nav tick and "Finish" state follow the rule too (`rule.Met` in
   `renderPage`; the page re-reads the resolution after Done rather than
   ticking on the click).
+- Changes since the last round (issue #214): `internal/changeset` diffs two
+  parses by block id (same id, new hash = edited; the rule Materialize
+  applies to notes) and gives an edited block a word-level redline; a
+  container whose inline children moved is left out. The baseline is the
+  parse the reviewer last finished: `server.Entry.Base`, moved to the
+  current parse on every `review_done` the server records (so `--watch`
+  follows the reviewer), and in hosted mode seeded from `Meta.Baseline` —
+  per document, the last revision finished before this one, computed at
+  republish from the log window `Meta.From` opens, parsed from the
+  immutable snapshot at startup and carried in memory after. No Done, no
+  baseline, nothing marked. `GET /api/changes`, `review_status`'s
+  `changed_blocks` (`Target.Base`) and the inbox's "n changed" all read it;
+  the last two count with `changeset.Without`, which skips the redlines.
+  The baseline is shared: any reviewer's Done moves it, whatever the
+  completion rule. Under `serve` and stdio it lives in memory, so a restart
+  or a read no live session serves has none until the next Done.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
@@ -459,6 +488,23 @@ users are agents, not humans.
   changes). Tab counts are taken after the filters, `/api/reviews` accepts
   the same parameters, and a row's `framing` is its preset, `custom` for an
   inline config alone, or empty for the default.
+  Urgency (issue #220): `publish_document`'s `blocking` and `due_by` land
+  on `Meta.Blocking`/`Meta.DueBy`, per revision; `Host.urgency` marks a
+  row `Urgent` when it is not done and blocking or past due, `rows()` sorts
+  urgent first and day grouping heads them "An agent is waiting", with the
+  wait measured from `Meta.Updated`. A blocking publish bypasses the
+  notifier's debounce. A hint for ordering, never a verdict.
+- `/stats` and `/api/stats` (issue #216, `hosted/stats.go`, `web.RenderStats`)
+  are the inbox's sibling, human-only and computed the same way — current
+  revision, in-memory logs, `feedback.Materialize`, zero store reads. Per
+  agent and in total: first look (first human event − `Meta.Created`), time
+  to done (when every document's log first met the review's completion
+  rule − `Meta.Created`), rounds (`Meta.Rounds`, incremented at republish
+  when the outgoing revision met the rule past `Meta.From`, plus one if the
+  current one does), notes by
+  non-protocol type, and claim outcomes (notes with an `addressed`: latest
+  status, and `Unclaimed`). Filters: `period=7d|30d|90d` on publish time,
+  `agent`, `framing`. Retired documents' logs are not counted.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
@@ -574,6 +620,17 @@ users are agents, not humans.
   `MARGINALIA_CALLBACK_HOSTS`; https and listed hosts only, and the dialer
   refuses a non-public address after resolution (no proxy, no redirects).
   Questions debounce per review; a Done is never held.
+  Assets (issue #217, `hosted/assets.go`): `publish_document` takes
+  `assets` (base64 PNG/JPEG/WebP/SVG, type checked against extension and
+  content), stored put-if-absent at `reviews/<id>/asset/<n>/<name>`,
+  recorded in `Meta.Assets` (name → rev, type, bytes) and carried over by a
+  republish that does not resend them. Their bytes are held in memory
+  (`Review.assets`), so serving `/r/{id}/assets/{rev}/{name}` reads nothing;
+  it answers with nosniff and a `sandbox` CSP. Markdown image and link
+  destinations naming an asset are rewritten at parse time through
+  `document.Options.Link` (HTML only; text and hash unchanged), and hosted
+  review pages carry `img-src 'self' data:` so a remote image is not
+  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a

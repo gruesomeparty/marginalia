@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gruesomeparty/marginalia/internal/changeset"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/web"
@@ -207,6 +208,21 @@ func (s *Server) handleResolution(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.resolution(e, events))
 }
 
+// handleChanges lists what moved in a document since the reviewer last
+// finished it: blocks added, edited (with a word-level redline) and removed.
+func (s *Server) handleChanges(w http.ResponseWriter, r *http.Request) {
+	e := s.entry(r)
+	if e == nil {
+		http.NotFound(w, r)
+		return
+	}
+	cs := s.Changes(e)
+	if cs == nil {
+		cs = []changeset.Change{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"changes": cs})
+}
+
 // handleRevision lets the page notice that a document it is showing has been
 // re-parsed under it. Deliberately tiny: the page polls it while --watch is on.
 func (s *Server) handleRevision(w http.ResponseWriter, _ *http.Request) {
@@ -326,6 +342,18 @@ func (s *Server) check(target *Entry, e *feedback.Event) (int, error) {
 		// enforcing anything.
 		if !s.knows(target, e.ReplyTo) {
 			return http.StatusBadRequest, fmt.Errorf("unknown note %q — nothing in this document's log answers to it", e.ReplyTo)
+		}
+		// The one protocol event that carries fields is a tap on a
+		// multiple-choice requester note, and the choice must be one the
+		// agent offered.
+		if len(e.Fields) > 0 {
+			if e.Type != feedback.TypeReply || !strings.HasPrefix(e.ReplyTo, review.RequesterPrefix) {
+				return http.StatusBadRequest, fmt.Errorf("a %s carries no fields", e.Type)
+			}
+			d := s.docOf(target)
+			if err := cfg.CheckAnswer(e.ReplyTo, e.Fields, d.Path, target.Rel); err != nil {
+				return http.StatusBadRequest, err
+			}
 		}
 		// A reply is deliberately not blocked by readonly/skip: a pattern
 		// added after the fact must not strand an open thread. Root
