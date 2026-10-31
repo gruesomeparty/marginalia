@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0](https://github.com/gruesomeparty/marginalia/compare/v0.4.0...v0.5.0) (2026-10-31)
+
+
+### Features
+
+* adopt mermaid-cli 12 and strip the webfonts it embeds ([#203](https://github.com/gruesomeparty/marginalia/issues/203)) ([1e41d99](https://github.com/gruesomeparty/marginalia/commit/1e41d9916f21d94f9a1381b5ac688c39d6caf6b9)), closes [#87](https://github.com/gruesomeparty/marginalia/issues/87)
+* anchor mermaid sequence, state and ER diagrams per statement ([#196](https://github.com/gruesomeparty/marginalia/issues/196)) ([98d998d](https://github.com/gruesomeparty/marginalia/commit/98d998d36972ca2dbf3796ce6188ef5e259b7759))
+* **ci:** flag PRs that conflict with main in the merge loop ([#198](https://github.com/gruesomeparty/marginalia/issues/198)) ([8a9e747](https://github.com/gruesomeparty/marginalia/commit/8a9e747b1f5aea944924bd818644ad4f5c208970))
+* **hosted:** admit only listed reviewers, carry provider and subject ([#202](https://github.com/gruesomeparty/marginalia/issues/202)) ([6794c85](https://github.com/gruesomeparty/marginalia/commit/6794c8587f1c252c2ef11bd08811d12111670e90))
+* **hosted:** let an agent long-poll a review over HTTP ([#186](https://github.com/gruesomeparty/marginalia/issues/186)) ([#200](https://github.com/gruesomeparty/marginalia/issues/200)) ([d5420da](https://github.com/gruesomeparty/marginalia/commit/d5420da92b06f176a4e5641897def9992f0c3c2c))
+* make sequence, state and ER diagram pictures clickable ([#201](https://github.com/gruesomeparty/marginalia/issues/201)) ([aadf5d8](https://github.com/gruesomeparty/marginalia/commit/aadf5d8d3f97700fda4f66234e28464f38873fbd))
+* **mcp:** wake await_review_done on questions, short default waits ([#193](https://github.com/gruesomeparty/marginalia/issues/193)) ([b175f4a](https://github.com/gruesomeparty/marginalia/commit/b175f4a11cc9333a51622d79047c116bb2351315)), closes [#182](https://github.com/gruesomeparty/marginalia/issues/182)
+* **merge:** ask for the maintainer by change domain, not line count ([#195](https://github.com/gruesomeparty/marginalia/issues/195)) ([73ec8d6](https://github.com/gruesomeparty/marginalia/commit/73ec8d62a507fe27eaec29055d45da82a17f8954))
+* opt-in token for serve, and provenance checks on import ([#204](https://github.com/gruesomeparty/marginalia/issues/204)) ([0ba148f](https://github.com/gruesomeparty/marginalia/commit/0ba148f038b6dd769349ef63d4b1afa5419da0d8))
+* review OpenAPI specs by operation and component ([#197](https://github.com/gruesomeparty/marginalia/issues/197)) ([ced9063](https://github.com/gruesomeparty/marginalia/commit/ced9063f0ba7162a7e0e8763bd712dbc522138cb))
+* review Terraform and HCL files anchored by block path ([#192](https://github.com/gruesomeparty/marginalia/issues/192)) ([1ee63e1](https://github.com/gruesomeparty/marginalia/commit/1ee63e1874027e60989ab95df9d9f7c6e60e76fc)), closes [#151](https://github.com/gruesomeparty/marginalia/issues/151)
+* **triage:** re-triage an issue when Berkay answers its question ([#191](https://github.com/gruesomeparty/marginalia/issues/191)) ([b7aa8ad](https://github.com/gruesomeparty/marginalia/commit/b7aa8ad4bb4f843f66d22fdb7580e731d0a50d36))
+
+
+### Bug Fixes
+
+* **hosted:** count the agent wait on the review's logs ([#205](https://github.com/gruesomeparty/marginalia/issues/205)) ([d4f79e3](https://github.com/gruesomeparty/marginalia/commit/d4f79e33a198c34730253cb2daea3e58e57403c8))
+
 ## [0.4.0](https://github.com/gruesomeparty/marginalia/compare/v0.3.1...v0.4.0) (2026-10-30)
 
 
