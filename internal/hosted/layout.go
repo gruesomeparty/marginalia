@@ -107,6 +107,17 @@ type Meta struct {
 	// running total carried on the metadata, so the stored-bytes budget can
 	// be rebuilt at startup from the one listing it already does.
 	Bytes int64 `json:"bytes,omitempty"`
+	// From is each document's log length when this revision was published.
+	// The logs outlive a republish, so a review_done before that point
+	// answered an earlier revision, not this one. Absent on revision 1 and
+	// on metadata written before it existed, which reads as zero: every
+	// review_done counts, as it always did.
+	From map[string]int `json:"from,omitempty"`
+	// Retired is the log length of each document an earlier revision served
+	// and this one does not. No page or tool writes to those logs any more,
+	// but their events still count toward the agent wait's cursor, which
+	// must never move back.
+	Retired map[string]uint64 `json:"retired,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

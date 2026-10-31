@@ -507,8 +507,10 @@ users are agents, not humans.
   operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
   no tool that writes anything but `reply` and `addressed`; the one other
-  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/oauth.go`), the
-  review server's long-poll behind the `/mcp` bearer check — a route of its
+  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/agentwait.go`),
+  a long-poll in `/api/wait`'s shape behind the `/mcp` bearer check, counted
+  on the review's in-memory logs rather than a server's counter, since a
+  republish or a restart builds new servers and the cursor must survive both — a route of its
   own beside `/mcp`, not an exception in `requireHuman`, serving nothing else,
   answered 401 by the Worker (and listed in Access's Bypass) like `/mcp`;
   `review_done`,
