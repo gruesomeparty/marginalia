@@ -128,3 +128,86 @@ func TestSetTickFollowsTheCompletionRule(t *testing.T) {
 		t.Error("both reviewers done, the tick never appeared")
 	}
 }
+
+// postAs saves a note as another reviewer would, from another browser.
+func postAs(t *testing.T, url string, e feedback.Event) {
+	t.Helper()
+	body, _ := json.Marshal(e)
+	res, err := http.Post(strings.TrimSuffix(url, "/")+"/api/feedback", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("%s's note: %d", e.Author, res.StatusCode)
+	}
+}
+
+// A hidden tab stops following, so an open request does not hold a hosted
+// container awake, and catches up when it is shown again.
+func TestHiddenPageStopsFollowing(t *testing.T) {
+	r := serve(t, "plan.md", prose, session.Options{Author: "ana"})
+	ctx := browser(t)
+	id := r.block(t, "paragraph", "Friday")
+	do(t, ctx,
+		chromedp.Navigate(r.URL),
+		chromedp.Evaluate[chromedp.Void](`(function(){
+			window.mgWaits = 0;
+			var f = window.fetch;
+			window.fetch = function(u){ if(String(u).indexOf("/api/wait") >= 0) window.mgWaits++; return f.apply(this, arguments); };
+			Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){ return window.mgHidden ? "hidden" : "visible"; }});
+			window.mgHidden = true;
+			document.dispatchEvent(new Event("visibilitychange"));
+		})()`),
+	)
+	// The poll in flight answers the first note; nothing asks after the second.
+	postAs(t, r.URL, feedback.Event{Doc: r.Doc.Path, Block: id, Type: feedback.TypeComment, Text: "one", Author: "bo"})
+	time.Sleep(1500 * time.Millisecond)
+	before := get(t, ctx, chromedp.Evaluate[int](`window.mgWaits`))
+	postAs(t, r.URL, feedback.Event{Doc: r.Doc.Path, Block: id, Type: feedback.TypeComment, Text: "two", Author: "bo"})
+	time.Sleep(1500 * time.Millisecond)
+	if after := get(t, ctx, chromedp.Evaluate[int](`window.mgWaits`)); after != before {
+		t.Fatalf("a hidden page kept polling: %d waits, then %d", before, after)
+	}
+	do(t, ctx, chromedp.Evaluate[chromedp.Void](`window.mgHidden = false; document.dispatchEvent(new Event("visibilitychange"))`))
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if get(t, ctx, chromedp.Evaluate[int](`document.querySelectorAll('[data-block="`+id+`"] + .existing .item').length`)) == 2 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("shown again, the page never caught up with the note")
+}
+
+// A block with a new note being written is not redrawn under the composer;
+// another reviewer's note shows once, after it closes.
+func TestLiveUpdateWaitsForTheComposer(t *testing.T) {
+	r := serve(t, "plan.md", prose, session.Options{Author: "ana"})
+	ctx := browser(t)
+	id := r.block(t, "paragraph", "Friday")
+	do(t, ctx,
+		chromedp.Navigate(r.URL),
+		chromedp.Click(sel(id)),
+		chromedp.WaitVisible(chromedp.CSS(".composer textarea")),
+		chromedp.SendKeys(chromedp.CSS(".composer textarea"), "draft"),
+	)
+	postAs(t, r.URL, feedback.Event{Doc: r.Doc.Path, Block: id, Type: feedback.TypeComment, Text: "from bo", Author: "bo"})
+	time.Sleep(1500 * time.Millisecond)
+	if n := get(t, ctx, chromedp.Evaluate[int](`document.querySelectorAll(".existing").length`)); n != 0 {
+		t.Fatalf("the block was redrawn under an open composer: %d notes boxes", n)
+	}
+	if v := get(t, ctx, chromedp.Evaluate[string](`document.querySelector(".composer textarea").value`)); v != "draft" {
+		t.Fatalf("draft lost: %q", v)
+	}
+	do(t, ctx, chromedp.KeyEvent("\x1b"))
+	deadline := time.Now().Add(8 * time.Second)
+	n := 0
+	for time.Now().Before(deadline) {
+		if n = get(t, ctx, chromedp.Evaluate[int](`document.querySelectorAll(".existing").length`)); n == 1 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("after closing the composer: %d notes boxes, want 1", n)
+}

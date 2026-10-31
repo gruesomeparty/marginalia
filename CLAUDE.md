@@ -364,7 +364,10 @@ users are agents, not humans.
   payload's `author` is the request's resolved identity (`Server.authorOf`) —
   reads "Done (n of m)" when the rule needs more than one Done, and follows
   `/api/wait`: on any append it re-reads `/api/resolution` and redraws only
-  blocks whose notes changed, never one with a reply being typed.
+  blocks whose notes changed, never one with a reply or a new note being
+  typed (it catches up when the composer closes). It parks while the tab is
+  hidden or after 20 minutes without input, because an open request holds a
+  hosted container awake.
   A set's nav tick and "Finish" state follow the rule too (`rule.Met` in
   `renderPage`; the page re-reads the resolution after Done rather than
   ticking on the click).

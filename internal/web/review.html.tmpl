@@ -1124,6 +1124,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
     var inside = c.contains(document.activeElement);
     c.remove();
     if(inside && from && from.isConnected) from.focus({preventScroll:true});
+    // A live update skipped this block while it was being written on.
+    if(deferred){ deferred = false; refresh(); }
   }
   // save appends one event and folds it into the page without a reload. In
   // share mode there is no server to append to, so the browser is the store
@@ -2260,9 +2262,11 @@ window.__MARGINALIA__ = {{.DataJSON}};
       return [n.id, n.status, n.stale, (n.replies || []).length, (n.progress || []).length];
     })) + several();
   }
+  var deferred = false;
   function busy(el){
     var box = el.mg_existing;
-    return !!(box && box.isConnected && (box.querySelector("textarea") || box.contains(document.activeElement)));
+    return !!((el.mg_composer && el.mg_composer.isConnected) ||
+      (box && box.isConnected && (box.querySelector("textarea") || box.contains(document.activeElement))));
   }
   Object.keys(elOf).forEach(function(id){ shown[id] = sig(id); });
   function refresh(){
@@ -2276,7 +2280,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
         if(t && t.hidden === !!res.done){ t.hidden = !res.done; refreshSetCount(); }
         Object.keys(elOf).forEach(function(id){
           var el = elOf[id], now = sig(id);
-          if(now === shown[id] || busy(el)) return;
+          if(now === shown[id]) return;
+          if(busy(el)){ deferred = true; return; }
           shown[id] = now;
           marker(el); renderExisting(el); markSub(el);
         });
@@ -2284,8 +2289,20 @@ window.__MARGINALIA__ = {{.DataJSON}};
       });
   }
   if(!data.static && window.fetch){
-    var since = null;
+    // An open request holds a hosted container awake, so the page follows
+    // only while someone could be reading it: not in a hidden tab, and not
+    // after twenty minutes without a key, click or scroll. It parks instead
+    // and picks up where it left off, catching up in one read.
+    var since = null, parked = null, lastSeen = Date.now();
+    function awake(){ return document.visibilityState !== "hidden" && Date.now() - lastSeen < 20 * 60 * 1000; }
+    function stir(){
+      lastSeen = Date.now();
+      if(parked && awake()){ var f = parked; parked = null; f(); }
+    }
+    ["keydown", "pointerdown", "scroll"].forEach(function(t){ window.addEventListener(t, stir, {passive: true}); });
+    document.addEventListener("visibilitychange", stir);
     (function follow(){
+      if(!awake()){ parked = follow; return; }
       var q = since === null ? "" : "?since=" + since + "&timeout=25";
       fetch(base + "/api/wait" + q, {cache: "no-store"})
         .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
