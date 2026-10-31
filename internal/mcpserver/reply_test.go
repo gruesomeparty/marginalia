@@ -315,3 +315,32 @@ func TestNewestSessionsRuleWins(t *testing.T) {
 		}
 	}
 }
+
+// review_document hands its config's rule to the stdio reads: by path, one
+// of two reviewers' Done must not read as done.
+func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
+	root := t.TempDir()
+	path := writeDoc(t, root, "spec.md", specDoc)
+	cfg := writeDoc(t, root, "review.yaml", "complete_when: all\nreviewers: [ana, bo]\n")
+	cs, _ := serveMCP(t, root)
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}, "config": cfg}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := feedback.NewStore(path).Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"}); err != nil {
+		t.Fatal(err)
+	}
+	var st statusOut
+	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &st); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Docs) != 1 || st.Docs[0].Done || st.Docs[0].DoneBy != 1 || st.Docs[0].DoneNeeded != 2 {
+		t.Errorf("review_status after one of two Dones: %+v", st.Docs)
+	}
+	var fb feedbackOut
+	if err := call(t, cs, "feedback_since", map[string]any{"paths": []string{"spec.md"}}, &fb); err != nil {
+		t.Fatal(err)
+	}
+	if len(fb.Docs) != 1 || fb.Docs[0].Done {
+		t.Errorf("feedback_since after one of two Dones: %+v", fb.Docs)
+	}
+}
