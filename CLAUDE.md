@@ -459,6 +459,12 @@ users are agents, not humans.
   changes). Tab counts are taken after the filters, `/api/reviews` accepts
   the same parameters, and a row's `framing` is its preset, `custom` for an
   inline config alone, or empty for the default.
+  Urgency (issue #220): `publish_document`'s `blocking` and `due_by` land
+  on `Meta.Blocking`/`Meta.DueBy`, per revision; `Host.urgency` marks a
+  row `Urgent` when it is not done and blocking or past due, `rows()` sorts
+  urgent first and day grouping heads them "An agent is waiting", with the
+  wait measured from `Meta.Updated`. A blocking publish bypasses the
+  notifier's debounce. A hint for ordering, never a verdict.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,

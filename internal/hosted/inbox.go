@@ -28,6 +28,10 @@ func (h *Host) rows() []web.InboxRow {
 		out = append(out, h.row(r))
 	}
 	sort.Slice(out, func(i, j int) bool {
+		// A review an agent is stopped on comes first (issue #220).
+		if out[i].Urgent != out[j].Urgent {
+			return out[i].Urgent
+		}
 		if !out[i].LastActivity.Equal(out[j].LastActivity) {
 			return out[i].LastActivity.After(out[j].LastActivity)
 		}
@@ -120,14 +124,43 @@ func (h *Host) row(r *Review) web.InboxRow {
 		row.Status = web.StatusAwaiting
 	}
 	row.StatusLabel = web.StatusLabel(row.Status)
+	h.urgency(r, &row)
 	return row
+}
+
+// urgency copies what the agent said about its wait onto the row: blocking,
+// the due-by and whether it has passed, and since when it has waited (the
+// revision it is waiting on, so a republish restarts the clock). Once that
+// revision is finished none of it shows, whatever it was published with.
+func (h *Host) urgency(r *Review, row *web.InboxRow) {
+	// The wait is on the revision the agent published: it is over once that
+	// revision has its Dones under the review's rule, as the agent's own
+	// wait reads it. So a blocking republish after Done is urgent again,
+	// and an agent's reply after Done (no new revision) is not.
+	_, finished, err := h.tally(r.Meta.ID)
+	open := err == nil && !finished
+	row.Blocking = r.Meta.Blocking && open
+	row.WaitingSince, _ = time.Parse(time.RFC3339, r.Meta.Updated)
+	if t, err := time.Parse(time.RFC3339, r.Meta.DueBy); err == nil && open {
+		t = t.UTC()
+		row.DueBy = &t
+		row.Overdue = t.Before(h.opts.Now())
+	}
+	row.Urgent = open && (row.Blocking || row.Overdue)
+	// The status is read off the whole log, where the last round's Done
+	// still stands. A review the agent is waiting on again is not done:
+	// file it where the reviewer looks.
+	if row.Urgent && (row.Status == web.StatusDone || row.Status == web.StatusReplied) {
+		row.Status = web.StatusInProgress
+		row.StatusLabel = web.StatusLabel(row.Status)
+	}
 }
 
 // handleRoot is the inbox. The tab counts are taken after the other
 // filters, so a search says how many of its matches each tab holds.
 func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 	f := web.ParseInboxFilter(r.URL.Query())
-	in := web.Inbox{Tab: f.Tab, Filter: f}
+	in := web.Inbox{Tab: f.Tab, Filter: f, Now: h.opts.Now()}
 	framings, agents := map[string]bool{}, map[string]bool{}
 	for _, row := range h.rows() {
 		if k := web.FramingKey(row.Framing); !framings[k] {

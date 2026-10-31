@@ -284,6 +284,9 @@ func TestPublishRefusalsWriteNothing(t *testing.T) {
 	if err := call(t, cs, "publish_document", map[string]any{"review_id": "nope", "documents": []map[string]any{{"name": "a.md", "content": "# a\n"}}}, nil); err == nil {
 		t.Error("a revision of an unknown review was accepted")
 	}
+	if err := call(t, cs, "publish_document", map[string]any{"documents": []map[string]any{{"name": "a.md", "content": "# a\n"}}, "due_by": "tomorrow"}, nil); err == nil || !strings.Contains(err.Error(), "RFC 3339") {
+		t.Errorf("a due_by that is not a time must say what one looks like: %v", err)
+	}
 	if keys, _ := counting.List(context.Background(), ""); len(keys) != 0 {
 		t.Errorf("refusals left keys behind: %v", keys)
 	}
