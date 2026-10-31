@@ -77,7 +77,7 @@ func (h *Host) row(r *Review) web.InboxRow {
 		row.Comments += res.Comments
 		row.Outstanding += res.Outstanding
 		row.Stale += res.Stale
-		row.Changed += len(r.Server.Changes(e))
+		row.Changed += r.Server.ChangedCount(e)
 		for _, st := range res.States {
 			if st.Current.Unclaimed {
 				row.Unclaimed++

@@ -45,7 +45,13 @@ type Span struct {
 // A container is left out when what changed inside it is already listed: a
 // list whose item was edited, or an item whose list was added or removed
 // with it. Otherwise one edit would be reported twice.
-func Between(old, now *document.Document) []Change {
+func Between(old, now *document.Document) []Change { return between(old, now, true) }
+
+// Without is Between without the word-level redlines, for a caller that only
+// counts or names the blocks: the redline is the expensive part.
+func Without(old, now *document.Document) []Change { return between(old, now, false) }
+
+func between(old, now *document.Document, redline bool) []Change {
 	if old == nil || now == nil {
 		return nil
 	}
@@ -89,7 +95,7 @@ func Between(old, now *document.Document) []Change {
 			continue
 		}
 		c := Change{Block: b.ID, Kind: k, Quote: b.Quote}
-		if k == Edited {
+		if k == Edited && redline {
 			c.Redline = Words(before[b.ID].PlainText, b.PlainText)
 		}
 		out = append(out, c)

@@ -353,13 +353,13 @@ func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
 // recorded at that Done.
 func TestReviewStatusNamesChangedBlocks(t *testing.T) {
 	root := t.TempDir()
-	path := writeDoc(t, root, "spec.md", specDoc)
+	writeDoc(t, root, "spec.md", specDoc)
 	cs, _ := serveMCP(t, root)
 	var started reviewDocumentOut
 	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}}, &started); err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(feedback.Event{Doc: path, Type: feedback.TypeReviewDone})
+	body, _ := json.Marshal(feedback.Event{Type: feedback.TypeReviewDone})
 	res, err := http.Post(started.URL+"/api/feedback", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)

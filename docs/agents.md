@@ -55,7 +55,7 @@ SIGTERM drains in-flight calls before the process exits, as `serve` does.
 |---|---|
 | `review_document` | Serve a document (or a set); returns the URL to hand over and the vocabulary you will read back. |
 | `feedback_since` | Only what is new, by cursor. Every event carries the `note_id` you would answer it with. |
-| `review_status` | The log materialized against the document as it now reads: per-block state, what went stale, what is orphaned, which `suggest_edit`s are safe to apply verbatim, and `changed_blocks` (added, edited, removed since the reviewer last finished). |
+| `review_status` | The log materialized against the document as it now reads: per-block state, what went stale, what is orphaned, which `suggest_edit`s are safe to apply verbatim, and `changed_blocks` (added, edited, removed since a reviewer last finished; under `serve` and stdio only after a Done the running session recorded). |
 | `reply_to_note` | Answer one of the human's notes in place. |
 | `mark_addressed` | Record that you changed the document in answer to a note. |
 | `await_review_done` | Wait until they finish or ask a question (`reason: "question"`, so you can answer before Done). Short by default (45s, under common client tool timeouts): call it in a loop with the returned cursor. A timeout is not an error — it returns `done: false`. |

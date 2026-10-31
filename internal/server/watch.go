@@ -136,6 +136,15 @@ func (s *Server) Changes(e *Entry) []changeset.Change {
 	return changeset.Between(base, doc)
 }
 
+// ChangedCount is how many blocks Changes would list, without building the
+// redlines: the inbox counts every review on every render.
+func (s *Server) ChangedCount(e *Entry) int {
+	s.mu.RLock()
+	base, doc := e.Base, e.Doc
+	s.mu.RUnlock()
+	return len(changeset.Without(base, doc))
+}
+
 // BaseAt is BaseOf by the document's path rather than its Rel, for a caller
 // that only knows the file.
 func (s *Server) BaseAt(path string) *document.Document {

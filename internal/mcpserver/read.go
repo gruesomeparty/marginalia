@@ -243,7 +243,7 @@ func StatusOf(t Target) (DocStatus, error) {
 	if t.Base != nil {
 		base = t.Base()
 	}
-	a, e, r := changeset.IDs(changeset.Between(base, doc))
+	a, e, r := changeset.IDs(changeset.Without(base, doc))
 	out.Changed = ChangedBlocks{Added: nonNil(a), Edited: nonNil(e), Removed: nonNil(r)}
 	if out.Needs == nil {
 		out.Needs = []feedback.Suggestion{}

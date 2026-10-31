@@ -382,7 +382,11 @@ users are agents, not humans.
   republish from the log window `Meta.From` opens, parsed from the
   immutable snapshot at startup and carried in memory after. No Done, no
   baseline, nothing marked. `GET /api/changes`, `review_status`'s
-  `changed_blocks` (`Target.Base`) and the inbox's "n changed" all read it.
+  `changed_blocks` (`Target.Base`) and the inbox's "n changed" all read it;
+  the last two count with `changeset.Without`, which skips the redlines.
+  The baseline is shared: any reviewer's Done moves it, whatever the
+  completion rule. Under `serve` and stdio it lives in memory, so a restart
+  or a read no live session serves has none until the next Done.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a

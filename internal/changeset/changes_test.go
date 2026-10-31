@@ -101,3 +101,14 @@ func TestWordsTooLargeIsAReplacement(t *testing.T) {
 		t.Fatalf("got %d spans", len(spans))
 	}
 }
+
+func TestWithoutSkipsTheRedline(t *testing.T) {
+	old, now := parse(t, "# T\n\nOne two three.\n"), parse(t, "# T\n\nOne four three.\n")
+	with, without := Between(old, now), Without(old, now)
+	if len(with) != 1 || len(without) != 1 || with[0].Block != without[0].Block {
+		t.Fatalf("Between %+v, Without %+v", with, without)
+	}
+	if len(with[0].Redline) == 0 || without[0].Redline != nil {
+		t.Errorf("redlines: Between %v, Without %v", with[0].Redline, without[0].Redline)
+	}
+}
