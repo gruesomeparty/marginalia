@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"github.com/gruesomeparty/marginalia/internal/changeset"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
@@ -46,18 +47,28 @@ type DocStatus struct {
 	// The revision loop, as a queue length: what still wants doing, what the
 	// agent says it did and the reviewer has not ruled on yet, and what is
 	// settled. Reading these beats re-reading every state.
-	Outstanding int                   `json:"outstanding"`
-	Addressed   int                   `json:"addressed"`
-	Confirmed   int                   `json:"confirmed"`
-	Reopened    int                   `json:"reopened"`
-	Stale       int                   `json:"stale"`
-	Orphaned    int                   `json:"orphaned"`
-	Done        bool                  `json:"done"`
-	DoneBy      int                   `json:"done_by"`
-	DoneNeeded  int                   `json:"done_needed"`
-	States      []feedback.State      `json:"states"`
-	Ready       []ReadySuggestion     `json:"applicable_suggestions"`
-	Needs       []feedback.Suggestion `json:"suggestions_needing_confirmation"`
+	Outstanding int              `json:"outstanding"`
+	Addressed   int              `json:"addressed"`
+	Confirmed   int              `json:"confirmed"`
+	Reopened    int              `json:"reopened"`
+	Stale       int              `json:"stale"`
+	Orphaned    int              `json:"orphaned"`
+	Done        bool             `json:"done"`
+	DoneBy      int              `json:"done_by"`
+	DoneNeeded  int              `json:"done_needed"`
+	States      []feedback.State `json:"states"`
+	// Changed is what moved since the reviewer last finished the document:
+	// the blocks to look at again, whether or not anyone wrote on them.
+	Changed ChangedBlocks         `json:"changed_blocks"`
+	Ready   []ReadySuggestion     `json:"applicable_suggestions"`
+	Needs   []feedback.Suggestion `json:"suggestions_needing_confirmation"`
+}
+
+// ChangedBlocks lists block ids by how they moved since the baseline.
+type ChangedBlocks struct {
+	Added   []string `json:"added"`
+	Edited  []string `json:"edited"`
+	Removed []string `json:"removed"`
 }
 
 // ReadySuggestion carries the block's current text beside the replacement, so
@@ -80,6 +91,9 @@ type Target struct {
 	// Completion is when the review counts as done (issue #53). The zero
 	// value is "any one reviewer's Done", which is what it always was.
 	Completion review.Completion
+	// Base is the parse the reviewer last finished, which changed_blocks is
+	// measured from (issue #214); nil, or returning nil, reports nothing.
+	Base func() *document.Document
 }
 
 // TargetOf is the disk-backed Target: the document at path and the log
@@ -108,6 +122,9 @@ func (s *Server) targetsOf(paths []string) []Target {
 		t := TargetOf(p)
 		if l := rules[p]; l != nil {
 			t.Completion = l.completion
+			if srv, path := l.srv, p; srv != nil {
+				t.Base = func() *document.Document { return srv.BaseAt(path) }
+			}
 		}
 		out = append(out, t)
 	}
@@ -222,6 +239,12 @@ func StatusOf(t Target) (DocStatus, error) {
 	for _, s := range ready {
 		out.Ready = append(out.Ready, ReadySuggestion{Suggestion: s, Current: text[s.Block]})
 	}
+	var base *document.Document
+	if t.Base != nil {
+		base = t.Base()
+	}
+	a, e, r := changeset.IDs(changeset.Between(base, doc))
+	out.Changed = ChangedBlocks{Added: nonNil(a), Edited: nonNil(e), Removed: nonNil(r)}
 	if out.Needs == nil {
 		out.Needs = []feedback.Suggestion{}
 	}
@@ -229,4 +252,11 @@ func StatusOf(t Target) (DocStatus, error) {
 		out.States = []feedback.State{}
 	}
 	return out, nil
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

@@ -118,6 +118,11 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Baseline is, per document, the last revision the reviewer finished
+	// before this one: what the page's changes are measured from (issue
+	// #214). Absent for a document nobody has finished yet, which marks
+	// nothing as changed.
+	Baseline map[string]int `json:"baseline,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

@@ -224,20 +224,30 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		docs = append(docs, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, name)), Label: name, Rel: name})
-	}
-	r, err := h.build(meta, docs)
-	if err != nil {
-		return nil, err
-	}
-	// Warm the logs: a read through now is the last time the backend sees a
-	// read for them.
-	for _, e := range docs {
-		if _, err := e.Store.Load(); err != nil {
+		e := server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, name)), Label: name, Rel: name}
+		// Warm the log: a read through now is the last time the backend
+		// sees a read for it.
+		events, err := e.Store.Load()
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", e.Store.Path(), err)
 		}
+		// What changes are measured from: this revision if the reviewer
+		// already finished it, else the last one they did.
+		switch b := meta.Baseline[name]; {
+		case finishedSince(events, meta.From[name]):
+			e.Base = doc
+		case b > 0:
+			old, err := h.store.GetBlob(ctx, revKey(id, b, name))
+			if err != nil {
+				return nil, err
+			}
+			if e.Base, err = document.ParseBytes(name, old); err != nil {
+				return nil, fmt.Errorf("%s revision %d: %w", name, b, err)
+			}
+		}
+		docs = append(docs, e)
 	}
-	return r, nil
+	return h.build(meta, docs)
 }
 
 // build wires parsed documents and metadata into the per-review server that
@@ -319,7 +329,7 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 		Review: p.Review, Config: p.Config, Theme: p.Theme,
 		Created: now, Updated: now,
 	}
-	return h.publish(ctx, meta, p)
+	return h.publish(ctx, meta, p, nil)
 }
 
 // Republish stores revision n+1 of an existing review and serves it. Earlier
@@ -374,14 +384,50 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 		retired = nil
 	}
 	meta.Retired = retired
-	return h.publish(ctx, meta, p)
+	// Each document the new revision keeps is compared with the revision
+	// the reviewer last finished: this one if they did, else whatever this
+	// one was compared with.
+	meta.Baseline = nil
+	bases := map[string]*document.Document{}
+	for _, e := range prev.Server.Entries() {
+		if !slices.ContainsFunc(p.Docs, func(d Document) bool { return d.Name == e.Rel }) {
+			continue
+		}
+		events, err := e.Store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+		}
+		b, base := prev.Meta.Baseline[e.Rel], prev.Server.BaseOf(e.Rel)
+		if finishedSince(events, prev.Meta.From[e.Rel]) {
+			b, base = prev.Meta.Revision, prev.Server.DocOf(e.Rel)
+		}
+		if b > 0 && base != nil {
+			if meta.Baseline == nil {
+				meta.Baseline = map[string]int{}
+			}
+			meta.Baseline[e.Rel] = b
+			bases[e.Rel] = base
+		}
+	}
+	return h.publish(ctx, meta, p, bases)
+}
+
+// finishedSince reports whether a log holds a review_done at or after index
+// from: the reviewer finished the revision that started there.
+func finishedSince(events []feedback.Event, from int) bool {
+	for _, e := range events[min(from, len(events)):] {
+		if e.Type == feedback.TypeReviewDone {
+			return true
+		}
+	}
+	return false
 }
 
 // publish validates everything, then writes the revision's blobs and the new
 // metadata version, then swaps the served review. The order is the point: a
 // refusal happens before the first write, and the page only changes once
 // every byte of the revision is in the store.
-func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, error) {
+func (h *Host) publish(ctx context.Context, meta Meta, p Publish, bases map[string]*document.Document) (*Review, error) {
 	if len(p.Docs) == 0 {
 		return nil, errors.New("nothing to publish — send at least one document")
 	}
@@ -416,7 +462,7 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
-		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name})
+		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name, Base: bases[d.Name]})
 		meta.Docs = append(meta.Docs, d.Name)
 	}
 	// Where this revision starts in each log, so a wait can tell this

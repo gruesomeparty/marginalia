@@ -66,8 +66,10 @@ text, stale where a block changed and orphaned where it is gone, exactly as
    - `review_done` — they submitted the Done sheet. Its `text` is their
      overall note, if they wrote one, so read it before acting on the
      per-block notes.
-4. `review_status {session_id}` — per-block state, what went stale, and the
-   suggested edits that are safe to apply verbatim.
+4. `review_status {session_id}` — per-block state, what went stale, the
+   suggested edits that are safe to apply verbatim, and `changed_blocks`:
+   the blocks added, edited or removed since the reviewer last finished
+   (empty before their first Done), whether or not anyone commented on them.
 
 `feedback_since {cursor}` reads incrementally if you want to react while the
 review is still open. Every read works from the log on disk, so pass `paths`

@@ -205,6 +205,7 @@ func (s *Server) reviewDocument(_ context.Context, _ *mcp.CallToolRequest, in re
 	}
 	cfg := srv.Review()
 	l.completion = cfg.Completion()
+	l.srv = srv
 	out := reviewDocumentOut{
 		SessionID:      l.id,
 		URL:            l.url,

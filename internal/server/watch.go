@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gruesomeparty/marginalia/internal/changeset"
 	"github.com/gruesomeparty/marginalia/internal/document"
 )
 
@@ -96,6 +97,55 @@ func (s *Server) setDoc(e *Entry, doc *document.Document) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e.Doc = doc
+}
+
+// BaseOf is the parse a document's changes are measured from, by its Rel,
+// or nil.
+func (s *Server) BaseOf(rel string) *document.Document {
+	e, ok := s.byRel[rel]
+	if !ok {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return e.Base
+}
+
+// DocOf is a document's current parse, by its Rel, or nil.
+func (s *Server) DocOf(rel string) *document.Document {
+	e, ok := s.byRel[rel]
+	if !ok {
+		return nil
+	}
+	return s.docOf(e)
+}
+
+// finished makes an entry's current parse its baseline: what the reviewer
+// has just signed off is what the next round is compared with.
+func (s *Server) finished(e *Entry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e.Base = e.Doc
+}
+
+// Changes lists what moved in an entry since the reviewer last finished it.
+func (s *Server) Changes(e *Entry) []changeset.Change {
+	s.mu.RLock()
+	base, doc := e.Base, e.Doc
+	s.mu.RUnlock()
+	return changeset.Between(base, doc)
+}
+
+// BaseAt is BaseOf by the document's path rather than its Rel, for a caller
+// that only knows the file.
+func (s *Server) BaseAt(path string) *document.Document {
+	e, ok := s.byPath[path]
+	if !ok {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return e.Base
 }
 
 // atomic counter type used by Server; kept here beside its reader.
