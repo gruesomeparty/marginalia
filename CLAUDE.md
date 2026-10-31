@@ -371,6 +371,22 @@ users are agents, not humans.
   A set's nav tick and "Finish" state follow the rule too (`rule.Met` in
   `renderPage`; the page re-reads the resolution after Done rather than
   ticking on the click).
+- Changes since the last round (issue #214): `internal/changeset` diffs two
+  parses by block id (same id, new hash = edited; the rule Materialize
+  applies to notes) and gives an edited block a word-level redline; a
+  container whose inline children moved is left out. The baseline is the
+  parse the reviewer last finished: `server.Entry.Base`, moved to the
+  current parse on every `review_done` the server records (so `--watch`
+  follows the reviewer), and in hosted mode seeded from `Meta.Baseline` —
+  per document, the last revision finished before this one, computed at
+  republish from the log window `Meta.From` opens, parsed from the
+  immutable snapshot at startup and carried in memory after. No Done, no
+  baseline, nothing marked. `GET /api/changes`, `review_status`'s
+  `changed_blocks` (`Target.Base`) and the inbox's "n changed" all read it;
+  the last two count with `changeset.Without`, which skips the redlines.
+  The baseline is shared: any reviewer's Done moves it, whatever the
+  completion rule. Under `serve` and stdio it lives in memory, so a restart
+  or a read no live session serves has none until the next Done.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a

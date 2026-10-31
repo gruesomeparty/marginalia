@@ -1,7 +1,10 @@
 package mcpserver
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -342,5 +345,35 @@ func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
 	}
 	if len(fb.Docs) != 1 || fb.Docs[0].Done {
 		t.Errorf("feedback_since after one of two Dones: %+v", fb.Docs)
+	}
+}
+
+// review_status names the blocks that moved since the reviewer's Done: a
+// stdio read of the file on disk, measured from the parse the live session
+// recorded at that Done.
+func TestReviewStatusNamesChangedBlocks(t *testing.T) {
+	root := t.TempDir()
+	writeDoc(t, root, "spec.md", specDoc)
+	cs, _ := serveMCP(t, root)
+	var started reviewDocumentOut
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}}, &started); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(feedback.Event{Type: feedback.TypeReviewDone})
+	res, err := http.Post(started.URL+"/api/feedback", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("done: %d", res.StatusCode)
+	}
+	writeDoc(t, root, "spec.md", strings.Replace(specDoc, "Three attempts", "Five attempts", 1))
+	var st statusOut
+	if err := call(t, cs, "review_status", map[string]any{"paths": []string{"spec.md"}}, &st); err != nil {
+		t.Fatal(err)
+	}
+	if c := st.Docs[0].Changed; len(c.Edited) != 1 || len(c.Added)+len(c.Removed) != 0 {
+		t.Errorf("changed_blocks %+v, want the one edited block", c)
 	}
 }

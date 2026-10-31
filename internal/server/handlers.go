@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gruesomeparty/marginalia/internal/changeset"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
 	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/web"
@@ -205,6 +206,21 @@ func (s *Server) handleResolution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.resolution(e, events))
+}
+
+// handleChanges lists what moved in a document since the reviewer last
+// finished it: blocks added, edited (with a word-level redline) and removed.
+func (s *Server) handleChanges(w http.ResponseWriter, r *http.Request) {
+	e := s.entry(r)
+	if e == nil {
+		http.NotFound(w, r)
+		return
+	}
+	cs := s.Changes(e)
+	if cs == nil {
+		cs = []changeset.Change{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"changes": cs})
 }
 
 // handleRevision lets the page notice that a document it is showing has been

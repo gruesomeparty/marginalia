@@ -54,6 +54,9 @@ func (s *Server) recorded(target *Entry, e feedback.Event) {
 	c.n++
 	close(c.tick)
 	c.tick = make(chan struct{})
+	if e.Type == feedback.TypeReviewDone {
+		s.finished(target)
+	}
 	if e.Type != feedback.TypeReviewDone || c.done[target.Rel] {
 		return
 	}
