@@ -132,6 +132,12 @@ main.tree.diff{max-width:none}
 .block mark.mg-sub{background:color-mix(in srgb,var(--marker) var(--tint),transparent);color:inherit;border-radius:var(--r-tab);padding:0 .05em;box-shadow:0 1px 0 var(--marker-ink)}
 .block mark.mg-sub.on{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);box-shadow:0 1px 0 var(--accent)}
 .existing .item .quoted{margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--marker);color:var(--muted);font-style:italic}
+/* A suggested edit to one sentence, as a redline: what goes struck through,
+   what comes underlined. Colour is not the only cue, so both keep their
+   decoration in every palette. */
+.existing .item .redline{margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--marker)}
+.existing .item .redline del{color:var(--muted);text-decoration:line-through}
+.existing .item .redline ins{text-decoration:underline;text-decoration-thickness:2px;background:color-mix(in srgb,var(--accent) var(--tint),transparent)}
 /* The offer to comment on a selection, floating where the selection is. It is
    a button and not a hijacked mouseup, so selecting text to copy it stays
    exactly what it always was. */
@@ -900,6 +906,31 @@ window.__MARGINALIA__ = {{.DataJSON}};
     }
     return box && box.classList.contains(cls) ? box : null;
   }
+  // redline writes a word-level diff of a into b as text nodes, struck
+  // through and underlined. Only text nodes: nothing a reviewer typed is
+  // ever parsed as markup.
+  function redline(into, a, b){
+    var x=a.split(/(\s+)/), y=b.split(/(\s+)/), n=x.length, m=y.length;
+    function add(tag, t){
+      if(!t) return;
+      var last=into.lastChild;
+      if(tag && last && last.tagName===tag.toUpperCase()){ last.textContent+=t; return; }
+      if(!tag && last && last.nodeType===3){ last.textContent+=t; return; }
+      if(!tag){ into.appendChild(document.createTextNode(t)); return; }
+      var el=document.createElement(tag); el.textContent=t; into.appendChild(el);
+    }
+    if(n*m > 40000){ add("del", a); add("ins", b); return; }
+    var L=[]; for(var i=0;i<=n;i++){ L.push(new Array(m+1).fill(0)); }
+    for(i=n-1;i>=0;i--) for(var j=m-1;j>=0;j--) L[i][j] = x[i]===y[j] ? L[i+1][j+1]+1 : Math.max(L[i+1][j], L[i][j+1]);
+    i=0; j=0;
+    while(i<n && j<m){
+      if(x[i]===y[j]){ add(null, x[i]); i++; j++; }
+      else if(L[i+1][j] >= L[i][j+1]){ add("del", x[i]); i++; }
+      else { add("ins", y[j]); j++; }
+    }
+    for(;i<n;i++) add("del", x[i]);
+    for(;j<m;j++) add("ins", y[j]);
+  }
   function renderExisting(el){
     var id=el.dataset.block, list=byBlock[id]||[];
     var box=boxAfter(el, "existing");
@@ -930,17 +961,27 @@ window.__MARGINALIA__ = {{.DataJSON}};
       // What the note is about, when it is about one sentence rather than the
       // block. Shown even when stale — especially then, since "the text this
       // was written against" is exactly what the reader needs.
+      // A suggested edit to one sentence reads as a redline of that
+      // sentence; the replacement is the note, so it is not repeated below.
+      var redlined = e.type === "suggest_edit" && e.sub && e.sub.quote && e.text;
+      if(redlined){
+        var rl=document.createElement("div"); rl.className="redline";
+        rl.setAttribute("role","group");
+        rl.setAttribute("aria-label", "Suggested: replace \u201c"+e.sub.quote+"\u201d with \u201c"+e.text+"\u201d");
+        redline(rl, e.sub.quote, e.text);
+        item.appendChild(rl);
+      }
       if(e.sub && e.sub.quote){
         var on=document.createElement("div"); on.className="quoted";
         on.textContent="\u201c"+e.sub.quote+"\u201d";
-        item.appendChild(on);
+        if(!redlined) item.appendChild(on);
         if(note.at){
           item.addEventListener("mouseenter", function(){ lightSub(el, note.at, true); });
           item.addEventListener("mouseleave", function(){ lightSub(el, note.at, false); });
         }
       }
       var body=document.createElement("div"); body.textContent=e.text||"";
-      item.appendChild(body);
+      if(!redlined) item.appendChild(body);
       if(e.fields){
         var keys=Object.keys(e.fields);
         if(keys.length){
@@ -1225,7 +1266,9 @@ window.__MARGINALIA__ = {{.DataJSON}};
       Array.prototype.forEach.call(chips.querySelectorAll(".chip"), function(x){
         x.setAttribute("aria-pressed", x.dataset.type===a.type ? "true" : "false");
       });
-      if(a.type==="suggest_edit" && !ta.value) ta.value=editableText(id, el);
+      // A suggestion on a selection replaces that sentence, so it starts
+      // from the sentence, not the whole block.
+      if(a.type==="suggest_edit" && !ta.value) ta.value=selection || editableText(id, el);
       renderFields();
     }
     actions.forEach(function(a){

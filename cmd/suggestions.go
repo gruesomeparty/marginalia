@@ -109,7 +109,12 @@ func formatReports(reports []report) string {
 			b.WriteString("  applicable\n")
 			for _, s := range r.Applicable {
 				fmt.Fprintf(&b, "    %s (hash %s, %s)\n", s.Block, s.Hash, s.Author)
-				fmt.Fprintf(&b, "      current: %s\n", s.Current)
+				if s.Sub != nil {
+					// One sentence, not the block: name the span it replaces.
+					fmt.Fprintf(&b, "      sentence: %s\n", s.Sub.Quote)
+				} else {
+					fmt.Fprintf(&b, "      current: %s\n", s.Current)
+				}
 				fmt.Fprintf(&b, "      replace: %s\n", s.Replacement)
 			}
 		}
@@ -117,7 +122,11 @@ func formatReports(reports []report) string {
 			b.WriteString("  need confirmation\n")
 			for _, s := range r.NeedsConfirmation {
 				fmt.Fprintf(&b, "    %s — %s\n", s.Block, s.Reason)
-				fmt.Fprintf(&b, "      was:     %s\n", s.Quote)
+				if s.Sub != nil {
+					fmt.Fprintf(&b, "      sentence: %s\n", s.Sub.Quote)
+				} else {
+					fmt.Fprintf(&b, "      was:     %s\n", s.Quote)
+				}
 				fmt.Fprintf(&b, "      replace: %s\n", s.Replacement)
 			}
 		}
