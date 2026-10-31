@@ -2,16 +2,11 @@
 
 **A document-review tool an agent hands to a human.**
 
-It renders a document — markdown, a `.proto` schema, a JSON/YAML/TOML tree, a
-mermaid diagram, one file or a whole set — as a readable page, collects inline
-comments anchored to blocks, and writes them back as append-only JSONL events
-the agent consumes directly.
-
-Three parts: **render, annotate, return events.** No database, no accounts, no
-export step. Feedback lands beside the document as `<doc>.feedback.jsonl` the
-instant it is saved.
-
-Its primary users are agents. Its interface is a page a human enjoys using.
+Marginalia renders a document as a readable page, lets a person comment on any
+block of it, and writes every comment back as an append-only JSONL event the
+agent reads directly. Render, annotate, return events. No database, no export
+step: feedback lands beside the document as `<doc>.feedback.jsonl` the instant
+it is saved.
 
 ```
 agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedback.jsonl ──▶ agent
@@ -19,40 +14,28 @@ agent ──serve──▶ page ──human clicks a block──▶ <doc>.feedba
   └──────────────── answers, revises, says what changed ──────────────────┘
 ```
 
-`PRD.md` is the full product spec. This file is how to use what exists.
+The [homepage](https://marginalia.gruesomeparty.xyz) has a live review page to
+click around in.
 
----
+## Why
 
-## Contents
+When an agent writes a spec, a schema or a plan, the human's review usually
+comes back as one chat message: "looks fine, but the retry bit is wrong".
+The agent has to guess which retry bit, and the next round starts from a full
+re-read. Marginalia gives the review a shape both sides can use. The person
+clicks the paragraph, the field or the arrow in a diagram and says what they
+think. The agent gets an event that names that exact block, notices when the
+text it was about has since changed, and can answer or say what it fixed, in
+place.
 
-- [What you get](#what-you-get) · [Install](#install) · [Quickstart](#quickstart)
-- [Using it as an agent](#using-it-as-an-agent) · [Using it as a human](#using-it-as-a-human)
-- [Framing a review](#framing-a-review) · [Supported inputs](#supported-inputs)
-- [The review loop](#the-review-loop) · [Sharing off your machine](#sharing-off-your-machine)
-- [Reference](#reference) · [Why it works this way](#why-it-works-this-way)
-- [Gaps](#gaps) · [Direction](#direction) · [Development](#development)
+## What it reads
 
----
-
-## What you get
-
-| | |
-|---|---|
-| **Block anchoring** | Every block carries `{block, quote, hash}`. Feedback re-anchors on re-render; a comment written against text that has since changed comes back flagged **stale** rather than silently pointing at the wrong thing. |
-| **Five input families** | Markdown, `.proto`, JSON/YAML/TOML, mermaid, and unified diffs — including mermaid fences inside markdown. Everything but markdown renders as a folding, indented tree anchored by node path. |
-| **Drawn diagrams** | With mermaid's CLI installed, a flowchart renders as a picture whose shapes carry the same anchors as the source. Click the arrow, comment on that edge. |
-| **Framed reviews** | The requesting agent sets the instructions, the vocabulary (`blocker`, `nit`, …), structured fields, and which blocks are off-limits. Enforced server-side, not just rendered. |
-| **Four shipped framings** | `adr`, `schema`, `security`, `copy` — so the same review compares across runs instead of getting a fresh vocabulary each time. |
-| **Sentence-level notes** | Select a sentence in a paragraph and comment on *that*. The note survives unrelated edits around it and goes honestly stale when its own sentence changes. |
-| **Threads** | A reviewer's question gets an answer, in place, under their own note. |
-| **A revision loop** | The agent records *which note* a change answered; the reviewer confirms or reopens. The claim is checked against whatever the note is about — the block, or the one sentence. |
-| **Long-document flow** | Progress as answered-of-commentable, keyboard movement between unanswered blocks, filters, and a Done button that names what is missing. |
-| **Multi-document sets** | A directory, several paths, or a curated `.marginalia.yml`. One page per document, one log per document. |
-| **An MCP server** | Seven tools over stdio, so an agent stops scraping banners and parsing JSONL. |
-| **Share mode** | One self-contained HTML file that loads nothing, survives a strict CSP, and merges back append-only and idempotently. |
-| **Themes** | Six palettes; the reviewer owns light/dark and ligatures. Code highlighted server-side, because a CDN script would not survive the CSP. |
-
----
+Markdown, `.proto`, JSON / YAML / TOML (OpenAPI specs by operation), mermaid
+diagrams (drawn and clickable when mermaid-cli is installed), unified diffs,
+SQL and HCL. One file, several, or a whole directory. Everything but markdown
+renders as a folding tree anchored by its own path, so a note on
+`CreateOrderRequest/customer_id` stays on that field. See
+[supported formats](docs/formats.md).
 
 ## Install
 
@@ -61,60 +44,20 @@ brew install --cask gruesomeparty/tap/marginalia   # macOS
 go install github.com/gruesomeparty/marginalia@latest
 ```
 
-Or grab a build from the [releases page](https://github.com/gruesomeparty/marginalia/releases)
-— Linux and macOS, amd64 and arm64. It is a single Go binary with no runtime
+Or download a build from the
+[releases page](https://github.com/gruesomeparty/marginalia/releases) (Linux
+and macOS, amd64 and arm64). It is a single Go binary with no runtime
 dependencies.
-Each archive comes with an SPDX SBOM and a build provenance attestation, which
-you can check with
-`gh attestation verify <archive> --repo gruesomeparty/marginalia`.
-[SECURITY.md](SECURITY.md) explains this and how to report a vulnerability.
 
-### Claude plugin
+As a Claude Code plugin, which also wires up the MCP server:
 
 ```
-/plugin marketplace add gruesomeparty/marginalia   # or: gruesomeparty/ghost-bazaar
+/plugin marketplace add gruesomeparty/marginalia
 /plugin install marginalia
 ```
 
-Then `/marginalia:review-doc <path>` hands a document to a human and consumes
-the events. (`/marginalia:implement-approved` is the loop that maintains
-Marginalia itself — you probably do not want it.)
-
-### Optional: drawing mermaid diagrams
-
-Marginalia needs no dependencies. If you want a `mermaid` fence to render as a
-**picture** rather than as anchored source, install mermaid's own CLI:
-
-```bash
-npm i -g @mermaid-js/mermaid-cli     # provides `mmdc`
-marginalia serve arch.md             # startup now says: "1 diagram(s) drawn"
-```
-
-Without it the page shows the anchored source and every other part of the
-review is identical — this is never a prerequisite for handing a document over.
-
-`mmdc` drives a headless Chromium through puppeteer, which is where the two
-things that go wrong live:
-
-- **Running as root** (containers, CI) — Chromium refuses without
-  `--no-sandbox`, and says so. Give `mmdc` a puppeteer config:
-
-  ```bash
-  printf '{"args":["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]}' > /tmp/puppeteer.json
-  export MARGINALIA_MMDC_ARGS="-p /tmp/puppeteer.json"
-  ```
-
-- **No browser downloaded** — `Could not find chrome-headless-shell (ver. …)`
-  means puppeteer never fetched one: `npx puppeteer browsers install
-  chrome-headless-shell`. If Chromium is already on the machine, skip the
-  download with `export PUPPETEER_EXECUTABLE_PATH=/path/to/chrome`.
-
-`MARGINALIA_MMDC` (or `--mmdc`) names the binary when it is not on `PATH`. A
-path that is wrong is an **error**, not a silent fallback to no pictures —
-answering a typo with "install the thing you just said you had" would be worse.
-`--diagrams=off` skips drawing entirely.
-
----
+Then `/marginalia:review-doc <path>` hands a document to a human and reads the
+answers back.
 
 ## Quickstart
 
@@ -122,923 +65,53 @@ answering a typo with "install the thing you just said you had" would be worse.
 marginalia serve README.md --open
 ```
 
-Open the URL, click any block to comment, press **Done**. Every comment is on
-disk the instant it is saved.
-
----
-
-## Using it as an agent
-
-The PRD says the primary users are agents, so there are two ways in and one of
-them is much better.
-
-### MCP (preferred)
-
-**Installed as a Claude plugin, this is already done** — the plugin declares the
-server, so the tools are there as soon as the `marginalia` binary is on `PATH`.
-If the tools are missing, that binary is the thing to check: a server that
-cannot start looks exactly like one nobody configured.
-
-For any other MCP client:
-
-```jsonc
-// in your MCP client's config
-{ "mcpServers": { "marginalia": { "command": "marginalia", "args": ["mcp"] } } }
-```
-
-Add `"--root", "<dir>"` to confine it somewhere other than the working
-directory; `MARGINALIA_MCP_ROOT` does the same without a flag.
-
-**From another machine** — a Claude Code session on your laptop driving a
-review server on the box where the documents live, say, over Tailscale — the
-same tools speak Streamable HTTP:
-
-```bash
-export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"   # required off loopback
-marginalia mcp --http 100.64.0.9:8080 --host 100.64.0.9 --root ~/docs
-```
-
-`--http` is where the MCP endpoint listens (`/mcp`, with `/healthz` beside
-it for health checks); `--host` is still where the review pages bind, so the
-URL a tool hands back is one your phone can open. Without
-`MARGINALIA_MCP_TOKEN` the command refuses to bind anything but a loopback
-address: an unauthenticated MCP endpoint on a reachable interface is not an
-option. The client sends the token as a bearer:
-
-```jsonc
-// .mcp.json, or any client that takes an HTTP server
-{ "mcpServers": { "marginalia": {
-    "type": "http",
-    "url": "http://100.64.0.9:8080/mcp",
-    "headers": { "Authorization": "Bearer ${MARGINALIA_MCP_TOKEN}" } } } }
-```
-
-Stdout stays clean in this mode too — notices go to stderr — and SIGINT or
-SIGTERM drains in-flight calls before the process exits, as `serve` does.
-
-### Hosted mode
-
-When the agent and the reviewer share no filesystem at all — an agent in a
-Claude project or a cloud session, a reviewer on a phone — `marginalia host`
-is one always-on instance that agents publish *content* to and the owner
-reviews from (PRD §5.9). It is additive: `serve` and `mcp` are untouched.
-
-```bash
-export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"
-export MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
-export MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
-marginalia host --addr :8080 --store file:///data --public-url https://review.example
-```
-
-`--store` is `file://<dir>` or `r2://<bucket>/<prefix>` — Cloudflare R2
-through its S3 API, credentials from `MARGINALIA_R2_*` only, one object per
-event so the log is append-only by construction, and exactly one PUT per
-comment ([docs/hosting.md](docs/hosting.md) has the cost per operation).
-One listener, four surfaces: `/` the inbox, `/r/<id>/` one review's pages
-and API exactly as `serve` mounts them at `/`, `/mcp` the tools over
-Streamable HTTP, `/healthz` for the platform. The **inbox** is every review,
-newest activity first, with what each one is waiting on — *awaiting you*, *in
-progress*, *done*, or *agent replied since you finished* (the revision loop
-coming back) — and its counts (notes, outstanding, stale, unclaimed) from the
-same materialization the review page shows. Tabs *Needs me* / *Done* / *All*
-live in the query string; `GET /api/reviews` is the same list as JSON. It is
-server-rendered from memory, needs no script to read, and works on a phone. Every byte of review state goes
-through `--store` (`MARGINALIA_STORE`), laid out the same on every backend —
-`reviews/<id>/meta/<n>.json` (versioned metadata, highest wins),
-`reviews/<id>/rev/<n>/<name>` (immutable document snapshots),
-`reviews/<id>/log/<name>` (the append-only feedback log) — so the local disk
-of a container is disposable. Startup loads every review from the store; from
-then on the process keeps them in memory and writes through, which makes it
-**single-instance by design**: one writer per store, and a deploy must pin
-exactly one. URLs handed to agents are built from `--public-url`
-(`MARGINALIA_PUBLIC_URL`), never the bind address. `MARGINALIA_MCP_TOKEN` gates `/mcp` and is required off
-loopback, as for `mcp --http`.
-
-Over `/mcp` the tools are the ones above with one substitution — a
-`review_id` and a document `name` where a path was — and `publish_document`
-in place of `review_document`, because a path means nothing to an agent on
-another machine:
-
-| Tool | What it does |
-|---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor — stale where a block changed, orphaned where it is gone. A revision replaces the whole document set. |
-| `feedback_since`, `review_status`, `await_review_done`, `close_review` | As above, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
-| `reply_to_note`, `mark_addressed` | As above, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
-
-A name is one plain file name — `../x.md`, `.env` and `a/b.md` are refused,
-not cleaned up — and a publish refuses before writing anything: an
-unsupported format (naming `request-feature`), empty content, an invalid
-config, or a **limit**. The host is metered, so what agents can publish is
-capped — and every refusal names the limit and its value, so an agent tells
-the human instead of retrying blindly:
-
-| limit | default | flag / env |
-|---|---|---|
-| bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
-| documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
-| revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
-| publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
-| open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
-| stored bytes, all reviews | 1 GiB | `--limit-stored-bytes` / `MARGINALIA_LIMIT_STORED_BYTES` |
-
-The stored total is tracked in memory (documents on the metadata as a running
-total, logs as they are read once and appended), never by listing the store;
-past it new publishes are refused and a human's note never is. Finished
-reviews are **archived** `--retain-done` (30 days) after their last
-activity, and reviews never marked done after `--retain-open` (90 days): the
-whole review is moved under `archive/` with the store's prefix move — out of
-the inbox, nothing edited, nothing deleted, restorable by moving it back. The
-sweep runs at startup and hourly. Diagrams are `--diagrams=off` in hosted mode
-unless you say otherwise: an agent's input is not worth a headless browser
-per publish.
-
-**Notifications.** The inbox shows what is waiting only when you look;
-`--notify-url <url>` (repeatable; `MARGINALIA_NOTIFY_URL`, comma-separated)
-gets a POST when an agent publishes a review, publishes a revision, or
-replies or claims after you pressed Done — never on anything you did. The
-body is plain text with the review's title, the agent and what happened, the
-review URL in the text and in a `Click` header, so an ntfy topic works as is;
-`--notify-format json` sends `{event, review_id, title, agent, url, at}` for
-a generic webhook. It never carries a word of a document or a note — the
-service is a third party — and it is delivered off the request path with a
-short timeout and one retry: a dead receiver is a line on stderr, never a
-failed publish. At most one notification per review per minute; a burst
-collapses into one "n updates".
-
-Every release also publishes a container image,
-`ghcr.io/gruesomeparty/marginalia:<version>` for `linux/amd64` and
-`linux/arm64`: the released binary on a distroless base, non-root, `host` on
-port 8080, store and secrets from the environment. The operator's side — the
-image, the edge, the authorization server, the connector — is in
-[docs/hosting.md](docs/hosting.md).
-
-**Deploying it to Cloudflare** is a template in this repository:
-[`deploy/cloudflare`](deploy/cloudflare/README.md) is a Worker in front of one
-Container running that image, with the store in R2 and Cloudflare Access in
-front of the pages. It holds nothing account-specific. From a release tag,
-`npx wrangler deploy --domain review.<your-domain> --secrets-file
-settings.env` brings up an instance. The hostname is the command-line
-argument, and the settings are a file on your machine that git ignores.
-
-**Who is asking is decided on every request, before any handler runs.** A
-*human* reaches the pages through the edge, which puts a JWT on the request
-(Cloudflare Access: the `Cf-Access-Jwt-Assertion` header, or its
-`CF_Authorization` cookie); the host verifies the signature against the
-issuer's published keys (`--human-jwt-issuer`, `--human-jwt-audience`,
-`--human-jwks-url` — the last defaults to the Access certs URL, or to OpenID
-discovery for any other issuer), plus issuer, audience and validity, and the
-token's email becomes the **author of every event they write**, whatever the
-page sent. An *agent* holds `MARGINALIA_MCP_TOKEN` on `/mcp` and writes as
-`--agent-name` (default `agent`). The two never cross: a page route refuses
-an agent credential, and `/mcp` has no tool that writes a `comment`, a
-verdict, a `confirm`, a `reopen` or a `review_done`. Trusting the header
-without verifying it is not an option — the container's port may be
-reachable around the edge. For a laptop with no edge in front of it,
-`--insecure-dev-identity you@example.com` makes every page request that
-human; it refuses to start on anything but a loopback address.
-
-For the claude.ai connector, `/mcp` is also an **OAuth resource server**
-(RFC 9728): with `--mcp-oauth-issuer` set, an unauthenticated request is
-challenged with the protected-resource metadata, the metadata names the
-authorization server, and the access token that comes back is verified
-against that server's keys with `aud` = the public `/mcp` URL. The token's
-subject becomes `agent:<sub>`, and it is still an agent's seat — no verdicts.
-Marginalia never issues tokens; the deploy picks the server (Cloudflare
-Access as an OIDC provider, or any other). The static token keeps working
-beside it. Steps in [docs/hosting.md](docs/hosting.md).
-
-| Tool | What it does |
-|---|---|
-| `review_document` | Serve a document (or a set); returns the URL to hand over and the vocabulary you will read back. |
-| `feedback_since` | Only what is new, by cursor. Every event carries the `note_id` you would answer it with. |
-| `review_status` | The log materialized against the document as it now reads: per-block state, what went stale, what is orphaned, and which `suggest_edit`s are safe to apply verbatim. |
-| `reply_to_note` | Answer one of the human's notes in place. |
-| `mark_addressed` | Record that you changed the document in answer to a note. |
-| `await_review_done` | Wait until they finish or ask a question (`reason: "question"`, so you can answer before Done). Short by default (45s, under common client tool timeouts): call it in a loop with the returned cursor. A timeout is not an error — it returns `done: false`. |
-| `close_review` | Stop serving. Comments already saved stay on disk and stay readable. |
-
-Three things about it are deliberate:
-
-- **Reads come from the log on disk**, never from the running HTTP server. They
-  keep working after your session ends, and any number of agents can follow one
-  review by passing `paths` instead of a `session_id`.
-- **An agent may answer and may claim, never decide.** `reply_to_note` and
-  `mark_addressed` are the only tools that write, each writes one fixed type,
-  and both name the note they are about. There is deliberately no confirm or
-  reopen tool: that is the reviewer's verdict on your work, and an agent that
-  could settle its own note would make the revision loop decorative. Everything
-  else in the log is theirs — `review_done` above all, since it is the one
-  signal the handover exists to produce.
-- **`--root` confines every path a tool names.** A tool argument can come from
-  text the model read, and `.yaml` is a supported input, so without a root
-  "review `~/.config/gh/hosts.yml`" would render a token onto a listening
-  socket. The check runs before anything is parsed or served.
-
-### CLI
-
-Everything the MCP server does, you can do with the binary:
-
-```bash
-marginalia serve spec.md --review schema      # hand it over
-marginalia reply spec.md                      # what they said, and the ids
-marginalia reply spec.md --to <id> --text …   # answer a question
-marginalia addressed spec.md --to <id> --text … # say what you changed
-marginalia suggestions spec.md --json         # what is safe to apply
-```
-
-`serve` prints the URL and the log path on startup, then runs until
-interrupted. Feedback is readable from disk the whole time — you do not need to
-stop the server to read it.
-
----
-
-## Using it as a human
-
-You get a page. Click a block, pick a verdict, done.
-
-- **One tap where possible.** An action with nothing to fill in saves on the
-  tap. Most feedback is a verdict, not prose, and a review where saying "nit"
-  means typing is a review that gets abandoned. Those one-tap actions sit
-  apart in the composer as one compact control, Approve in green and Reject
-  in red (always labelled, never colour alone), so a verdict no longer looks
-  like the start of a comment.
-- **Keyboard.** `Enter` on a focused block opens the composer. A configured
-  action's key writes it without one. And on a long document:
-
-  | | |
-  |---|---|
-  | `↓` / `↑` | next / previous block |
-  | `⇧↓` / `⇧↑` | next / previous **unanswered** block, wrapping |
-  | `j` `k` `n` `p` | the same, when the review has not claimed those letters |
-  | `i` | back to the inbox, on a hosted review (also the header's **← Inbox** link) |
-  | `?` | what is actually bound right now |
-
-  A configured action always wins its key — the agent asked for that
-  vocabulary. That is why the arrows exist: a configured key is a single
-  character, so `ArrowDown` can never be taken.
-
-- **Comment on a sentence, not the paragraph.** Select text inside a block and
-  an offer appears; take it and the note is about that sentence, which the page
-  marks in the prose. Ignore it and selecting text is exactly what it always
-  was — you can still copy a quote out, and clicking a block still comments on
-  the block.
-- **Progress that means something.** The header reads *answered of
-  commentable*, not a raw comment count, because only that ratio says how much
-  is left:
-
-  ```
-  12 of 61 answered · 3 of 9 sections · 12 comments · 3 to re-check
-  ```
-
-  On a long document the bar barely moves, so the page also groups blocks by
-  top-level section: an outline in the left column lists each one with how
-  many of its blocks are answered, ticks it when all of them are, and takes
-  you there on a click. That is a markdown document's outermost chapters (a
-  lone title over H2 chapters groups by chapter), a diff's files, and a
-  tree's top-level nodes. The rule for what counts as answered is the same.
-
-- **Filters** for how you actually work: not answered, ones you answered, ones
-  the requester asked about, ones waiting to be re-checked. The menu label says
-  how many blocks are out of view, so a filter is never a silent lie. An inline
-  block — a list item, a diagram statement — dims instead of hiding, because
-  removing a bullet renumbers the list around it.
-- **Done is a summary, not a click.** It opens a sheet that shows what you
-  said (counts by type), how many blocks you left unanswered, and a box for an
-  optional overall note. Nothing is written until you press **Submit**. Cancel
-  or Esc leaves the log untouched. With `require_verdict` the sheet lists the
-  blocks still waiting, takes you to any of them, and will not submit until
-  they are answered. The overall note becomes the `text` of the `review_done`
-  event, so the agent reads it alongside the signal to go.
-- **Your display is yours.** The **Display** menu picks System / Light / Dark
-  and turns code ligatures off. Those choices live in your browser, never on
-  the agent's disk. `--theme` picks the palette it arrives in: `default`,
-  `light`, `dark`, `catppuccin`, `catppuccin-latte`, `catppuccin-mocha`.
-
-### Reviewing on your phone
-
-There is no second UI. The server binds where you tell it, so bind it to your
-Tailscale interface and open the same URL:
-
-```bash
-marginalia serve doc.md --host 100.x.y.z
-```
-
-Know what that means: `serve` has no login. Anyone who can reach the port can
-read the document and write notes under any name. On loopback that is only you.
-On a tailnet it is everyone on the tailnet. When the network is not the boundary
-you want, set a token. It comes from the environment, never a flag, because flags
-show up in process lists:
-
-```bash
-export MARGINALIA_SERVE_TOKEN="$(openssl rand -hex 16)"
-marginalia serve doc.md --host 100.x.y.z
-# open http://100.x.y.z:8787/?token=<the token> once per browser
-```
-
-Every request then needs the token. A browser passes it once as `?token=`, which
-leaves a cookie and drops the token from the address bar; a script sends it as
-`Authorization: Bearer`. Every note is written under `--author` (default
-`$USER`), whatever the page says. Without the variable, nothing changes.
-
----
-
-## Framing a review
-
-The requesting agent decides what the review asks for, at serve time.
-
-### Shipped framings
-
-Writing a config from scratch every time means the same question gets a
-different vocabulary each time, and the events stop comparing across runs.
-
-```bash
-marginalia review list                        # names and their vocabularies
-marginalia review show security > review.yaml # copy one to disk as a start
-marginalia serve api.proto --review security  # or just use it by name
-```
-
-| Framing | Asks | Adds to the built-ins |
-|---|---|---|
-| `adr` | Is this decision sound? | `blocker`, `concern`, `alternative`, `context_missing` |
-| `schema` | Is this change safe to ship? | `breaking` (with *what breaks*), `naming`, `optionality`, `migration` |
-| `security` | Read it as an attacker. | `vulnerability` (with severity), `hardening`, `threat_model`, `out_of_scope` |
-| `copy` | It goes in front of users. | `wrong`, `unclear`, `tone`, `typo` |
-
-A preset is a starting point, not a cage: `--config` layers a file over it and
-the file changes only what it names. `instructions:` alone reframes a review
-without touching its verbs; naming `actions:` replaces the vocabulary wholesale.
-
-### Writing your own
-
-```yaml
-# review.yaml — marginalia serve spec.md --config review.yaml
-title: Ingest spec — retry policy
-instructions: |
-  Focus on the retry policy in §1. Ignore prose and wording.
-  Tag every finding: Blocker for anything that must change before rollout.
-
-actions:
-  - type: blocker        # written to the log verbatim
-    label: Blocker       # button text
-    key: b               # optional keyboard shortcut on a focused block
-  - type: nit
-    key: n
-  - type: finding
-    requires_text: true
-    fields:
-      - name: severity
-        options: [high, medium, low]
-        required: true
-      - name: owner
-
-builtins: true           # false drops comment/suggest_edit/question/approve/reject
-require_verdict: false   # true: no review_done until every block is answered
-
-readonly:
-  - "2"                  # section 2 is context: shown, muted, not commentable
-skip:
-  - "3"                  # generated appendix: folded, and refused if posted to
-
-notes:                   # your questions, rendered beside the block
-  - id: batch-cap         # optional; what the reviewer's answer names
-    doc: spec.md         # which document — required in a set, optional for one
-    block: "1/2"
-    text: why 500? I took it from the queue's batch limit — is that right?
-```
-
-The instructions render as a banner above the document, so the framing survives
-the switch from chat to browser. A note renders beside its block, labelled as
-coming from the requester, with an **Answer** button. The answer is a `reply`
-event whose `reply_to` is the note's id — `req:batch-cap`, or `req:` plus a hash
-of the document, block and text when you gave no `id` — so it comes back tied to
-the question even when one block carries several.
-
-Give each note a `doc` when the review serves a set — block ids are
-per-document, so `1/2` exists in every markdown file and an unnamed note would
-follow its id into all of them. Startup names any note whose document is not in
-the set rather than dropping it. **Notes never enter `<doc>.feedback.jsonl`** —
-that log is the human's answers, not your questions.
-
-**The server enforces all of it.** An event whose `type` is not in the
-configured set is refused; so is one for a read-only block, a field that was not
-declared, or a choice outside its options. Rendering a rule is not enforcing it,
-and a tab left open across a restart must not be able to invent vocabulary.
-
----
-
-## Supported inputs
-
-| Input | Block ID |
-|---|---|
-| `.md`, `.markdown` | `section/ordinal` — `5.3/2`; a list item adds its position — `5.3/2.1`, nested `5.3/2.1.3` |
-| `.proto` (proto3 source) | schema path — `CreateOrderRequest/customer_id`, `CreateOrderRequest.Line/sku`, `OrderService/CreateOrder`, `Status/STATUS_UNSPECIFIED` |
-| `.json`, `.yaml`, `.yml`, `.toml` | node path — `$.spec.storage.paths[2]`, `$["odd key"]`, `$doc[1].kind` (multi-document YAML) |
-| an OpenAPI or Swagger spec in any of those | an operation by method and path — `GET /orders/{id}`, below it `GET /orders/{id}.responses["200"]`; a path item by its path; a component by kind and name — `components/schemas/Order`; the rest as above |
-| `.mmd`, `.mermaid`, and `mermaid` fences in markdown | what the statement connects — `client-->api`, `payments/worker-->queue`; a message `C->A` (repeats `C->A#2`), a transition `Pending-->Paid`, a relationship `CUSTOMER--ORDER`; in a fence, under the fence's own ID — `1/3/client-->api` |
-| `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
-| `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
-| `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
-
-Everything but markdown renders as a folding tree — one commentable block per
-node, indented by depth, with **Collapse all** for a big file.
-
-**Markdown.** Lists are anchorable item by item: each bullet or numbered step is
-its own block, nested ones included, so a note about one task lands on that task
-rather than on the whole list. The list keeps its own anchor too, for a note
-about its shape.
-
-**`.proto`.** Every declaration — message, field, `oneof` and its members, enum
-value, rpc, `reserved` range, option — is its own block, so `reject` on "field 4
-was reused" and `suggest_edit` on a rename land on that exact field. Parsing is
-structural, not semantic: a schema whose imports are not on disk, or that does
-not compile yet, still reviews fine.
-
-**`.json` / `.yaml` / `.toml`.** Keys keep the order the author wrote them,
-scalars show their type (`port: "8080"` reads differently from `port: 8080`,
-which is the whole point of reviewing a config), and YAML comments render with
-the node they document.
-
-**mermaid.** Every statement of a flowchart — node, edge, subgraph — is its own
-block, anchored by what it connects with the line style and any label left out
-(`worker -.retry.-> queue` anchors as `worker-->queue`). So "the retry edge
-should go to a dead-letter queue" lands on that edge and an agent can apply it
-mechanically. In markdown the fence's own `<pre>` is what you see — the diagram
-exactly as written, annotated in place — and the fence keeps its anchor for a
-note about the diagram as a whole.
-
-With `mmdc` installed the diagram is also **drawn**: rendered to SVG on the
-server, inlined into the page, carrying the same anchors on its shapes. Clicking
-the retry arrow in the picture opens the composer for that statement; hovering
-lights it up; a shape that already has notes wears the marker colour. **Show
-source** flips every diagram on the page and the choice sticks. No script and no
-request reach the page, which is what lets a shared file keep its picture under
-a strict CSP, and the drawing takes the reviewer's theme and light/dark.
-
-Sequence, state and ER diagrams are taken apart the same way: a message by
-who sends it to whom (`C->A`, the second one between the same pair `C->A#2`),
-a transition by what it connects (`Pending-->Paid`), a relationship by its
-pair of entities (`CUSTOMER--ORDER`), with groups, composite states and
-entity attributes underneath. Their drawings are clickable too: a
-participant, state or entity by name, and a message, note, loop, transition or
-relationship by its place in the source when the picture draws as many as the
-source writes. What cannot be paired that surely (a state edge inside a
-composite state, an entity's attributes) stays one toggle away in the source. A diagram type the parser does not take
-apart — a class diagram, say — stays reviewable as one source block rather
-than failing.
-
-**Diffs and patches.** The thing a human is most often asked to approve, so the
-review is the *change* rather than the file. Each file is a top-level block and
-each hunk hangs off it, with the commit message from `git format-patch` kept as
-a block of its own — it is part of what is being signed off.
-
-```bash
-git diff main... > change.patch && marginalia serve change.patch
-```
-
-Hunks are anchored by **ordinal, not line number**: regenerating a patch after
-an earlier hunk changes shifts every line number below it, which would orphan
-every note under it. The markers are hashed with the text, because `+ if n >
-2000` and `- if n > 2000` are opposite statements. A note on the *file* —
-"this shouldn't be in the patch at all" — hashes the file's identity and tally
-rather than its hunks, so editing a hunk does not make it stale.
-
-Since the review config's patterns already treat `/` as a separator,
-`readonly: ["internal/"]` mutes a whole directory of a patch.
-
-Parsing is tolerant, like every other format here: a truncated hunk, a patch
-from something that is not git, a hunk with no file header, or a mailer that
-ate the leading space off context lines all still render. A binary file, a pure
-rename or a mode change says what it is instead of showing an empty diff.
-
-### Where sentence-level notes apply
-
-Deliberately narrow: markdown prose. A tree node and a diagram statement are
-already fine-grained, and inside a code fence the rendered text and the block's
-plain text can differ — so the page simply does not offer there, and a note on
-the whole block is what you get. That is better than an anchor nothing can
-resolve.
-
-### Code in a document
-
-Fenced code blocks and `.proto` declarations are highlighted at render time, on
-the **server**: comments recede, strings and numbers stand out. Go, Rust,
-JS/TS, Python, shell, SQL, HCL, JSON, YAML, TOML, proto and HTTP are tokenized;
-anything else renders as plain text rather than badly.
-
-No highlighter is fetched — the page has to survive a strict CSP. That is also
-why the mono stack only *prefers* JetBrains Mono, Fira Code, Cascadia Code or
-Iosevka if the reviewer already has one, and falls back to the system mono.
-
-### Multi-document sets
-
-```bash
-marginalia serve docs/                       # every supported file beneath it
-marginalia serve spec.md plan.md api.proto   # or name them
-```
-
-A sidebar tree mirrors the folders the documents were found in, with a live
-comment count and a tick per finished file. **Done with this file** marks one
-document; **Finish review set** marks them all, appending `review_done` to every
-log so an agent watching any one of them sees the handover close.
-
-To curate what the reviewer sees, drop a `.marginalia.yml` in the directory:
-
-```yaml
-title: Ingest rework — sign-off
-docs:
-  - path: api/orders.proto
-    label: Order service contract
-  - path: docs/plan.md
-    label: Rollout plan
-  - deploy.yaml            # a bare path keeps its own name
-```
-
-With an index the list *is* the tree: its order, its labels, nothing else. That
-makes it a whitelist too, so startup says how many supported files it left out —
-and a mistyped entry fails loudly rather than quietly shrinking the review.
-
----
-
-## The review loop
-
-### 1. Hand it over
-
-```bash
-marginalia serve spec.md --review schema --watch
-```
-
-`--watch` re-reads and re-parses when the file changes, so an edit lands without
-a restart. The page never reloads under the reviewer's hands: a change while a
-comment is half-typed shows a *"this document changed on disk — Reload"* prompt
-and auto-reloads only when nothing is open. Watching polls size and mtime a
-couple of times a second rather than using filesystem notifications, which miss
-the temp-file-and-rename that editors save with.
-
-### 2. Read what they said
-
-```bash
-curl -s localhost:8787/api/resolution | jq '.outstanding, .stale, .orphaned'
-```
-
-The resolution view is the log replayed against the document **as it now
-reads** — not the raw log:
-
-- a note whose block still reads the same **stands**, and the badge shows what
-  was decided;
-- a note written before that block changed is **stale**, with the text it was
-  written against (`was: "…"`) so you can see what moved;
-- a note whose block is gone entirely is listed as **no longer anchored** at the
-  end of the page instead of disappearing.
-
-Nothing is rewritten to produce it. Staleness is a reading of the log, not a
-fact on disk.
-
-### 3. Answer their questions
-
-A question used to be a dead end — you could revise the document and hope they
-noticed.
-
-```bash
-marginalia reply spec.md                         # the notes, and the ids
-marginalia reply spec.md --to 8f2a1c4b9de0 --text "The cap comes from the upstream API."
-```
-
-The answer hangs under their own note the next time the page renders, and the
-page shows a **Reply** box under every note so they can answer back. A reply
-changes nothing about the note it answers: the question stays the block's
-current state, and the header count still says how much the *reviewer* said.
-Threads are one level deep on purpose — an answer to an answer re-roots to the
-note that started it.
-
-Note ids are **derived** from the event, so every log already on disk has them
-and an id survives `export`/`import` unchanged.
-
-### 4. Revise, and say which note you were answering
-
-```bash
-marginalia addressed spec.md --to 8f2a1c4b9de0 --text "Raised the cap to 2000."
-```
-
-Their next look shows that block as **addressed — is this right now?**, with
-their original note beside what the block now says, and two buttons: *Yes,
-settled* or *No, still open*. The second round is a short queue instead of a
-full re-read.
-
-**The claim is checkable, not just asserted.** If a re-render finds that the
-thing the note is about has not moved, the page says so next to the claim — the
-edit may be somewhere else, or may not have happened. The claim is still shown;
-this is a review tool, not a court.
-
-What gets checked is what the note is about: the block's hash for a block-level
-note, and the *sentence* for a sentence-level one. So editing a different
-sentence in the same paragraph does not make an unrelated claim look borne out.
-
-A note nobody addressed stays **outstanding**, however much the document moves
-around it: silence is not resolution. An `approve` is not outstanding work.
-Confirming and reopening are the reviewer's, and there is no tool for them.
-
-### 5. Apply what is safe
-
-```bash
-marginalia suggestions spec.md --json
-```
-
-A `suggest_edit` is **applicable** only when it is the note that stands for its
-block, its hash still matches the block as the document now reads, *and* it
-carries a hash at all. Everything else comes back under `needs_confirmation`
-with the reason — the block changed since, a later note supersedes it, the block
-is gone, or there is no hash to check.
-
-Marginalia never edits your document. This reports; you apply.
-
----
-
-## Sharing off your machine
-
-Server mode needs no export step — but it needs the reviewer to reach your
-machine. When they cannot:
-
-```bash
-marginalia export spec.md -o review.html    # one self-contained file
-# send review.html; they comment in their browser and send back a .json
-marginalia import their-review.json         # merges onto spec.md.feedback.jsonl
-```
-
-The shared page loads **nothing**: inline CSS and JS, and every image reference
-in the document is rewritten to say what it was rather than fetch it, so opening
-the file makes no request at all. Comments live in that browser
-(`localStorage`) until the reviewer hands them over through a pre-selected
-textarea — no Clipboard API, which hosted contexts block — or the download
-button, which says so if the viewer refuses it.
-
-`import` is append-only and idempotent: it skips events already in the log, so
-merging the same file twice changes nothing, and a malformed file is refused
-before anything is written. A reply whose target is in neither the incoming file
-nor the existing log is refused too — that is the last moment the mismatch can
-be reported to someone who still has the review it answers. Feedback already on
-disk travels with the exported page, so a second round shows the thread so far.
-
-What the reviewer sends back names the document and the sha256 of the file it
-was exported from. `import --doc` can say where a document moved to, but a reply
-to a different document is refused, naming both. A reply to an earlier revision
-of the same document is merged with a warning: its notes re-anchor, and those on
-blocks that changed read as stale.
-
----
-
-## Reference
-
-### Commands
+Click any block to comment, press **Done**, then look at
+`README.md.feedback.jsonl`.
+
+From an agent, prefer the MCP server (`marginalia mcp`): it hands the document
+over, waits for the reviewer, and reads, answers and resolves notes without
+parsing anything. [Using it from an agent](docs/agents.md) covers the setup and
+the whole review loop.
+
+## Highlights
+
+- **Anchors that notice change.** Every block carries an id, a quote and a
+  hash. A note written against text that has since changed comes back marked
+  *stale* instead of silently pointing at the wrong thing.
+- **Reviews framed by the agent.** Instructions, a vocabulary (`blocker`,
+  `nit`, …), structured fields and off-limits sections, enforced by the server.
+  Four framings ship built in: `adr`, `schema`, `security`, `copy`.
+- **A revision loop.** The agent answers questions in a thread and records
+  which note a change addressed. The reviewer confirms or reopens. An agent
+  can answer and claim, never decide.
+- **A page people finish.** One-tap verdicts, sentence-level notes, keyboard
+  movement between unanswered blocks, an outline with progress, and a phone
+  layout.
+- **Three ways to share.** `serve` on your machine or tailnet,
+  [`export`](docs/sharing.md) to a single self-contained HTML file, or
+  [hosted mode](docs/hosting.md) for agents that share no filesystem with you.
+
+## Documentation
 
 | | |
 |---|---|
-| `serve <doc\|dir>...` | Serve one or more documents for review |
-| `export <doc>` | Write a self-contained review page for someone off your machine |
-| `import <review.json>` | Merge a shared review back onto the document's log |
-| `reply <doc>` | List the notes and their ids; `--to`/`--text` answers one |
-| `addressed <doc>` | Record that you acted on a note, so the reviewer can check it |
-| `suggestions <doc\|dir>...` | The `suggest_edit`s that are safe to apply verbatim |
-| `review list` / `review show <name>` | Inspect the shipped framings |
-| `mcp` | Speak MCP over stdio, or over Streamable HTTP with `--http` |
-| `host` | Run one always-on instance serving every review in a store (hosted mode) |
-| `version` | Print version information |
+| [Using it from an agent](docs/agents.md) | MCP setup, the tools, the CLI, and the review loop step by step |
+| [Reviewing a document](docs/reviewing.md) | The page from the reviewer's side: verdicts, keys, filters, Done |
+| [Framing a review](docs/review-config.md) | Built-in framings and writing your own `review.yaml` |
+| [Supported formats](docs/formats.md) | How each input is anchored, drawn diagrams, multi-document sets |
+| [Sharing off your machine](docs/sharing.md) | `export` and `import` |
+| [Hosted mode](docs/hosting.md) | `marginalia host`: publishing over remote MCP, the inbox, running it |
+| [Reference](docs/reference.md) | Commands, flags, environment, HTTP API, event schema |
+| [Design and limits](docs/design.md) | The rules the design is built on, and what it does not do yet |
 
-### Key flags
+[`PRD.md`](PRD.md) is the full product spec.
 
-| Flag | On | Meaning |
-|---|---|---|
-| `--port` / `--host` | `serve` | Where to listen. Default `127.0.0.1:8787`; set the host to your Tailscale IP for remote review. |
-| `--open` | `serve` | Open the page in a browser |
-| `--watch` | `serve` | Re-parse when the file changes; the page offers a reload |
-| `--until-done` | `serve` | Exit 0 once every served document is marked done |
-| `--timeout <dur>` | `serve` | Stop after this long (`30m`) and exit 124 |
-| `--config <yaml>` | `serve`, `export` | Framing, vocabulary, read-only blocks |
-| `--review <name>` | `serve`, `export` | Start from a shipped framing |
-| `--theme <name>` | `serve`, `export` | Palette the page arrives in |
-| `--diagrams auto\|off` | `serve`, `export` | Draw mermaid diagrams |
-| `--mmdc <path>` | `serve`, `export` | Where mermaid-cli lives |
-| `--author <name>` | `serve`, `export`, `reply`, `addressed` | Recorded on events; defaults to `$USER` |
-| `-o, --out` | `export` | Output file; default `<doc>.review.html` |
-| `--doc <path>` | `import` | Which log to append to, when the file does not say |
-| `--root <dir>` | `mcp` | Confine every path a tool call may reach |
-| `--http <addr>` | `mcp` | Serve the tools over Streamable HTTP at `/mcp` instead of stdio; off loopback, `MARGINALIA_MCP_TOKEN` must be set |
-| `--addr <addr>` | `host` | Where to listen; default `127.0.0.1:8080` |
-| `--store <uri>` | `host` | Where review state lives: `file://<dir>` (default `file://./marginalia-data`) or `r2://<bucket>/<prefix>` |
-| `--public-url <origin>` | `host` | The origin reviewers and agents reach the host at (scheme and host only); every URL handed out is built from it |
-| `--human-jwt-issuer`, `--human-jwt-audience`, `--human-jwks-url` | `host` | How to verify the edge's JWT on page requests |
-| `--insecure-dev-identity <email>` | `host` | Every page request is this human; loopback only |
-| `--agent-name <name>` | `host` | What agents holding the static token write as; default `agent` |
-| `--mcp-oauth-issuer`, `--mcp-oauth-audience`, `--mcp-oauth-jwks-url` | `host` | Accept access tokens from an OAuth authorization server on `/mcp` (the claude.ai connector) |
-| `--limit-*`, `--retain-done`, `--retain-open` | `host` | The caps and retention above |
-| `--notify-url <url>`, `--notify-format text\|json` | `host` | POST a notification on agent activity (ntfy-ready text, or JSON) |
-| `--json` | `suggestions`, `reply` | Machine-readable output |
+## Contributing
 
-### Environment
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
+which also explains how to verify a release.
 
-| | |
-|---|---|
-| `MARGINALIA_MCP_ROOT` | Default `--root` for `mcp` |
-| `MARGINALIA_SERVE_TOKEN` | Opt-in token `serve` then requires on every request; notes are written under `--author` |
-| `MARGINALIA_MCP_TOKEN` | Bearer token `mcp --http` and `host` require on `/mcp`; mandatory off loopback |
-| `MARGINALIA_STORE` | Default `--store` for `host` |
-| `MARGINALIA_PUBLIC_URL` | Default `--public-url` for `host` |
-| `MARGINALIA_R2_ACCOUNT_ID`, `MARGINALIA_R2_ACCESS_KEY_ID`, `MARGINALIA_R2_SECRET_ACCESS_KEY` | Credentials for an `r2://` store; `MARGINALIA_R2_ENDPOINT` overrides the endpoint |
-| `MARGINALIA_HUMAN_JWT_ISSUER`, `MARGINALIA_HUMAN_JWT_AUDIENCE`, `MARGINALIA_HUMAN_JWKS_URL` | Defaults for the `--human-jwt-*` flags of `host` |
-| `MARGINALIA_AGENT_NAME` | Default `--agent-name` for `host` |
-| `MARGINALIA_MCP_OAUTH_ISSUER`, `MARGINALIA_MCP_OAUTH_AUDIENCE`, `MARGINALIA_MCP_OAUTH_JWKS_URL` | Defaults for the `--mcp-oauth-*` flags of `host` |
-| `MARGINALIA_LIMIT_*`, `MARGINALIA_RETAIN_DONE`, `MARGINALIA_RETAIN_OPEN` | Defaults for the `--limit-*` and `--retain-*` flags of `host` |
-| `MARGINALIA_NOTIFY_URL` | Default `--notify-url`s for `host`, comma-separated |
-| `MARGINALIA_MMDC` | Path to mermaid-cli |
-| `MARGINALIA_MMDC_ARGS` | Extra arguments for it (a puppeteer config, say) |
+## License
 
-### HTTP API
-
-| | |
-|---|---|
-| `GET /` | The first document |
-| `GET /d/{rel...}` | One page per document |
-| `GET /api/doc[?doc=]` | The parsed document, the log, the resolution view and the review config |
-| `GET /api/feedback[?doc=]` | The raw log |
-| `POST /api/feedback[?doc=]` | Append one event (capped at 1 MB; 413 past it) |
-| `GET /api/resolution[?doc=]` | The materialized view — per-block state, stale, orphaned |
-| `GET /api/revision` | The re-parse counter, for `--watch` |
-| `GET /api/wait?since=N[&timeout=S]` | Long-poll: answers once more than N events have been saved this run, or after S seconds (default 30, max 60). It counts what this server saved: a `reply` or `addressed` written through MCP goes to the log directly and does not wake it |
-| `POST /api/session_done` | `review_done` on every document in the set |
-
-A posted event names its own document, and the server only writes to documents
-in the served set — a stale page must not be able to append elsewhere.
-
-### Event schema
-
-```jsonc
-{
-  "doc": "spec.md",
-  "block": "5.3/2",          // section path + ordinal, or a node/statement path
-  "quote": "The first ~90 characters of the block…",
-  "hash": "9f2a1c4b9de0",    // sha256(normalized text)[:12] — how staleness is detected
-  "type": "blocker",
-  "text": "…",
-  "fields": {"severity": "high"},
-  "author": "berkay",
-  "ts": "2026-09-16T08:11:15Z",
-  "reply_to": "8f2a1c4b9de0", // on reply/addressed/confirm/reopen: the note this is about
-  "sub": {                    // present only when the note is about one sentence
-    "quote": "Retries use no backoff.",
-    "prefix": "The cap is 500. ",
-    "suffix": " Failures go to the log.",
-    "start": 16,
-    "hash": "c814be3e3d44"
-  }
-}
-```
-
-**Sub-anchors are a field, never a longer block id.** A sub-block id
-(`5.3/2#1`, say) would be accepted by every consumer that already reads
-`block`, and would silently mean something different to each of them. An event
-with a `sub` still names its block exactly as before, so a reader that knows
-nothing about this sees an ordinary note on the paragraph — which is where it
-is, just less precisely.
-
-Re-location is by **quote plus surrounding context**, the selectors the W3C
-annotation model settled on for the same problem. An offset alone would always
-"find" something, which is the failure mode worth avoiding: a note that
-silently re-anchors to a neighbouring sentence is worse than one that admits it
-is stale. So a sub-anchored note is judged by whether **its own sentence** is
-still there, not by whether the paragraph changed — otherwise the feature would
-be worthless on any paragraph anyone edits.
-
-The page sends only the quote; the server derives the context and the offset
-against its own copy of the block, so the two cannot disagree about text the
-reviewer is looking at. A quote the block does not contain is refused rather
-than stored as an anchor nothing could ever resolve.
-
-**Types.** `comment`, `suggest_edit` (the `text` is the replacement),
-`question`, `approve`, `reject`, plus any action the requesting agent
-configured. The protocol's own events are `review_done`, `reply`, `addressed`,
-`confirm` and `reopen` — a config can neither define nor disable those.
-
-A note's **status** (`outstanding` / `addressed` / `confirmed` / `reopened`) and
-its **staleness** are *derived* by replaying the log. Neither is a field anyone
-writes, and nothing in the log is ever rewritten.
-
-### Files on disk
-
-| | |
-|---|---|
-| `<doc>.feedback.jsonl` | The log. Append-only, beside the document. |
-| `.marginalia.yml` | Optional, in a served directory: whitelist, order, labels. |
-| user cache dir | Drawn SVGs, keyed by source hash. Never beside your document. |
-
----
-
-## Why it works this way
-
-These are the constraints the design is built on. They explain most of the
-choices above, and none of them is negotiable:
-
-- **The source document is never mutated.** Review is read-only against the
-  input. `suggestions` reports; the caller applies.
-- **Feedback events are append-only.** Later events override earlier ones only
-  when *materializing* a view. The log itself is immutable and replayed
-  chronologically.
-- **No export step in the local loop.** In server mode every comment is on disk
-  the instant it is saved. A flow that makes the human copy, download or paste
-  is a failure — tolerated only in share mode, where there is no alternative.
-- **Never depend on the Clipboard API.** Hosted and embedded contexts block it.
-  Every copy affordance degrades to a pre-selected textarea.
-- **Self-contained HTML in both modes.** Inline CSS and JS, system fonts, no
-  external requests. Share mode must survive a strict CSP — which is why code is
-  highlighted on the server and diagrams are inlined SVG.
-- **Server mode is the product.** Share mode exists for people off your machine,
-  not as a second UI. The phone opens the same URL.
-- **No database.** Documents in, HTML out, JSONL beside the source.
-
----
-
-## Gaps
-
-Honest limitations of what is on `main` today, in the order they matter. Each
-links to where it is tracked.
-
-| Gap | Detail |
-|---|---|
-| **Limited input formats** ([#52](https://github.com/gruesomeparty/marginalia/issues/52), [#31](https://github.com/gruesomeparty/marginalia/issues/31)) | Diffs, SQL, HCL and OpenAPI have landed. Still missing: source code as symbols. What Marginalia accepts is what it is for, so this stays the first-order gap. |
-| **Only some mermaid types decompose** | Flowchart, sequence, state and ER diagrams anchor per statement, and their pictures are clickable. Other types stay reviewable as a single source block. |
-| **The page's JavaScript is barely tested** ([#60](https://github.com/gruesomeparty/marginalia/issues/60)) | `internal/browsertest` drives the page in headless Chrome for the composer, one-tap actions, replies and diagram clicks. Keyboard movement, folding, share-mode storage and `--watch` reloads are still verified by hand; each PR that touches the page adds its case. |
-| **Touch and accessibility are incomplete** ([#50](https://github.com/gruesomeparty/marginalia/issues/50)) | The drawn diagram is effectively mouse-only, and the page has had no keyboard or screen-reader audit. |
-| **`suggest_edit` is reported, never applied** ([#55](https://github.com/gruesomeparty/marginalia/issues/55)) | By design Marginalia will not edit your document — but the agent's half of that loop is still manual. |
-| **No outbound notification from `serve`** ([#44](https://github.com/gruesomeparty/marginalia/issues/44)) | `serve --until-done`, `GET /api/wait` and MCP's `await_review_done` cover waiting. Only hosted mode can POST somewhere when a review moves (`--notify-url`). |
-| **Drawing needs Node** | `mmdc` is the only non-Go dependency anywhere near this tool. It is optional and degrades to anchored source. |
-
----
-
-## Direction
-
-Two things come first, in this order, because they are what the tool *is*:
-
-**1. What it accepts.** Marginalia is worth reaching for exactly as often as it
-can read the thing you want reviewed. Every format it cannot take is a review
-that happens somewhere worse. More inputs, and finer anchoring within the ones
-it already has, is the first call on the time
-([#52](https://github.com/gruesomeparty/marginalia/issues/52),
-[#31](https://github.com/gruesomeparty/marginalia/issues/31)).
-
-**2. The interface.** The page is the whole product from the human's side, and
-it is the part with no automated tests
-([#60](https://github.com/gruesomeparty/marginalia/issues/60)) and no
-accessibility pass ([#50](https://github.com/gruesomeparty/marginalia/issues/50)).
-A reviewer who finds it tiring stops reviewing, and no amount of event schema
-fixes that.
-
-After those, in no fixed order: the agent's half of `suggest_edit`
-([#55](https://github.com/gruesomeparty/marginalia/issues/55)) and a blocking
-handoff from the CLI ([#44](https://github.com/gruesomeparty/marginalia/issues/44)).
-
-The [tracker](https://github.com/gruesomeparty/marginalia/issues) is the live
-roadmap; every milestone in the PRD's build order has shipped.
-
-### Deliberately not now
-
-Marginalia is a local tool. You run it on your machine and hand the URL to
-someone who can reach your machine — usually you, sometimes a colleague on the
-same Tailnet, and otherwise through `export`, which needs no server at all.
-
-`serve` stays that local tool. Hosted mode is where review that crosses
-machines lives, with real identities. What `serve` has is an opt-in token
-(`MARGINALIA_SERVE_TOKEN`, see [Reviewing on your phone](#reviewing-on-your-phone))
-for when the network should not be the only boundary, and `import` checks that a
-shared reply belongs to the document it is merged into. Without the token,
-anyone who can reach the URL can write to the log under any name, which is fine
-for `127.0.0.1` and for a tailnet you trust.
-
-There is still **one reviewer** per document: two people write to one log with
-no conflict story ([#53](https://github.com/gruesomeparty/marginalia/issues/53)).
-
-### How work gets picked up
-
-Marginalia improves itself. On an unsupported format or an unknown flag, the
-binary's error message points at the `request-feature` skill, so an agent that
-hits a wall files it. Agents capture freely as `agent-feedback` issues;
-a triage workflow labels, prioritises and sizes every new issue and leaves the
-implementer's plan in a hidden comment in it; `approved-for-agent` is the gate
-that turns one into work; `/marginalia:implement-approved` drains the approved
-queue into a pull request, highest priority first. The guardrail is that an issue
-quotes document **structure**, never **content** — no secrets, no private text.
-
----
-
-## Development
-
-```bash
-go build ./...                                          # build
-go test -race ./...                                     # tests
-go test -run TestName ./internal/document/              # one test
-go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80
-golangci-lint run                                       # matches CI's pinned version
-go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...   # reachable vulns (CI: PRs + weekly)
-go run . serve <doc.md> --open                          # run it
-```
-
-`CLAUDE.md` is the orientation for agents working *on* Marginalia — architecture,
-the invariants above, and the traps that are easy to fall into. `PRD.md` is
-authoritative when the two disagree.
+[MIT](LICENSE)

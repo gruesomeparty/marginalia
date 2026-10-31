@@ -847,7 +847,7 @@ template) — done**.
   container, CI included — puppeteer needs `{"args":["--no-sandbox",
   "--disable-setuid-sandbox","--disable-dev-shm-usage"]}` in a file named by
   `MARGINALIA_MMDC_ARGS="-p that.json"`, and `PUPPETEER_EXECUTABLE_PATH` if a
-  Chromium is already on the box. Startup says which mode you got; README and
+  Chromium is already on the box. Startup says which mode you got; docs/formats.md and
   `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
@@ -873,6 +873,9 @@ template) — done**.
 - Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it
   through the `# renovate:` comment) on PRs, `main` and weekly; it gates
   Renovate's automerge too.
+- User docs: `README.md` is a short front page; detail lives in `docs/` (index
+  `docs/README.md`), contributor workflow in `CONTRIBUTING.md`. A behaviour
+  change updates the `docs/` page that covers it, not the README.
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
 - Loop switches: `scripts/loop-vars.sh` shows and flips the repository
   variables the Actions loops read (`IMPLEMENT_LOOP`, `MERGE_LOOP_AUTO`, …),
