@@ -256,6 +256,25 @@ func TestQuestionsCallBackDebounced(t *testing.T) {
 	}
 }
 
+// The allow-list holds at delivery too: a review published while its host
+// was listed is not called once the operator removes it.
+func TestCallbackHostRecheckedAtDelivery(t *testing.T) {
+	clock := time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
+	k := newHook(t)
+	h, ts, cb := openCallbacks(t, k, &clock)
+	r, err := h.Publish(context.Background(), Publish{Title: "t", Docs: []Document{{Name: "spec.md", Content: []byte(specDoc)}}, Callback: k.url()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cb.Hosts = []string{"*.hooks.example.net"}
+	if c := post(t, ts.URL+"/r/"+r.Meta.ID+"/api/feedback", feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone}); c != http.StatusCreated {
+		t.Fatalf("done: %d", c)
+	}
+	if calls := k.wait(t, 0); len(calls) != 0 {
+		t.Errorf("a host taken off the allow-list was still called: %d call(s)", len(calls))
+	}
+}
+
 // Without an allow-list the feature is off, and says so; an allow-list
 // without a strong secret does not start.
 func TestCallbacksOffWithoutAnAllowList(t *testing.T) {

@@ -343,6 +343,12 @@ func (c *Callbacks) Close() {
 // deliver posts in the background: one try, one retry, and a failure is a
 // line on stderr naming the review, never the URL's query or the body.
 func (c *Callbacks) deliver(target string, cb Callback) {
+	// The allow-list is checked again here, not only at publish: a host the
+	// operator has since removed is not called, whatever a review stored.
+	if err := c.Check(target); err != nil {
+		c.logf("marginalia: callback for review %s not sent: %v\n", cb.ReviewID, err)
+		return
+	}
 	body, err := json.Marshal(cb)
 	if err != nil {
 		return

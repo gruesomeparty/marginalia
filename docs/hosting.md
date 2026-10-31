@@ -85,7 +85,9 @@ review's secret is derived from it and the review id, so nothing secret is
 stored, and rotating it rotates them all). A callback must be https, carry no
 credentials, and name a listed host; the host refuses, at publish time and
 again when it connects, any address that is not public (loopback, private,
-link-local, `100.64.0.0/10`), and does not follow redirects.
+link-local, `100.64.0.0/10`), and does not follow redirects. The allow-list
+is checked again on every delivery, so a host removed from it is no longer
+called by reviews published before.
 
 ### Limits
 
