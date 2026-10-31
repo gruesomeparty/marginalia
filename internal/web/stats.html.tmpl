@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"{{with .Theme.Palette}} data-palette="{{.}}"{{end}}{{with .Theme.Mode}} data-mode="{{.}}"{{end}}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marginalia — stats</title>
+<script>
+// Before first paint: the reviewer's display choice, as on the inbox.
+(function(){
+  try{
+    var mode = localStorage.getItem("marginalia.mode");
+    if(mode === "light" || mode === "dark") document.documentElement.dataset.mode = mode;
+    else if(mode === "system") delete document.documentElement.dataset.mode;
+  }catch(e){}
+})();
+</script>
+<style>
+{{template "tokens.css"}}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:var(--lh-ui);font-size:var(--fs-base)}
+header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:var(--sp-4) var(--sp-5);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5)}
+header strong{font-size:var(--fs-lg)}
+header a{color:var(--accent)}
+header a:focus-visible{outline:none;box-shadow:var(--ring)}
+main{max-width:80rem;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-3) var(--sp-4);margin:0 0 var(--sp-6);font-size:var(--fs-sm);color:var(--muted)}
+.filters label{display:inline-flex;align-items:center;gap:var(--sp-2)}
+.filters select,.filters button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--rule);border-radius:var(--r-pill);padding:var(--sp-2) var(--sp-4)}
+.filters button{cursor:pointer}
+.filters select:focus-visible,.filters button:focus-visible,.filters .clear:focus-visible{outline:none;box-shadow:var(--ring)}
+.filters .clear{color:var(--accent)}
+h2{font-size:var(--fs-sm);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:var(--sp-6) 0 var(--sp-3)}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-tab-lg);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--fs-sm)}
+th,td{padding:var(--sp-2) var(--sp-4);text-align:right;white-space:nowrap;border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child{text-align:left}
+thead th{color:var(--muted);font-weight:600}
+tbody tr:last-child td{border-bottom:0}
+tr.total td{font-weight:600}
+.hint{color:var(--muted);font-size:var(--fs-sm);max-width:68ch}
+.empty{color:var(--muted);padding:var(--sp-6) 0;text-align:center}
+@media (max-width:40rem){main{margin:var(--sp-5) auto;padding:0 var(--sp-4)}}
+</style>
+</head>
+<body>
+<header>
+  <a href="/">← Inbox</a>
+  <strong>Stats</strong>
+</header>
+<main>
+  <form class="filters" method="get" action="/stats" aria-label="Filter the numbers">
+    <label>Published <select name="period">{{range .Periods}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label>Agent <select name="agent">{{range .AgentOpts}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <label>Framing <select name="framing">{{range .FramingOpts}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <button type="submit">Apply</button>
+    {{if .Filtered}}<a class="clear" href="/stats">Clear filters</a>{{end}}
+  </form>
+  {{if .Rows}}
+  <h2 id="loop">The loop</h2>
+  <div class="scroll"><table aria-labelledby="loop">
+    <thead><tr><th scope="col">Agent</th><th scope="col">Reviews</th><th scope="col">Done</th><th scope="col">First look (median)</th><th scope="col">First look (p90)</th><th scope="col">To done (median)</th><th scope="col">To done (p90)</th><th scope="col">Rounds per done</th></tr></thead>
+    <tbody>{{range .Rows}}
+      <tr{{if .Total}} class="total"{{end}} data-agent="{{.Agent}}"><td>{{.Label}}</td><td>{{.Reviews}}</td><td>{{.Done}}</td><td>{{.FirstLook}}</td><td>{{.FirstLook90}}</td><td>{{.TimeToDone}}</td><td>{{.TimeToDone9}}</td><td>{{.RoundsPerReview}}</td></tr>{{end}}
+    </tbody>
+  </table></div>
+  <p class="hint">First look is from publishing to the reviewer's first note or Done; to done is from publishing until the review first met its completion rule. A round is a revision the reviewers finished.</p>
+  <h2 id="claims">The agent's fixes</h2>
+  <div class="scroll"><table aria-labelledby="claims">
+    <thead><tr><th scope="col">Agent</th><th scope="col">Addressed</th><th scope="col">Confirmed</th><th scope="col">Reopened</th><th scope="col">Not yet checked</th><th scope="col">Text unchanged</th></tr></thead>
+    <tbody>{{range .Rows}}
+      <tr{{if .Total}} class="total"{{end}}><td>{{.Label}}</td><td>{{.Claims.Addressed}}</td><td>{{.Claims.Confirmed}}</td><td>{{.Claims.Reopened}}</td><td>{{.Claims.Pending}}</td><td>{{.Claims.Unclaimed}}</td></tr>{{end}}
+    </tbody>
+  </table></div>
+  {{if .Types}}{{$types := .Types}}
+  <h2 id="notes">Notes by type</h2>
+  <div class="scroll"><table aria-labelledby="notes">
+    <thead><tr><th scope="col">Agent</th>{{range $types}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+    <tbody>{{range .Rows}}
+      <tr{{if .Total}} class="total"{{end}}><td>{{.Label}}</td>{{range .ByType}}<td>{{.}}</td>{{end}}</tr>{{end}}
+    </tbody>
+  </table></div>{{end}}
+  {{else}}<p class="empty">No reviews in this period.</p>{{end}}
+</main>
+<script>
+(function(){
+  var form = document.querySelector(".filters");
+  form.addEventListener("change", function(e){ if(e.target.tagName === "SELECT") form.submit(); });
+})();
+</script>
+</body>
+</html>

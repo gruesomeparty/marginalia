@@ -223,3 +223,20 @@ func TestInboxHasNoSeriousA11yViolations(t *testing.T) {
 	do(t, ctx, chromedp.Navigate(ts.URL), chromedp.WaitVisible(chromedp.CSS("body")))
 	audit(t, ctx, "inbox")
 }
+
+func TestStatsHasNoSeriousA11yViolations(t *testing.T) {
+	a := web.AgentStats{
+		Agent: "agent:ci", Reviews: 3, Done: 2, Rounds: 3,
+		FirstLook: web.Durations{Count: 2, Median: 3600, P90: 7200}, TimeToDone: web.Durations{Count: 2, Median: 9000, P90: 86400},
+		Notes: map[string]int{"comment": 4, "approve": 2}, Claims: web.Claims{Addressed: 2, Confirmed: 1, Pending: 1, Unclaimed: 1},
+	}
+	b := web.AgentStats{Agent: "agent:docs", Reviews: 1, Notes: map[string]int{}}
+	total := web.AgentStats{Reviews: 4, Done: 2, Rounds: 3, FirstLook: a.FirstLook, TimeToDone: a.TimeToDone, Notes: a.Notes, Claims: a.Claims}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = web.RenderStats(w, web.Stats{Period: "30d", Total: total, Agents: []web.AgentStats{a, b}, AllAgents: []string{"agent:ci", "agent:docs"}, AllFramings: []string{"default"}})
+	}))
+	t.Cleanup(ts.Close)
+	ctx := browser(t)
+	do(t, ctx, chromedp.Navigate(ts.URL), chromedp.WaitVisible(chromedp.CSS("table")))
+	audit(t, ctx, "stats")
+}

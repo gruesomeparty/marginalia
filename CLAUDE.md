@@ -459,6 +459,17 @@ users are agents, not humans.
   changes). Tab counts are taken after the filters, `/api/reviews` accepts
   the same parameters, and a row's `framing` is its preset, `custom` for an
   inline config alone, or empty for the default.
+- `/stats` and `/api/stats` (issue #216, `hosted/stats.go`, `web.RenderStats`)
+  are the inbox's sibling, human-only and computed the same way — current
+  revision, in-memory logs, `feedback.Materialize`, zero store reads. Per
+  agent and in total: first look (first human event − `Meta.Created`), time
+  to done (when every document's log first met the review's completion
+  rule − `Meta.Created`), rounds (`Meta.Rounds`, incremented at republish
+  when the outgoing revision met the rule past `Meta.From`, plus one if the
+  current one does), notes by
+  non-protocol type, and claim outcomes (notes with an `addressed`: latest
+  status, and `Unclaimed`). Filters: `period=7d|30d|90d` on publish time,
+  `agent`, `framing`. Retired documents' logs are not counted.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
