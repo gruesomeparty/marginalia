@@ -27,6 +27,9 @@ const (
 	// StatusReplied: the agent answered or claimed after the reviewer
 	// finished — the revision loop coming back for a second look.
 	StatusReplied = "replied"
+	// StatusArchived: moved out of the inbox, by the reviewer, by the agent
+	// that published it, or by the retention sweep. Restorable.
+	StatusArchived = "archived"
 )
 
 // StatusLabel is the status as the page shows it.
@@ -40,6 +43,8 @@ func StatusLabel(status string) string {
 		return "done"
 	case StatusReplied:
 		return "agent replied since you finished"
+	case StatusArchived:
+		return "archived"
 	}
 	return status
 }
@@ -50,12 +55,19 @@ const (
 	TabNeedsMe = "needs-me"
 	TabDone    = "done"
 	TabAll     = "all"
+	// TabArchived is the archive: the only tab an archived review is under.
+	TabArchived = "archived"
 )
 
 // InTab reports whether a review with status belongs under tab. An unknown
 // tab is the default one.
 func InTab(status, tab string) bool {
+	if (status == StatusArchived) != (tab == TabArchived) {
+		return false
+	}
 	switch tab {
+	case TabArchived:
+		return true
 	case TabAll:
 		return true
 	case TabDone:
@@ -212,7 +224,7 @@ type Inbox struct {
 	// rather than the filtered ones, so a choice never strands the reviewer.
 	Framings, Agents []string
 	// Counts per tab, for the tab labels.
-	NeedsMe, Done, All int
+	NeedsMe, Done, All, Archived int
 	// Now is what "today" is measured against; zero means the clock. Tests
 	// set it so a row stamped at 23:59 does not move groups mid-run.
 	Now time.Time
@@ -262,6 +274,9 @@ type inboxView struct {
 	Done     int
 	All      int
 	TabLabel string
+	// Back is this page's own address, which an archive or restore form
+	// returns to.
+	Back     string
 	Empty    string
 	Tabs     []tabLink
 	Filter   InboxFilter
@@ -281,6 +296,8 @@ func RenderInbox(w io.Writer, in Inbox) error {
 		v.TabLabel, v.Empty = "Done", "Nothing finished yet."
 	case TabAll:
 		v.TabLabel, v.Empty = "All", "No reviews have been published to this instance."
+	case TabArchived:
+		v.TabLabel, v.Empty = "Archived", "Nothing is archived."
 	default:
 		v.Tab, v.TabLabel, v.Empty = TabNeedsMe, "Needs me", "Nothing is waiting for you."
 	}
@@ -300,13 +317,14 @@ func RenderInbox(w io.Writer, in Inbox) error {
 	}
 	v.Filter, v.Filtered = f, f.Filtered()
 	v.Clear = InboxFilter{Tab: f.Tab, Group: f.Group}.href()
+	v.Back = f.href()
 	if v.Filtered {
 		v.Empty = "No review matches this filter."
 	}
 	for _, t := range []struct {
 		key, label string
 		n          int
-	}{{TabNeedsMe, "Needs me", in.NeedsMe}, {TabDone, "Done", in.Done}, {TabAll, "All", in.All}} {
+	}{{TabNeedsMe, "Needs me", in.NeedsMe}, {TabDone, "Done", in.Done}, {TabAll, "All", in.All}, {TabArchived, "Archived", in.Archived}} {
 		g := f
 		g.Tab = t.key
 		v.Tabs = append(v.Tabs, tabLink{Key: t.key, Label: t.label, Href: g.href(), N: t.n, Current: t.key == v.Tab})
@@ -344,7 +362,7 @@ func (v *inboxView) setGroups(groups []inboxGroup) {
 }
 
 // statusOrder puts what asks the most of the reviewer first.
-var statusOrder = []string{StatusAwaiting, StatusReplied, StatusInProgress, StatusDone}
+var statusOrder = []string{StatusAwaiting, StatusReplied, StatusInProgress, StatusDone, StatusArchived}
 
 // groupBy splits rows by key, keeping each group's rows newest first. Groups
 // come in order's order when one is given — a status label is written for the

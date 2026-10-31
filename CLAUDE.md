@@ -565,6 +565,20 @@ users are agents, not humans.
   and never a human's note. `Sweep` (startup, then hourly) moves a review
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
+  The same move runs on demand (`hosted/archive.go`): the reviewer's
+  Archive button and **Archived** tab (`POST /api/reviews/{id}/archive|restore`,
+  behind `http.CrossOriginProtection`), and the agent's `withdraw_review`,
+  which only the publishing agent may call and only while every log is
+  empty — once the reviewer has written, archiving is their decision. Each
+  move writes a marker blob first (`<id>/archived/<ns>`, `<id>/restored/<ns>`,
+  time in the key so startup's listing already knows it); a restore counts
+  as activity, so the sweep does not take it straight back. Before a
+  move, `metered.freeze` waits out in-flight appends under the review's
+  prefix and refuses later ones until a restore thaws it, so a note
+  routed to the old server cannot split the log across both trees (and
+  `Withdraw` freezes before its emptiness check). Archived
+  reviews' metadata is read once at startup for the tab; their logs are not.
+  Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a

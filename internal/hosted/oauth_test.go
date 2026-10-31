@@ -125,7 +125,7 @@ func TestAccessTokensFromTheServerOpenMCP(t *testing.T) {
 		t.Fatalf("a valid access token was refused: %v", err)
 	}
 	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(tools.Tools) != 7 {
+	if err != nil || len(tools.Tools) != 8 {
 		t.Fatalf("tools over OAuth: %d, %v", len(tools.Tools), err)
 	}
 	// What the token's bearer writes is written as that agent, by subject.
@@ -234,7 +234,7 @@ func TestTheStaticTokenStillWorksBesideOAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the static token was refused once OAuth was on: %v", err)
 	}
-	if tools, err := cs.ListTools(context.Background(), nil); err != nil || len(tools.Tools) != 7 {
+	if tools, err := cs.ListTools(context.Background(), nil); err != nil || len(tools.Tools) != 8 {
 		t.Errorf("tools with the static token: %v", err)
 	}
 	if _, err := connectWith(t, ts, "wrong"); err == nil {

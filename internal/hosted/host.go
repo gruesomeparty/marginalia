@@ -93,8 +93,11 @@ type Host struct {
 	// source and the router's table, and it is complete: startup loaded it
 	// all, and this process is the only writer.
 	reviews map[string]*Review
-	mux     *http.ServeMux
-	mcp     *mcp.Server
+	// archived is every review under archive/, by id: enough of each to
+	// list it and bring it back (archive.go). Like reviews, loaded once.
+	archived map[string]*Archived
+	mux      *http.ServeMux
+	mcp      *mcp.Server
 	// closing is closed once when the host is going down, so an in-flight
 	// await returns "cancelled" instead of being waited out by the drain.
 	closing   chan struct{}
@@ -108,6 +111,9 @@ type Host struct {
 	// limits and use are the caps and what counts against them.
 	limits Limits
 	use    usage
+	// meter is the layer under the cache that measures logs and freezes a
+	// review's appends while it is archived (metered.go).
+	meter *metered
 }
 
 func (h *Host) interrupt() { h.closeOnce.Do(func() { close(h.closing) }) }
@@ -132,6 +138,10 @@ func (h *Host) untilClosed(ctx context.Context) (context.Context, context.Cancel
 type Review struct {
 	Meta   Meta
 	Server *server.Server
+	// Restored is when the review last came back from the archive, or
+	// zero. It counts as activity, so a review the reviewer just restored
+	// is not archived again by the next sweep.
+	Restored time.Time
 }
 
 // Open loads every review in opts.Store and returns a host serving them. A
@@ -151,10 +161,14 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	h := &Host{opts: opts, reviews: map[string]*Review{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
+	h := &Host{opts: opts, reviews: map[string]*Review{}, archived: map[string]*Archived{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
 	h.use.publishes = map[string][]time.Time{}
-	h.store = storage.NewWriteThrough(&metered{Store: opts.Store, h: h, bytes: map[string]int64{}})
+	h.meter = &metered{Store: opts.Store, h: h, bytes: map[string]int64{}}
+	h.store = storage.NewWriteThrough(h.meter)
 	if err := h.load(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.loadArchived(ctx); err != nil {
 		return nil, err
 	}
 	// The sweep at startup: what outlived its retention while the process
@@ -179,6 +193,7 @@ func (h *Host) load(ctx context.Context) error {
 		return fmt.Errorf("hosted: listing reviews: %w", err)
 	}
 	latest := map[string]int{}
+	restored := map[string]time.Time{}
 	for _, key := range keys {
 		id, ok := reviewOf(key)
 		if !ok {
@@ -186,6 +201,9 @@ func (h *Host) load(ctx context.Context) error {
 		}
 		if n := metaVersion(id, key); n > latest[id] {
 			latest[id] = n
+		}
+		if at, ok := markTime(prefixReviews, id, markRestored, key); ok && at.After(restored[id]) {
+			restored[id] = at
 		}
 	}
 	for id, n := range latest {
@@ -195,6 +213,7 @@ func (h *Host) load(ctx context.Context) error {
 			h.logf("marginalia: review %s could not be loaded and is not served: %v\n", id, err)
 			continue
 		}
+		r.Restored = restored[id]
 		h.reviews[id] = r
 		h.recordStored(r.Meta.Bytes)
 	}
@@ -515,6 +534,16 @@ func (h *Host) routes() {
 	// the other.
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
+	// Archive and restore change what the inbox holds, so a forged
+	// cross-site form must not reach them.
+	cop := http.NewCrossOriginProtection()
+	if h.opts.PublicURL != "" {
+		if err := cop.AddTrustedOrigin(strings.TrimSuffix(h.opts.PublicURL, "/")); err != nil {
+			h.logf("marginalia: %v\n", err)
+		}
+	}
+	mux.Handle("POST /api/reviews/{id}/archive", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleArchive))))
+	mux.Handle("POST /api/reviews/{id}/restore", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleRestore))))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {

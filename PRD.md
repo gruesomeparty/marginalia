@@ -424,7 +424,9 @@ open reviews, total stored bytes — all configurable, with conservative
 defaults, and every refusal names the limit it hit so the agent can tell the
 human instead of retrying. Finished reviews are archived after a retention
 period by moving them, whole, under an `archive/` prefix: out of the inbox,
-never deleted. A human's note is never refused by a budget.
+never deleted. The reviewer archives and restores on demand from the inbox;
+an agent may withdraw a review it published until the reviewer has written
+on it. Permanent removal is the operator's lifecycle rule on `archive/`. A human's note is never refused by a budget.
 
 **Non-goals.** Multi-tenant SaaS, user accounts or sign-up, a second UI,
 horizontal scaling, and any storage backend beyond disk and R2 in this round.

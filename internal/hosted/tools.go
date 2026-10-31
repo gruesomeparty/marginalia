@@ -96,6 +96,15 @@ type closeIn struct {
 	ReviewID string `json:"review_id"`
 }
 
+type withdrawIn struct {
+	ReviewID string `json:"review_id"`
+}
+
+type withdrawOut struct {
+	ReviewID string `json:"review_id"`
+	Archived bool   `json:"archived"`
+}
+
 type closeOut struct {
 	ReviewID string                `json:"review_id"`
 	URL      string                `json:"url"`
@@ -133,6 +142,10 @@ func (h *Host) tools() {
 		Name:        "close_review",
 		Description: "Return a review's final status. A hosted review stays at its URL — there is no server to stop — and comments already saved stay readable.",
 	}, h.closeReview)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "withdraw_review",
+		Description: "Take back a review you published, before the reviewer has written anything on it — it moves to the archive, out of their inbox, and the reviewer can still restore it. Once they have started, it is theirs to archive: publish a revision instead.",
+	}, h.withdrawReview)
 }
 
 func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in publishIn) (*mcp.CallToolResult, publishOut, error) {
@@ -289,6 +302,13 @@ func (h *Host) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in a
 		return nil, awaitOut{}, err
 	}
 	return nil, awaitOut{Done: done, Reason: reason, Docs: events}, nil
+}
+
+func (h *Host) withdrawReview(ctx context.Context, req *mcp.CallToolRequest, in withdrawIn) (*mcp.CallToolResult, withdrawOut, error) {
+	if err := h.Withdraw(ctx, in.ReviewID, h.agentOf(req)); err != nil {
+		return nil, withdrawOut{}, err
+	}
+	return nil, withdrawOut{ReviewID: in.ReviewID, Archived: true}, nil
 }
 
 func (h *Host) closeReview(_ context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, closeOut, error) {
