@@ -74,8 +74,10 @@ POSTs to it when the reviewer submits Done or asks a question:
 from them returns it (and every question a collapsed burst stands for). It never carries a title, a quote or a word of a
 note. `X-Marginalia-Signature: sha256=<hex>` is HMAC-SHA256 of the body under
 the `callback_secret` the publish returned; verify it, and the `at`, before
-acting. Questions in a burst collapse into one call a minute with the latest
-cursor; a Done goes at once. A revision without `callback_url` keeps the
+acting. Questions in a burst collapse into one call a minute carrying the
+burst's first cursor; a Done goes at once. A session Done on a review of
+several documents calls once per document; only the last says `done: true`,
+so act on `done`, not on the first Done event. A revision without `callback_url` keeps the
 review's. Delivery is off the request path, with a 5s timeout and one retry.
 
 It is off unless the operator lists the hosts a callback may name, in

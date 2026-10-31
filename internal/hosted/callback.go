@@ -50,7 +50,7 @@ type Callbacks struct {
 	// Timeout bounds one attempt; zero means 5s.
 	Timeout time.Duration
 	// Debounce collapses a burst of questions on one review into one call
-	// carrying the latest cursor; zero means a minute. Done is never held.
+	// carrying the burst's first cursor; zero means a minute. Done is never held.
 	Debounce time.Duration
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
