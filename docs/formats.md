@@ -14,6 +14,7 @@ the document around it changes.
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
+| `.go` source | symbol path — `Ingest`, `Batch`, a field `Batch/Cap`, a method `Batch/Full`, `const/batchCap`; named on the command line, never picked up by a directory walk |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -95,6 +96,32 @@ Parsing is tolerant, like every other format here: a truncated hunk, a patch
 from something that is not git, a hunk with no file header, or a mailer that
 ate the leading space off context lines all still render. A binary file, a pure
 rename or a mode change says what it is instead of showing an empty diff.
+
+## Source files
+
+A source file is reviewed declaration by declaration, each anchored by the
+name the code already uses: a function by its name, a method by its type and
+name (`Batch/Full`), a struct field or interface method under its type, a
+constant under `const` whether it sits in a group or not. A method stays where
+the file put it rather than moving under its type, so the page reads in source
+order.
+
+A function quotes and hashes all of itself, signature and body, because a note
+on a function is almost always about its body. A struct or interface hashes its
+own header, not its members, which are blocks of their own — so editing a
+method or a field leaves a note on the type alone. No anchor holds a line
+number, so an edit elsewhere in the file moves nothing.
+
+Parsing is [tree-sitter](https://tree-sitter.github.io/), through a pure-Go
+runtime, so the single binary needs no C toolchain and no extra install. A file
+that does not compile still renders: what the parser could not place shows as
+an `unknown` block, and nothing in the file is hidden. Go is the first
+language; others are a grammar and a short table of which nodes are
+declarations away.
+
+Source files are reviewed when you name them — `marginalia serve handler.go` —
+and a directory walk passes them by, so serving a folder of docs never turns
+into a review of the code beside it. A `.marginalia.yml` index can list them.
 
 ## Drawing mermaid diagrams
 

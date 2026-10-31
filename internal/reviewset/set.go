@@ -164,7 +164,9 @@ func walk(dir string) ([]Doc, error) {
 			}
 			return nil
 		}
-		if strings.HasPrefix(name, ".") || supportedFormat(path) == "" {
+		// Source files are reviewed when named, never swept up: a directory
+		// of docs beside its code would otherwise become a review of both.
+		if f := supportedFormat(path); strings.HasPrefix(name, ".") || f == "" || f == document.FormatSource {
 			return nil
 		}
 		docs = append(docs, Doc{Path: path})

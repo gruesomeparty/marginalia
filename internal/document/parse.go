@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gruesomeparty/marginalia/internal/codetree"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -24,6 +25,7 @@ const (
 	FormatDiff     = "diff"
 	FormatSQL      = "sql"
 	FormatHCL      = "hcl"
+	FormatSource   = "source" // a program in any language codetree reads
 )
 
 var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
@@ -51,6 +53,9 @@ func FormatFor(path string) string {
 		return FormatSQL
 	case ".tf", ".tfvars", ".hcl":
 		return FormatHCL
+	}
+	if codetree.Detect(path) != nil {
+		return FormatSource
 	}
 	return ""
 }
@@ -87,6 +92,8 @@ func ParseBytes(path string, src []byte) (*Document, error) {
 		return parseHCL(path, src)
 	case FormatSQL:
 		return parseSQL(path, src)
+	case FormatSource:
+		return parseSource(path, src, codetree.Detect(path))
 	}
 	return nil, fmt.Errorf("no parser for %s", filepath.Ext(path))
 }
