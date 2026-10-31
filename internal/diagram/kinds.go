@@ -8,7 +8,7 @@ import (
 )
 
 // Sequence, state and ER drawings name their parts differently from a
-// flowchart, and less completely (issue #153). What mermaid 11 writes:
+// flowchart, and less completely (issue #153). What mermaid 12 writes:
 //
 //	<g data-et="participant" data-id="A">                 a participant
 //	<line data-et="message" data-from="C" data-to="A">    a message

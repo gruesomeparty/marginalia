@@ -1,10 +1,115 @@
-# Hosting Marginalia
+# Hosted mode
 
 `marginalia host` is one always-on instance that agents on other machines
-publish documents to over remote MCP and the owner reviews from a browser
-(PRD §5.9). This page is the operator's side of it: what the binary expects
-from the world around it. Nothing here is account-specific; every value is a
-placeholder.
+publish documents to over remote MCP, and that you review from a browser
+(PRD §5.9). It is for the case where the agent and the reviewer share no
+filesystem at all: an agent in a Claude project or a cloud session, a
+reviewer on a phone. It is additive: `serve` and `mcp` are untouched and stay
+the default.
+
+The first half of this page is what hosted mode does. The second half,
+[Running an instance](#running-an-instance), is the operator's side.
+
+## What it does
+
+```bash
+export MARGINALIA_MCP_TOKEN="$(openssl rand -hex 32)"
+export MARGINALIA_HUMAN_JWT_ISSUER=https://<team>.cloudflareaccess.com
+export MARGINALIA_HUMAN_JWT_AUDIENCE=<the Access application's AUD tag>
+marginalia host --addr :8080 --store file:///data --public-url https://review.example
+```
+
+One listener, four surfaces:
+
+| | |
+|---|---|
+| `/` | The **inbox**: every review, newest activity first, with what each one is waiting on (*awaiting you*, *in progress*, *done*, or *agent replied since you finished*) and its counts. Tabs *Needs me* / *Done* / *All* and the filters live in the query string, so a filtered inbox is a link; `GET /api/reviews` is the same list as JSON. Server-rendered, readable with no script, works on a phone. |
+| `/r/<id>/` | One review's pages and API, exactly as `serve` mounts them at `/`, plus an **← Inbox** link and the `i` key. |
+| `/mcp` | The tools over Streamable HTTP. |
+| `/healthz` | For the platform. |
+
+URLs handed to agents are built from `--public-url`
+(`MARGINALIA_PUBLIC_URL`), never from the bind address.
+
+### Publishing over MCP
+
+The tools are the [stdio ones](agents.md#the-tools) with one substitution: a
+`review_id` and a document `name` where a path was, and `publish_document` in
+place of `review_document`, because a path means nothing to an agent on
+another machine.
+
+| Tool | What it does |
+|---|---|
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
+| `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
+
+A name is one plain file name: `../x.md`, `.env` and `a/b.md` are refused,
+not cleaned up. A publish refuses before writing anything when the format is
+unsupported (naming `request-feature`), the content is empty, the config is
+invalid, or a limit is reached.
+
+### Limits
+
+The host is metered, so what agents can publish is capped, and every refusal
+names the limit and its value so an agent tells the human instead of retrying
+blindly:
+
+| limit | default | flag / env |
+|---|---|---|
+| bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
+| documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
+| revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
+| publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
+| open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
+| stored bytes, all reviews | 1 GiB | `--limit-stored-bytes` / `MARGINALIA_LIMIT_STORED_BYTES` |
+
+The stored total is tracked in memory, never by listing the store; past it
+new publishes are refused and a human's note never is. Finished reviews are
+**archived** `--retain-done` (30 days) after their last activity, and reviews
+never marked done after `--retain-open` (90 days): the whole review moves
+under `archive/`, out of the inbox, nothing edited or deleted, restorable by
+moving it back. The sweep runs at startup and hourly. Diagrams are
+`--diagrams=off` in hosted mode unless you say otherwise: an agent's input is
+not worth a headless browser per publish.
+
+### Notifications
+
+`--notify-url <url>` (repeatable; `MARGINALIA_NOTIFY_URL`, comma-separated)
+gets a POST when an agent publishes a review, publishes a revision, or
+replies or claims after you pressed Done, never on anything you did. The body
+is plain text with the review's title, the agent and what happened, with the
+review URL in the text and in a `Click` header, so an ntfy topic works as is;
+`--notify-format json` sends `{event, review_id, title, agent, url, at}` for a
+generic webhook. It never carries a word of a document or a note, and it is
+delivered off the request path with a short timeout and one retry: a dead
+receiver is a line on stderr, never a failed publish. At most one
+notification per review per minute; a burst collapses into one "n updates".
+
+### Who is asking
+
+Identity is decided on every request, before any handler runs. A **human**
+reaches the pages through the edge, which puts a JWT on the request
+(Cloudflare Access: the `Cf-Access-Jwt-Assertion` header or its
+`CF_Authorization` cookie; an OIDC proxy: whichever header
+`--human-jwt-header` names). The host verifies it against the issuer's keys,
+and the token's email becomes the author of every event they write, whatever
+the page sent. `--reviewers` (`MARGINALIA_REVIEWERS`) narrows who may review
+to a list. An **agent** holds `MARGINALIA_MCP_TOKEN` or an OAuth access token
+on `/mcp` and writes as `--agent-name` (default `agent`) or `agent:<sub>`.
+
+The two never cross: a page route refuses an agent credential, and `/mcp` has
+no tool that writes a `comment`, a verdict, a `confirm`, a `reopen` or a
+`review_done`. For a laptop with no edge in front of it,
+`--insecure-dev-identity you@example.com` makes every page request that
+human; it refuses to start on anything but a loopback address. The details
+are under [Humans](#humans-cloudflare-access-in-front-of-the-pages) and
+[Agents](#agents-mcp-as-an-oauth-resource-server) below.
+
+## Running an instance
+
+This part is what the binary expects from the world around it. Nothing here
+is account-specific; every value is a placeholder.
 
 The binary, the image and a deployable Cloudflare template ship here:
 [`deploy/cloudflare`](../deploy/cloudflare/README.md) is a Worker and a
@@ -55,7 +160,7 @@ a container, and the image's default). Then there are the caps —
 `--limit-revisions`, `--limit-publishes-per-hour`, `--limit-open-reviews`,
 `--limit-stored-bytes`, `--retain-done`, `--retain-open` (each with a
 `MARGINALIA_LIMIT_*` / `MARGINALIA_RETAIN_*` variable). The defaults are
-conservative; the README lists them. Finished reviews are archived under
+conservative and listed under [Limits](#limits). Finished reviews are archived under
 `archive/` in the store after `--retain-done`, open ones after
 `--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
 review is restored by moving its prefix back under `reviews/`.
@@ -188,7 +293,12 @@ overview page. Those three values go into the container's secrets.
 
    `/agent/r/<id>/wait?since=N` is the long-poll for an agent with a shell and
    the bearer (static or OAuth) rather than an MCP client: it answers when the
-   reviewer saves a note, and serves nothing else. The Cloudflare template's
+   review's logs hold more than `since` events or every document is marked
+   done for the current revision, and serves nothing else. The count is the
+   logs' length, every document the review has served included, so a cursor
+   holds across a republish (even one that drops a document) and a restart of
+   the instance; a done from before the last republish answered the earlier
+   revision and does not end the wait. The Cloudflare template's
    Worker answers it with a 401, without waking the container, when the
    bearer is missing or wrong.
 

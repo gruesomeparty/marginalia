@@ -104,6 +104,16 @@ users are agents, not humans.
   only writes to documents in the served set — a stale page must not be able to
   append elsewhere. Per-document `review_done` comes from the page's Done
   button; `session_done` writes one to every log with `text: "session"`.
+- `serve` has an opt-in token (issue #54, `internal/server/token.go`):
+  `MARGINALIA_SERVE_TOKEN`, env only, makes `Handler()` refuse any request
+  without it (bearer header, or the HttpOnly, SameSite=Lax cookie (a digest of the token, named per port) a one-time `?token=`
+  sets before redirecting the token out of the URL; a refused page gets a
+  one-field form), compared by digest in constant time, and pins every
+  event's author to `--author` through `Options.AuthorOf`. No variable, no
+  change. `export` writes the source file's sha256 into the page, the
+  share JSON carries it back as `source`, and `import` refuses a reply
+  whose `doc` names another file (by base name, so `--doc` can follow a
+  move) and warns, then merges, when the hash differs.
 - HTML template embedded via `go:embed`; one template feeds both server and
   static modes. The page's `window.__MARGINALIA__` payload is a *projection*
   (`web.project`), not the whole `Document`: ids, anchors, text, parent and
@@ -142,7 +152,7 @@ users are agents, not humans.
   transition `from-->to`, a relationship `A--B`; groups, composite states and
   entities are containers. Only a flowchart is split at `;`. Their pictures
   are stamped by `internal/diagram/kinds.go` (issue #153), from what mermaid
-  11 names in them: a participant, state or entity by name; a message,
+  12 names in them: a participant, state or entity by name; a message,
   note, group, transition or relationship by its ordinal — and only when the
   drawing holds exactly as many as the source, since a miscount means the
   pairing would guess (groups in the order they close, since mermaid draws a
@@ -507,8 +517,10 @@ users are agents, not humans.
   operator's guide). Page routes run under
   `requireHuman` and refuse an agent credential outright (403); `/mcp` has
   no tool that writes anything but `reply` and `addressed`; the one other
-  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/oauth.go`), the
-  review server's long-poll behind the `/mcp` bearer check — a route of its
+  agent door is `GET /agent/r/{id}/wait` (issue #186, `hosted/agentwait.go`),
+  a long-poll in `/api/wait`'s shape behind the `/mcp` bearer check, counted
+  on the review's in-memory logs rather than a server's counter, since a
+  republish or a restart builds new servers and the cursor must survive both — a route of its
   own beside `/mcp`, not an exception in `requireHuman`, serving nothing else,
   answered 401 by the Worker (and listed in Access's Bypass) like `/mcp`;
   `review_done`,
@@ -851,7 +863,7 @@ template) — done**.
   container, CI included — puppeteer needs `{"args":["--no-sandbox",
   "--disable-setuid-sandbox","--disable-dev-shm-usage"]}` in a file named by
   `MARGINALIA_MMDC_ARGS="-p that.json"`, and `PUPPETEER_EXECUTABLE_PATH` if a
-  Chromium is already on the box. Startup says which mode you got; README and
+  Chromium is already on the box. Startup says which mode you got; docs/formats.md and
   `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
@@ -877,6 +889,9 @@ template) — done**.
 - Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it
   through the `# renovate:` comment) on PRs, `main` and weekly; it gates
   Renovate's automerge too.
+- User docs: `README.md` is a short front page; detail lives in `docs/` (index
+  `docs/README.md`), contributor workflow in `CONTRIBUTING.md`. A behaviour
+  change updates the `docs/` page that covers it, not the README.
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
 - Loop switches: `scripts/loop-vars.sh` shows and flips the repository
   variables the Actions loops read (`IMPLEMENT_LOOP`, `MERGE_LOOP_AUTO`, …),

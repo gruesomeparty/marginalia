@@ -63,6 +63,10 @@ func requirePaths(verb string) cobra.PositionalArgs {
 	}
 }
 
+// ServeTokenEnv opts `serve` into a token (issue #54). An environment
+// variable and never a flag: flags show up in process lists.
+const ServeTokenEnv = "MARGINALIA_SERVE_TOKEN"
+
 func newServeCmd() *cobra.Command {
 	var (
 		opts        serveOptions
@@ -85,7 +89,7 @@ func newServeCmd() *cobra.Command {
 		Args:  requirePaths("serve"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts = serveOptions{
-				Host: host, Port: port, Open: open, Watch: watch, Author: author,
+				Host: host, Port: port, Open: open, Watch: watch, Author: author, Token: os.Getenv(ServeTokenEnv),
 				Config: config, Review: preset, Theme: theme, Diagrams: diagramMode, MMDC: mmdc,
 			}
 			srv, err := buildServer(args, opts)
@@ -98,7 +102,7 @@ func newServeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", 8787, "port to listen on")
-	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review)")
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "host/interface to bind (set to your Tailscale IP for remote review; set $"+ServeTokenEnv+" to require a token)")
 	cmd.Flags().BoolVar(&open, "open", false, "open the review page in a browser")
 	cmd.Flags().BoolVar(&watch, "watch", false, "re-parse a document when its file changes; the page offers a reload")
 	cmd.Flags().StringVar(&author, "author", "", "review author (defaults to $USER)")

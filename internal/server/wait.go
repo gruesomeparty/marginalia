@@ -77,10 +77,6 @@ func (s *Server) snapshot() (n uint64, tick chan struct{}, done bool) {
 	return c.n, c.tick, len(c.done) == len(s.docs)
 }
 
-// ServeWait answers the long-poll below and nothing else, for a caller that
-// is allowed to watch a review and not to open it (hosted mode's agent route).
-func (s *Server) ServeWait(w http.ResponseWriter, r *http.Request) { s.handleWait(w, r) }
-
 // handleWait is the long-poll: `GET /api/wait?since=N[&timeout=SECONDS]`
 // answers as soon as more than N events have been saved, or when the timeout
 // (default 30s, at most 60s) passes, with the count to pass as `since` next

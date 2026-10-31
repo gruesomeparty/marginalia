@@ -59,10 +59,16 @@ type Options struct {
 	// leaves it nil and records what the page sends, which on loopback is
 	// the reviewer's own name.
 	AuthorOf func(*http.Request) string
-	Host     string
-	Port     int
-	Open     bool
-	Watch    bool // re-parse a document when its file changes
+	// Token, when set, is required on every request (token.go), and every
+	// event is then written under Author whatever the body claims: past
+	// the token the network is not what vouches for the reviewer, the
+	// server is. `serve` reads it from MARGINALIA_SERVE_TOKEN, never a
+	// flag, since flags show in process lists.
+	Token string
+	Host  string
+	Port  int
+	Open  bool
+	Watch bool // re-parse a document when its file changes
 	// BasePath is the path this server is mounted under when it is not at
 	// the root — "/r/<id>" under a hosted instance. The page builds every
 	// URL from it. Empty for `serve`.
@@ -123,6 +129,10 @@ func New(opts Options) *Server {
 	if opts.Review == nil {
 		opts.Review = review.Default()
 	}
+	if opts.Token != "" && opts.AuthorOf == nil {
+		author := opts.Author
+		opts.AuthorOf = func(*http.Request) string { return author }
+	}
 	s := &Server{opts: opts, mux: http.NewServeMux(), changes: newChanges()}
 	s.docs = opts.Docs
 	if len(s.docs) == 0 && opts.Doc != nil {
@@ -176,7 +186,7 @@ func (s *Server) Review() *review.Config {
 // the current parse goes through docOf.
 func (s *Server) Entries() []Entry { return s.docs }
 
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return s.gate(s.mux) }
 
 // Run starts the server and blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context) error {
@@ -193,7 +203,7 @@ func (s *Server) Run(ctx context.Context) error {
 // comment saved as the reviewer closes the tab is on disk before the process
 // exits.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	httpSrv := &http.Server{Handler: s.mux, ReadHeaderTimeout: 5 * time.Second}
+	httpSrv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	httpSrv.RegisterOnShutdown(s.stopWaits)
 	stopped := make(chan struct{})
 	defer close(stopped)
@@ -233,6 +243,9 @@ func (s *Server) announce(url string) {
 	// an agent that configured actions needs to see they took.
 	defer s.announceReview()
 	defer s.announceDiagrams()
+	if s.opts.Token != "" {
+		defer s.logf("marginalia: token required — open %s/?token=$MARGINALIA_SERVE_TOKEN once per browser, or send it as a bearer header; notes are written as %s\n", url, s.opts.Author)
+	}
 	if s.opts.Watch {
 		defer s.logln("marginalia: watching for changes; the page offers a reload when a document moves on")
 	}

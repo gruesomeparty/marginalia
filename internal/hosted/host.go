@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -359,6 +361,29 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 		meta.Theme = p.Theme
 	}
 	meta.Docs = nil
+	// A document this revision drops keeps its events in the wait's count;
+	// one it brings back is counted live again.
+	retired := maps.Clone(meta.Retired)
+	for _, d := range p.Docs {
+		delete(retired, d.Name)
+	}
+	for _, e := range prev.Server.Entries() {
+		if slices.ContainsFunc(p.Docs, func(d Document) bool { return d.Name == e.Rel }) {
+			continue
+		}
+		events, err := e.Store.Load()
+		if err != nil {
+			return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+		}
+		if retired == nil {
+			retired = map[string]uint64{}
+		}
+		retired[e.Rel] = uint64(len(events))
+	}
+	if len(retired) == 0 {
+		retired = nil
+	}
+	meta.Retired = retired
 	return h.publish(ctx, meta, p)
 }
 
@@ -403,6 +428,23 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 		}
 		entries = append(entries, server.Entry{Doc: doc, Store: feedback.OpenStore(h.store, logKey(id, d.Name)), Label: d.Name, Rel: d.Name})
 		meta.Docs = append(meta.Docs, d.Name)
+	}
+	// Where this revision starts in each log, so a wait can tell this
+	// round's review_done from the last one's.
+	meta.From = nil
+	if n > 1 {
+		for _, e := range entries {
+			events, err := e.Store.Load()
+			if err != nil {
+				return nil, fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
+			}
+			if len(events) > 0 {
+				if meta.From == nil {
+					meta.From = map[string]int{}
+				}
+				meta.From[e.Rel] = len(events)
+			}
+		}
 	}
 	// Validate the framing before the first write, for the same reason.
 	r, err := h.build(meta, entries)

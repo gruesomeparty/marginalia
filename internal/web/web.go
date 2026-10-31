@@ -59,6 +59,10 @@ type Page struct {
 	// live in the reviewer's browser and leave by an explicit export. It is
 	// the one place in Marginalia where a human has to copy something.
 	Static bool
+	// Source is the sha256 of the file a shared page was exported from,
+	// carried into what the reviewer sends back so `import` can tell a
+	// reply to another revision of the document (issue #54).
+	Source string
 	// Base is the path the review is mounted under, "" for `serve` and
 	// "/r/<id>" under a hosted instance. Every URL the page builds — its
 	// API calls and the navigation tree — starts with it, so the page never
@@ -103,6 +107,7 @@ type clientBlock struct {
 
 type clientDoc struct {
 	Path     string          `json:"path"`
+	Source   string          `json:"source,omitempty"`
 	Blocks   []clientBlock   `json:"blocks"`
 	Sections []clientSection `json:"sections,omitempty"`
 }
@@ -260,6 +265,7 @@ func Render(w io.Writer, p Page) error {
 		names = append(names, p.Rel)
 	}
 	client := project(doc, cfg, names)
+	client.Source = p.Source
 	raw, err := json.Marshal(payload{
 		Static: p.Static,
 		Doc:    client, Events: events, Resolution: p.Resolution,
