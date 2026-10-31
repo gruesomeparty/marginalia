@@ -18,6 +18,7 @@ spec:
       from:
         {{- toYaml . | nindent 8 }}
     {{- /* helm test's own pod, which `from` naming only the ingress controller would shut out. */}}
+    {{- if $.Values.networkPolicy.allowHelmTest }}
     - ports:
         - port: http
           protocol: TCP
@@ -26,5 +27,6 @@ spec:
             matchLabels:
               app.kubernetes.io/instance: {{ $.Release.Name }}
               app.kubernetes.io/component: helm-test
+    {{- end }}
       {{- end }}
 {{- end }}

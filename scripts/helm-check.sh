@@ -47,6 +47,10 @@ expect "numbers from a values file stay integers" 'value: "10000000"' -- -f "$nu
 expect "extraEnv numbers too" 'value: "25000000"' -- -f "$numbers"
 expect "a fraction is not truncated" 'value: "0.5"' -- -f "$numbers"
 expect "helm test is let through a narrowed policy" 'component: helm-test' -- --set networkPolicy.enabled=true --set-json 'networkPolicy.from=[{"namespaceSelector":{"matchLabels":{"name":"ingress"}}}]' --show-only templates/networkpolicy.yaml
+if render --set networkPolicy.enabled=true --set networkPolicy.allowHelmTest=false --set-json 'networkPolicy.from=[{"namespaceSelector":{}}]' --show-only templates/networkpolicy.yaml | grep -q helm-test; then
+  echo "helm-check: allowHelmTest=false still admits the test pod" >&2; exit 1
+fi
+echo "helm-check: ok: the helm test exception can be turned off"
 
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \

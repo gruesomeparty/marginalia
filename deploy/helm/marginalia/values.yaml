@@ -208,6 +208,11 @@ networkPolicy:
   #  - namespaceSelector:
   #      matchLabels:
   #        kubernetes.io/metadata.name: ingress-nginx
+  # With `from` set, `helm test`'s own pod is also let in, matched by the
+  # release's instance label and `app.kubernetes.io/component: helm-test`.
+  # Anyone who can create pods in the namespace can wear those labels, so
+  # turn this off where that matters (helm test then fails under the policy).
+  allowHelmTest: true
 
 # Anything else to render with the release, templated (tpl): an auth
 # policy for the gateway, an ExternalSecret, an oauth2-proxy middleware.
