@@ -84,3 +84,18 @@ func TestCompletionRules(t *testing.T) {
 		t.Errorf("everyone done: %v, %d of %d", res.Done, res.DoneBy, res.DoneNeeded)
 	}
 }
+
+// Another reviewer's approval does not withdraw a suggested edit; their
+// rejection does (#53).
+func TestSuggestionsUnderSeveralReviewers(t *testing.T) {
+	blocks := []Block{{ID: "1/1", Hash: "h"}}
+	suggest := Event{Block: "1/1", Hash: "h", Type: TypeSuggestEdit, Text: "better", Author: "ana", Ts: "1"}
+	ready, _ := Materialize([]Event{suggest, {Block: "1/1", Hash: "h", Type: TypeApprove, Author: "bo", Ts: "2"}}, blocks).Suggestions()
+	if len(ready) != 1 {
+		t.Errorf("bo's approval withdrew ana's suggestion: %d applicable", len(ready))
+	}
+	ready, needs := Materialize([]Event{suggest, {Block: "1/1", Hash: "h", Type: TypeReject, Author: "bo", Text: "no", Ts: "2"}}, blocks).Suggestions()
+	if len(ready) != 0 || len(needs) != 1 || needs[0].Reason != ReasonSuperseded {
+		t.Errorf("bo's rejection: %d applicable, %+v", len(ready), needs)
+	}
+}
