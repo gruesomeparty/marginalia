@@ -1,0 +1,219 @@
+# Marginalia's hosted mode (`marginalia host`). One pod, one store: the host
+# loads every review at startup and is the single writer of its store, so
+# this chart always runs exactly one replica and replaces it with Recreate.
+# There is deliberately no replicas or autoscaling knob.
+
+image:
+  repository: ghcr.io/gruesomeparty/marginalia
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # Pin by digest instead of tag, e.g. sha256:…; wins over tag when set.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Required. The origin reviewers and agents reach the host at, scheme and
+# host only (https://review.example.com). Every link the host hands out is
+# built from it, and Ingress/HTTPRoute default their hostname to it.
+publicURL: ""
+
+# Credentials and anything else private, as an existing Secret whose keys
+# are environment variable names; every key becomes the container's
+# environment (envFrom). Create it yourself or with external-secrets /
+# sealed-secrets. Usual keys:
+#   MARGINALIA_MCP_TOKEN   bearer token agents use on /mcp
+#   MARGINALIA_NOTIFY_URL  ntfy topic or webhook, if the topic is private
+# The chart never takes a credential as a value.
+existingSecret: ""
+
+# Reviewers. An OIDC proxy (oauth2-proxy, an ingress auth annotation, a
+# gateway's ext-auth) signs them in and forwards their token; the host
+# verifies it against the issuer's keys on every page request, so the
+# header alone is never trusted. The token's email (else sub) becomes the
+# author of what they write.
+auth:
+  human:
+    # Issuer and audience the forwarded token must carry. For an ID token
+    # the audience is the OIDC client id. Both are required.
+    issuer: ""
+    audience: ""
+    # Where the issuer publishes its keys; default: OpenID discovery.
+    jwksURL: ""
+    # Request header the proxy forwards the token in. It cannot be
+    # Authorization: that header is the agent's and page routes refuse it.
+    header: X-Auth-Request-Id-Token
+    # Cookie to read the token from when the header is absent; "-" for none.
+    cookie: "-"
+    # The only people the pages admit, by the name their token resolves to
+    # (its email). Empty admits everyone the proxy lets sign in.
+    reviewers: []
+  # Agents on /mcp: the static bearer token in existingSecret
+  # (MARGINALIA_MCP_TOKEN), an OAuth authorization server, or both.
+  mcp:
+    oauth:
+      issuer: ""
+      # Default: <publicURL>/mcp.
+      audience: ""
+      jwksURL: ""
+    # What agents holding the static token write as (default: agent).
+    agentName: ""
+
+# Where review state lives.
+persistence:
+  # A volume holding a file:// store. Off means an emptyDir: every review is
+  # lost when the pod goes, which is only good for trying the chart out.
+  enabled: true
+  # Use a claim you created instead of one the chart creates.
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  annotations: {}
+  # Keep the chart's claim when the release is uninstalled.
+  retain: true
+  mountPath: /data
+
+# Overrides the store URI the chart derives (file://<mountPath>), e.g. an
+# r2:// bucket with its credentials in existingSecret.
+store: ""
+
+# Caps and retention; empty keeps the binary's defaults (see README).
+limits:
+  documentBytes: ""
+  documentsPerPublish: ""
+  revisions: ""
+  publishesPerHour: ""
+  openReviews: ""
+  storedBytes: ""
+  retainDone: ""
+  retainOpen: ""
+
+# More environment, as a map of name: value, and more envFrom sources.
+# extraEnv wins over a setting the chart derives (and skips its checks), and
+# is plain text in the release: credentials go in existingSecret instead.
+extraEnv: {}
+extraEnvFrom: []
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+# The host is reached on two kinds of path, and they want different auth:
+#   pages   /, /r/<id>/…   reviewers, behind the OIDC proxy
+#   public  /mcp, /agent/, /healthz, /.well-known/oauth-protected-resource
+#           agents and probes, authenticated by the host itself — a proxy
+#           that redirects them to a login page breaks every agent
+# So each route kind renders two objects, and auth annotations or policies
+# go on the pages one only. Enable Ingress or HTTPRoute (or neither, and
+# bring your own via extraObjects).
+ingress:
+  enabled: false
+  className: ""
+  # Default: publicURL's host.
+  host: ""
+  # Annotations on both objects (e.g. cert-manager).
+  annotations: {}
+  # Annotations on the pages object only — where the auth goes, e.g. for
+  # ingress-nginx in front of oauth2-proxy:
+  #   nginx.ingress.kubernetes.io/auth-url: http://oauth2-proxy.auth.svc/oauth2/auth
+  #   nginx.ingress.kubernetes.io/auth-signin: https://$host/oauth2/start?rd=$escaped_request_uri
+  #   nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-Id-Token
+  pagesAnnotations: {}
+  # Annotations on the public object only.
+  publicAnnotations: {}
+  tls: []
+  #  - secretName: marginalia-tls
+  #    hosts: [review.example.com]
+
+# Gateway API. Auth is the gateway's own policy (Envoy Gateway's
+# SecurityPolicy, Istio's AuthorizationPolicy, …): target the pages route,
+# named <fullname>-pages, from extraObjects or alongside the release.
+httpRoute:
+  enabled: false
+  parentRefs: []
+  #  - name: public-gateway
+  #    namespace: gateway-system
+  #    sectionName: https
+  # Default: [publicURL's host].
+  hostnames: []
+  annotations: {}
+  labels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+# The host loads every review before it listens, so a big store takes a
+# while to come up: the startup probe allows failureThreshold × period.
+startupProbe:
+  periodSeconds: 5
+  failureThreshold: 60
+livenessProbe:
+  periodSeconds: 20
+  failureThreshold: 3
+readinessProbe:
+  periodSeconds: 10
+  failureThreshold: 3
+
+# A shutdown drains in-flight requests, a comment saved as the reviewer
+# closes the tab included, before the pod goes.
+terminationGracePeriodSeconds: 30
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+# The image `helm test` runs its health check from (needs wget).
+testImage: busybox:1.37
+
+# Admit traffic to the pod only from these peers (NetworkPolicy `from`
+# entries), e.g. the ingress controller's namespace. Egress stays open: the
+# host fetches the issuer's keys.
+networkPolicy:
+  enabled: false
+  from: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: ingress-nginx
+  # With `from` set, `helm test`'s own pod is also let in, matched by the
+  # release's instance label and `app.kubernetes.io/component: helm-test`.
+  # Anyone who can create pods in the namespace can wear those labels, so
+  # turn this off where that matters (helm test then fails under the policy).
+  allowHelmTest: true
+
+# Anything else to render with the release, templated (tpl): an auth
+# policy for the gateway, an ExternalSecret, an oauth2-proxy middleware.
+extraObjects: []

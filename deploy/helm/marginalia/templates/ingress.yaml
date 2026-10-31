@@ -1,0 +1,51 @@
+{{- if .Values.ingress.enabled }}
+{{- $host := default (include "marginalia.host" .) .Values.ingress.host }}
+{{- $svc := include "marginalia.fullname" . }}
+{{- range $kind := list "pages" "public" }}
+{{- $extra := ternary $.Values.ingress.pagesAnnotations $.Values.ingress.publicAnnotations (eq $kind "pages") }}
+{{- $annotations := merge (deepCopy $extra) $.Values.ingress.annotations }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ printf "%s-%s" $svc $kind }}
+  labels:
+    {{- include "marginalia.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $kind }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $.Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $.Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- if eq $kind "pages" }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $svc }}
+                port:
+                  name: http
+          {{- else }}
+          {{- range (include "marginalia.publicPaths" $ | fromYamlArray) }}
+          - path: {{ .path }}
+            pathType: {{ ternary "Prefix" "Exact" (eq .type "PathPrefix") }}
+            backend:
+              service:
+                name: {{ $svc }}
+                port:
+                  name: http
+          {{- end }}
+          {{- end }}
+{{- end }}
+{{- end }}

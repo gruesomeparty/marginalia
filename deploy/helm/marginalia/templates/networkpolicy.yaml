@@ -1,0 +1,32 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "marginalia.fullname" . }}
+  labels:
+    {{- include "marginalia.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "marginalia.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with .Values.networkPolicy.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+    {{- /* helm test's own pod, which `from` naming only the ingress controller would shut out. */}}
+    {{- if $.Values.networkPolicy.allowHelmTest }}
+    - ports:
+        - port: http
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ $.Release.Name }}
+              app.kubernetes.io/component: helm-test
+    {{- end }}
+      {{- end }}
+{{- end }}

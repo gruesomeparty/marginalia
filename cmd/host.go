@@ -29,6 +29,8 @@ const (
 	HumanIssuerEnv  = "MARGINALIA_HUMAN_JWT_ISSUER"
 	HumanAudEnv     = "MARGINALIA_HUMAN_JWT_AUDIENCE"
 	HumanJWKSEnv    = "MARGINALIA_HUMAN_JWKS_URL"
+	HumanHeaderEnv  = "MARGINALIA_HUMAN_JWT_HEADER"
+	HumanCookieEnv  = "MARGINALIA_HUMAN_JWT_COOKIE"
 	AgentNameEnv    = "MARGINALIA_AGENT_NAME"
 	OAuthIssuerEnv  = "MARGINALIA_MCP_OAUTH_ISSUER"
 	OAuthAudEnv     = "MARGINALIA_MCP_OAUTH_AUDIENCE"
@@ -48,6 +50,8 @@ func newHostCmd() *cobra.Command {
 		issuer      string
 		audience    string
 		jwksURL     string
+		humanHeader string
+		humanCookie string
 		devIdentity string
 		reviewers   []string
 		agentName   string
@@ -144,7 +148,9 @@ whose email becomes the author of what they write; and an agent, holding
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
 				HumanAuth: humanAuth, DevIdentity: devIdentity, Reviewers: reviewersFrom(reviewers, os.Getenv(ReviewersEnv)),
-				OAuth: oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
+				HumanHeader: firstOf(humanHeader, os.Getenv(HumanHeaderEnv)),
+				HumanCookie: firstOf(humanCookie, os.Getenv(HumanCookieEnv)),
+				OAuth:       oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
 				Limits: limits, Diagrams: drawer, Notify: notifier,
 			})
 			if err != nil {
@@ -167,6 +173,8 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&issuer, "human-jwt-issuer", "", "issuer of the edge's JWT on page requests, e.g. https://<team>.cloudflareaccess.com ($"+HumanIssuerEnv+")")
 	cmd.Flags().StringVar(&audience, "human-jwt-audience", "", "audience the edge's JWT must carry, e.g. the Access application's AUD tag ($"+HumanAudEnv+")")
 	cmd.Flags().StringVar(&jwksURL, "human-jwks-url", "", "where the issuer publishes its keys (default: the Access certs URL, or OpenID discovery) ($"+HumanJWKSEnv+")")
+	cmd.Flags().StringVar(&humanHeader, "human-jwt-header", "", "request header the edge forwards the human's JWT in, e.g. X-Auth-Request-Id-Token behind an OIDC proxy (default: "+hosted.DefaultHumanHeader+") ($"+HumanHeaderEnv+")")
+	cmd.Flags().StringVar(&humanCookie, "human-jwt-cookie", "", "cookie a browser carries that JWT in when the header is absent; - for none (default: "+hosted.DefaultHumanCookie+") ($"+HumanCookieEnv+")")
 	cmd.Flags().StringVar(&devIdentity, devIdentityFlag, "", "treat every page request as this human; loopback only, for trying it out with no edge")
 	cmd.Flags().StringSliceVar(&reviewers, "reviewers", nil, "the only humans page routes admit, comma-separated, by the name their login resolves to (an email at the edge); default: everyone the edge lets in ($"+ReviewersEnv+")")
 	cmd.Flags().StringVar(&agentName, "agent-name", "", "identity agents holding the static token write under (default: "+mcpserver.DefaultAgentName+") ($"+AgentNameEnv+")")

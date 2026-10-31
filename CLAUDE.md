@@ -610,6 +610,22 @@ users are agents, not humans.
   that image exists. `/mcp`, `/.well-known/oauth-protected-resource` and
   `/healthz` need an Access **Bypass** application: an agent cannot log in,
   and the host authenticates those paths itself.
+- `deploy/helm/marginalia` is the **Kubernetes deployment**, generic in the
+  same way: one Deployment with `replicas: 1` and `Recreate` (no replica
+  knob — a second pod is a second writer), a `file:///data` store on a PVC,
+  credentials only from `existingSecret` (envFrom), and reviewers behind
+  any OIDC proxy whose forwarded ID token the host verifies; the header is
+  `MARGINALIA_HUMAN_JWT_HEADER` (`Options.HumanHeader`, default Cloudflare's)
+  and may never be `Authorization`, which is the agent's. Ingress and
+  HTTPRoute each render a `-pages` object (where auth annotations/policies
+  go) and a `-public` one for `/mcp`, `/agent/`, `/healthz` and
+  `/.well-known/oauth-protected-resource`, which must never sit behind the
+  proxy's login — a new agent-facing path joins `marginalia.publicPaths`. `validate.yaml` refuses at template time what the host would
+  refuse at startup. `helm_chart_test.go` pins the chart version to the
+  release (release-please `extra-files`), the single-writer shape, and every
+  `MARGINALIA_*` it passes to one the binary reads; `scripts/helm-check.sh`
+  (render + refusals) and `scripts/helm-smoke.sh` (kind install, publish,
+  pod replaced, review survives) run in CI's `helm-chart` job.
 - Reference implementation to generalize from: Black Mirror's
   `cmd/blackmirror/timebooking_review.go` + `timebooking_review.html`
   (event-sourced review server, atomic writes, replay) and the 2026-07-02

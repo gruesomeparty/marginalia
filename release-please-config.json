@@ -7,7 +7,7 @@
       "include-component-in-tag": false,
       "initial-version": "0.1.0",
       "bump-minor-pre-major": true,
-      "extra-files": ["deploy/cloudflare/Dockerfile"]
+      "extra-files": ["deploy/cloudflare/Dockerfile", "deploy/helm/marginalia/Chart.yaml"]
     }
   }
 }

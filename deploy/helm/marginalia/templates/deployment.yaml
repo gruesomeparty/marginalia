@@ -1,0 +1,146 @@
+{{- $env := dict
+  "MARGINALIA_PUBLIC_URL" (include "marginalia.publicURL" .)
+  "MARGINALIA_STORE" (include "marginalia.store" .)
+  "MARGINALIA_HUMAN_JWT_ISSUER" .Values.auth.human.issuer
+  "MARGINALIA_HUMAN_JWT_AUDIENCE" .Values.auth.human.audience
+  "MARGINALIA_HUMAN_JWKS_URL" .Values.auth.human.jwksURL
+  "MARGINALIA_HUMAN_JWT_HEADER" .Values.auth.human.header
+  "MARGINALIA_HUMAN_JWT_COOKIE" .Values.auth.human.cookie
+  "MARGINALIA_REVIEWERS" (join "," .Values.auth.human.reviewers)
+  "MARGINALIA_MCP_OAUTH_ISSUER" .Values.auth.mcp.oauth.issuer
+  "MARGINALIA_MCP_OAUTH_AUDIENCE" .Values.auth.mcp.oauth.audience
+  "MARGINALIA_MCP_OAUTH_JWKS_URL" .Values.auth.mcp.oauth.jwksURL
+  "MARGINALIA_AGENT_NAME" .Values.auth.mcp.agentName
+  "MARGINALIA_LIMIT_DOCUMENT_BYTES" .Values.limits.documentBytes
+  "MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH" .Values.limits.documentsPerPublish
+  "MARGINALIA_LIMIT_REVISIONS" .Values.limits.revisions
+  "MARGINALIA_LIMIT_PUBLISHES_PER_HOUR" .Values.limits.publishesPerHour
+  "MARGINALIA_LIMIT_OPEN_REVIEWS" .Values.limits.openReviews
+  "MARGINALIA_LIMIT_STORED_BYTES" .Values.limits.storedBytes
+  "MARGINALIA_RETAIN_DONE" .Values.limits.retainDone
+  "MARGINALIA_RETAIN_OPEN" .Values.limits.retainOpen
+}}
+{{- $env = merge (deepCopy .Values.extraEnv) $env }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "marginalia.fullname" . }}
+  labels:
+    {{- include "marginalia.labels" . | nindent 4 }}
+spec:
+  # The host is the single writer of its store: never more than one, and the
+  # old pod is gone before the new one opens the store.
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "marginalia.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "marginalia.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # The host reads its settings once, at start: a changed setting
+        # restarts it.
+        checksum/env: {{ toJson $env | sha256sum | trunc 16 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "marginalia.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: marginalia
+          image: {{ include "marginalia.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["host", "--addr", ":8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            {{- range $name, $value := $env }}
+            {{- /* A number in a values file decodes as a float, which prints as 1e+07: the host's integer parse refuses that. Only a whole number is rewritten, so 0.5 stays 0.5. */}}
+            {{- $s := toString $value }}
+            {{- if kindIs "float64" $value }}
+            {{- if eq (float64 (int64 $value)) $value }}
+            {{- $s = int64 $value | toString }}
+            {{- end }}
+            {{- end }}
+            {{- if ne $s "" }}
+            - name: {{ $name }}
+              value: {{ $s | quote }}
+            {{- end }}
+            {{- end }}
+          {{- if or .Values.existingSecret .Values.extraEnvFrom }}
+          envFrom:
+            {{- with .Values.existingSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "marginalia.claimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

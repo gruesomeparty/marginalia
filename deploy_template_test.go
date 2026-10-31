@@ -144,6 +144,18 @@ func TestTemplateSettingsAreReadByTheBinary(t *testing.T) {
 	if len(names) == 0 {
 		t.Fatal("settings.example.env names no setting")
 	}
+	source := binarySource(t)
+	for _, name := range names {
+		if !strings.Contains(source, `"`+name+`"`) {
+			t.Errorf("settings.example.env names %s, which no non-test Go file reads", name)
+		}
+	}
+}
+
+// binarySource is every non-test Go file of the binary, concatenated: where
+// a setting's name has to appear, quoted, for the binary to read it.
+func binarySource(t *testing.T) string {
+	t.Helper()
 	var source strings.Builder
 	for _, dir := range []string{"cmd", "internal"} {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -157,11 +169,7 @@ func TestTemplateSettingsAreReadByTheBinary(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, name := range names {
-		if !strings.Contains(source.String(), `"`+name+`"`) {
-			t.Errorf("settings.example.env names %s, which no non-test Go file reads", name)
-		}
-	}
+	return source.String()
 }
 
 // stripJSONC removes // and /* */ comments outside strings, which is all

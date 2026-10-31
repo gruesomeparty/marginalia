@@ -1,0 +1,22 @@
+Marginalia is running at {{ include "marginalia.publicURL" . }}
+
+  reviewers   {{ include "marginalia.publicURL" . }}/          behind your OIDC proxy
+  agents      {{ include "marginalia.publicURL" . }}/mcp       MCP over Streamable HTTP
+{{- if not .Values.persistence.enabled }}
+{{- if not .Values.store }}
+
+WARNING: persistence is off and no store is set — every review lives in an
+emptyDir and is lost when the pod goes.
+{{- end }}
+{{- end }}
+{{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
+
+No Ingress or HTTPRoute was rendered. Route {{ include "marginalia.host" . }} to
+service {{ include "marginalia.fullname" . }}:{{ .Values.service.port }}, and keep these paths out of the OIDC proxy:
+{{- range (include "marginalia.publicPaths" . | fromYamlArray) }}
+  {{ .path }}
+{{- end }}
+{{- end }}
+
+Check it:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "marginalia.fullname" . }} 8080:{{ .Values.service.port }}
+           curl http://127.0.0.1:8080/healthz

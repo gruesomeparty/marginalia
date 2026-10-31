@@ -13,11 +13,25 @@ import (
 
 // Cloudflare Access puts the user's JWT on every request it forwards, in a
 // header, and on the browser as a cookie. Both are verified the same way;
-// neither is trusted on its own.
+// neither is trusted on its own. They are the defaults, not the only names:
+// an OIDC proxy in front of a Kubernetes ingress forwards the same kind of
+// token under a header of its own choosing (Options.HumanHeader).
 const (
-	accessHeader = "Cf-Access-Jwt-Assertion"
-	accessCookie = "CF_Authorization"
+	DefaultHumanHeader = "Cf-Access-Jwt-Assertion"
+	DefaultHumanCookie = "CF_Authorization"
 )
+
+// checkHumanHeader refuses a header the human token cannot ride in.
+// Authorization is the agent's: a bearer on a page route is refused before
+// any token is looked at, so a proxy configured to forward the reviewer's
+// token there would lock every reviewer out — and telling the two apart by
+// trying the token would let an agent's credential be read as a human's.
+func checkHumanHeader(name string) error {
+	if strings.EqualFold(strings.TrimSpace(name), "Authorization") {
+		return errors.New("hosted: the human token cannot ride in Authorization — that header is the agent's credential and page routes refuse it; have the proxy forward the token in a header of its own (e.g. X-Auth-Request-Id-Token)")
+	}
+	return nil
+}
 
 // human resolves the reviewer behind a page request, or says why it cannot.
 // The order matters: an agent credential on a page route is refused before
@@ -34,9 +48,9 @@ func (h *Host) human(r *http.Request) (identity.Identity, int, error) {
 	if h.opts.HumanAuth == nil {
 		return identity.Identity{}, http.StatusServiceUnavailable, errors.New("no human identity is configured on this host")
 	}
-	raw := r.Header.Get(accessHeader)
-	if raw == "" {
-		if c, err := r.Cookie(accessCookie); err == nil {
+	raw := r.Header.Get(h.humanHeader())
+	if raw == "" && h.humanCookie() != "" {
+		if c, err := r.Cookie(h.humanCookie()); err == nil {
 			raw = c.Value
 		}
 	}
@@ -76,6 +90,24 @@ func (h *Host) admit(id identity.Identity) (identity.Identity, int, error) {
 		}
 	}
 	return identity.Identity{}, http.StatusForbidden, errors.New(id.Name + " is signed in but is not a reviewer on this host")
+}
+
+func (h *Host) humanHeader() string { return firstNonEmpty(h.opts.HumanHeader, DefaultHumanHeader) }
+
+// humanCookie is the cookie a browser carries the token in; "-" turns the
+// fallback off, for a proxy whose session cookie is not a JWT at all.
+func (h *Host) humanCookie() string {
+	if h.opts.HumanCookie == "-" {
+		return ""
+	}
+	return firstNonEmpty(h.opts.HumanCookie, DefaultHumanCookie)
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // requireHuman gates a page route: the request proceeds with the reviewer's

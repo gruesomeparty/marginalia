@@ -1,0 +1,18 @@
+apiVersion: v2
+name: marginalia
+description: Marginalia's hosted mode on Kubernetes — one review host behind your own OIDC proxy.
+type: application
+home: https://github.com/gruesomeparty/marginalia
+sources:
+  - https://github.com/gruesomeparty/marginalia
+keywords:
+  - review
+  - mcp
+  - agents
+# The chart is released with the binary: release-please moves both lines, so
+# chart 0.3.0 runs image 0.3.0 and a chart never names an image that does not
+# exist yet.
+# x-release-please-start-version
+version: 0.5.0
+appVersion: "0.5.0"
+# x-release-please-end
