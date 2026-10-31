@@ -164,11 +164,14 @@ answering a typo with "install the thing you just said you had" would be worse.
 
 ## Where sentence-level notes apply
 
-Deliberately narrow: markdown prose. A tree node and a diagram statement are
-already fine-grained, and inside a code fence the rendered text and the block's
-plain text can differ — so the page simply does not offer there, and a note on
-the whole block is what you get. That is better than an anchor nothing can
-resolve.
+Deliberately narrow: markdown prose, and the declarations of a source file. A
+tree node and a diagram statement are already fine-grained, and inside a code
+fence the rendered text and the block's plain text can differ — so the page
+simply does not offer there, and a note on the whole block is what you get.
+That is better than an anchor nothing can resolve. A source declaration is the
+exception among trees because it renders exactly its own source: select a few
+lines inside a long function and the note anchors to them, re-found after
+unrelated edits and stale once those lines change.
 
 ## Code in a document
 

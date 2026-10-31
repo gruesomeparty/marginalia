@@ -487,7 +487,7 @@ header #fold+button{margin-left:.5rem}
   </details>{{end}}
 </aside>
 {{end}}
-<main id="doc"{{if .Doc.IsTree}} class="tree{{if eq .Doc.Format "diff"}} diff{{end}}"{{end}}>
+<main id="doc"{{if .Doc.IsTree}} class="tree{{if eq .Doc.Format "diff"}} diff{{end}}{{if eq .Doc.Format "source"}} source{{end}}"{{end}}>
   {{if .Review.Instructions}}
   <section class="framing" aria-label="What you are being asked to review">
     <h2>What to look at</h2>
@@ -1341,6 +1341,8 @@ window.__MARGINALIA__ = {{.DataJSON}};
   // own plain text — which is what the server will search. When the rendering
   // and the plain text disagree (a fence, a tree node) we simply do not offer:
   // a note on the whole block is better than an anchor nothing can resolve.
+  // A source file's declaration is the exception among trees: it renders its
+  // own source, so a few lines inside a long function are anchorable.
   function anchorable(sel){
     if(!sel || sel.isCollapsed) return null;
     var text = sel.toString().replace(/\s+/g, " ").trim();
@@ -1351,7 +1353,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     // The whole selection has to be in that one block.
     var end = sel.focusNode, endEl = end && (end.nodeType === 1 ? end : end.parentElement);
     if(!endEl || !endEl.closest || endEl.closest(".block") !== el) return null;
-    if(el.closest("pre") || isTree) return null;
+    if(el.closest("pre") || (isTree && !isSource)) return null;
     var b = blockOf[el.dataset.block];
     if(!b || b.readonly) return null;
     if((b.text || "").replace(/\s+/g, " ").indexOf(text) < 0) return null;
@@ -1417,7 +1419,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
       acceptNode: function(n){
         // Notes rendered inside the block (a list item's box) are not part of
         // the document's text and must not be counted or marked.
-        return n.parentElement && n.parentElement.closest(".existing,.composer,.selbtn")
+        return n.parentElement && n.parentElement.closest(".existing,.composer,.selbtn,.caret")
           ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -1717,6 +1719,7 @@ window.__MARGINALIA__ = {{.DataJSON}};
     });
   }
   var isTree = document.getElementById("doc").classList.contains("tree");
+  var isSource = document.getElementById("doc").classList.contains("source");
   var elOf = {};
 
   // Tree documents render as a flat, pre-ordered list of nodes: indentation
