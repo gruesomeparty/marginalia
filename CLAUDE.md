@@ -426,12 +426,16 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
-- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+- Source files (issue #31: Go, Python, TypeScript/TSX, JavaScript, Rust,
+  Java) are read by `internal/codetree` on tree-sitter,
   through `gotreesitter` — a **pure-Go** runtime, so the build stays
   `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
   runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
   name plus a `decl` function saying which nodes are declarations, what each
-  is called, and which child lists hold its members; comment attachment,
+  is called, and which child lists hold its members (`scope` re-roots them,
+  so a Rust impl's methods sit under its type; `skip` leaves a docstring in
+  its container's text; `attached` node types — Rust attributes — join the
+  declaration below like a comment); comment attachment,
   `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
   and highlighting (from node types, not highlight queries, so it is the same
   for every grammar) are shared. Ids are symbol paths (`Batch/Full`,

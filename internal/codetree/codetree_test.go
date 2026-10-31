@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -69,6 +70,61 @@ func TestGoAnchorsBySymbolPath(t *testing.T) {
 	}
 	if got := flat(f.Symbols, 0); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("symbols:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Every other language follows the same rule: a declaration by its name,
+// what a container holds after a slash.
+func TestLanguagesAnchorBySymbolPath(t *testing.T) {
+	cases := map[string][]string{
+		"a.py": {
+			"docstring doc", "import import", "import#2 import", "RETRIES assign",
+			"Batch class", "  Batch/cap assign", "  Batch/full method", "  Batch/size method",
+			"ingest def", "if code",
+		},
+		"a.ts": {
+			"import code", "batchCap,other const", "z let",
+			"Doer interface", "  Doer/do method", "  Doer/name field",
+			"Id type", "Color enum",
+			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method", "  Batch/size method",
+			"ingest function", "default export", "handler const", "NS namespace", "  NS/f function",
+		},
+		"a.rs": {
+			"use code", "CAP const", "NAME static",
+			"Batch struct", "  Batch/cap field", "  Batch/items field",
+			"Color enum", "  Color/Red variant", "  Color/Green variant",
+			"Doer trait", "  Doer/run method",
+			"impl Batch impl", "  Batch/full method",
+			"impl Display for Batch impl", "  Batch/fmt method",
+			"inner mod", "  inner/f fn", "m macro", "Id type", "main fn",
+		},
+		"A.java": {
+			"package package", "import import",
+			"Batch class", "  Batch/cap field", "  Batch/A,B field", "  Batch/Batch constructor", "  Batch/full method",
+			"  Batch/Color enum", "  Batch/Inner interface", "    Batch/Inner/run method",
+			"Point record",
+		},
+	}
+	for name, want := range cases {
+		f := parse(t, name, load(t, name))
+		// treeBuilder numbers repeats; here the raw paths repeat, so number
+		// them the same way for the comparison.
+		seen := map[string]int{}
+		var got []string
+		for _, line := range flat(f.Symbols, 0) {
+			i := strings.LastIndex(line, " ")
+			path, kind := strings.TrimLeft(line[:i], " "), line[i+1:]
+			if seen[path]++; seen[path] > 1 {
+				path += "#" + strconv.Itoa(seen[path])
+			}
+			got = append(got, line[:len(line)-len(strings.TrimLeft(line, " "))]+path+" "+kind)
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("%s:\n%s\nwant:\n%s", name, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+		if l := Detect(name); l == nil || Detect("x"+name[strings.LastIndex(name, "."):]) != l {
+			t.Errorf("%s: not detected", name)
+		}
 	}
 }
 

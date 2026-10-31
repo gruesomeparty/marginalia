@@ -84,6 +84,9 @@ type Lang struct {
 	// grammar_subset_<Grammar> build tag a release must carry.
 	Grammar string
 	decl    func(w *walker, n *ts.Node) (decl, bool)
+	// attached are node types that, like a comment, belong to the
+	// declaration directly below them: Rust's `#[derive(…)]`.
+	attached []string
 }
 
 // decl is what a language says about one node.
@@ -96,6 +99,12 @@ type decl struct {
 	// flat gives members the enclosing scope rather than this path, for a
 	// grouping keyword that names nothing (Go's `type ( … )`).
 	flat bool
+	// scope, when set, is the path members hang under instead of this
+	// one's: a Rust `impl Display for Batch` holds `Batch/fmt`.
+	scope string
+	// skip leaves the node out of the members list, so it stays part of
+	// its container's own text: a Python docstring.
+	skip bool
 }
 
 var langs []*Lang
@@ -173,6 +182,7 @@ type walker struct {
 	src   []byte
 	l     *Lang
 	spans []Span
+	in    string // kind of the declaration whose members are being read
 }
 
 func (w *walker) typ(n *ts.Node) string  { return n.Type(w.lang) }
@@ -222,6 +232,12 @@ func (w *walker) has(n *ts.Node, tok string) bool {
 
 func (w *walker) isComment(n *ts.Node) bool { return strings.Contains(w.typ(n), "comment") }
 
+// isLeading reports whether n documents what follows it: a comment, or one
+// of the language's attached node types.
+func (w *walker) isLeading(n *ts.Node) bool {
+	return w.isComment(n) || contains(w.l.attached, w.typ(n))
+}
+
 // members turns the named children of lists into symbols under scope. A
 // comment run directly above a declaration (no blank line between) is that
 // declaration's documentation and part of its range; a comment on the same
@@ -235,17 +251,21 @@ func (w *walker) members(lists []*ts.Node, scope string) []*Symbol {
 		if len(run) == 0 {
 			return
 		}
+		name, kind := KindComment, KindComment
+		if !w.isComment(run[0]) {
+			name, kind = stmtName(w.typ(run[0])), KindCode
+		}
 		out = append(out, &Symbol{
-			Path: join(scope, KindComment), Kind: KindComment,
+			Path: join(scope, name), Kind: kind,
 			Start: int(run[0].StartByte()), End: int(run[len(run)-1].EndByte()),
 		})
 		run = nil
 	}
 	for _, list := range lists {
 		for _, n := range w.named(list) {
-			if w.isComment(n) {
+			if w.isLeading(n) {
 				switch {
-				case len(run) == 0 && lastWasSymbol && !w.newlineBetween(out[len(out)-1].End, int(n.StartByte())):
+				case len(run) == 0 && lastWasSymbol && w.isComment(n) && !w.newlineBetween(out[len(out)-1].End, int(n.StartByte())):
 					out[len(out)-1].End = int(n.EndByte())
 				case len(run) > 0 && w.blankBetween(int(run[len(run)-1].EndByte()), int(n.StartByte())):
 					flush()
@@ -257,6 +277,9 @@ func (w *walker) members(lists []*ts.Node, scope string) []*Symbol {
 				continue
 			}
 			s := w.symbol(n, scope)
+			if s == nil {
+				continue
+			}
 			if len(run) > 0 {
 				if w.blankBetween(int(run[len(run)-1].EndByte()), s.Start) {
 					flush()
@@ -274,9 +297,13 @@ func (w *walker) members(lists []*ts.Node, scope string) []*Symbol {
 }
 
 // symbol reads one node: a declaration if the language says so, otherwise a
-// statement named by its node type, or an unknown for a syntax error.
+// statement named by its node type, or an unknown for a syntax error. It
+// is nil for a node the language skips.
 func (w *walker) symbol(n *ts.Node, scope string) *Symbol {
 	d, ok := w.l.decl(w, n)
+	if ok && d.skip {
+		return nil
+	}
 	switch {
 	case n.IsError():
 		d = decl{name: "error", kind: KindUnknown}
@@ -286,15 +313,21 @@ func (w *walker) symbol(n *ts.Node, scope string) *Symbol {
 	s := &Symbol{Path: join(scope, d.name), Kind: d.kind, Start: int(n.StartByte()), End: int(n.EndByte())}
 	if d.members != nil {
 		inner := s.Path
-		if d.flat {
+		switch {
+		case d.scope != "":
+			inner = join(scope, d.scope)
+		case d.flat:
 			inner = scope
 		}
+		outer := w.in
+		w.in = d.kind
 		s.Children = w.members(d.members, inner)
+		w.in = outer
 	}
 	return s
 }
 
-// cover adds an unknown symbol for any run of non-whitespace bytes between
+// cover adds a code symbol for any run of non-whitespace bytes between
 // the file's top-level symbols that none of them holds — a stray token, or
 // the rest of a file after a parse that stopped early — so nothing in the
 // file goes unshown. Inside a container the gaps are the container's own
@@ -311,7 +344,7 @@ func (w *walker) cover(syms []*Symbol, from, to int) []*Symbol {
 			hi--
 		}
 		if lo < hi {
-			out = append(out, &Symbol{Path: KindUnknown, Kind: KindUnknown, Start: lo, End: hi})
+			out = append(out, &Symbol{Path: KindCode, Kind: KindCode, Start: lo, End: hi})
 		}
 	}
 	for _, s := range syms {
@@ -325,13 +358,23 @@ func (w *walker) cover(syms []*Symbol, from, to int) []*Symbol {
 	return out
 }
 
-func (w *walker) newlineBetween(a, b int) bool {
-	return a <= b && b <= len(w.src) && strings.Contains(string(w.src[a:b]), "\n")
+// newlines counts the line breaks between a and b, including one that ends
+// the node before a: some grammars (Rust's line comments) end a comment
+// after its newline rather than before.
+func (w *walker) newlines(a, b int) int {
+	if a > b || b > len(w.src) {
+		return 0
+	}
+	n := strings.Count(string(w.src[a:b]), "\n")
+	if a > 0 && w.src[a-1] == '\n' {
+		n++
+	}
+	return n
 }
 
-func (w *walker) blankBetween(a, b int) bool {
-	return a <= b && b <= len(w.src) && strings.Count(string(w.src[a:b]), "\n") > 1
-}
+func (w *walker) newlineBetween(a, b int) bool { return w.newlines(a, b) > 0 }
+
+func (w *walker) blankBetween(a, b int) bool { return w.newlines(a, b) > 1 }
 
 // stmtName names a node that declares nothing by what it is: Python's
 // `import_statement` is `import`, Go's `package_clause` is `package`.
