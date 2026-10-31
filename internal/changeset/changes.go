@@ -78,8 +78,9 @@ func between(old, now *document.Document, redline bool) []Change {
 	}
 	// A container whose inline children moved is explained by them.
 	explained := map[string]bool{}
+	parent := parents(now, old)
 	for id, k := range kind {
-		if p := parentOf(id, now, old); p != "" {
+		if p := parent[id]; p != "" {
 			if kind[p] == Edited {
 				explained[p] = true
 			}
@@ -108,19 +109,21 @@ func between(old, now *document.Document, redline bool) []Change {
 	return out
 }
 
-// parentOf is a block's inline container in whichever parse holds it.
-func parentOf(id string, docs ...*document.Document) string {
-	for _, d := range docs {
-		for _, b := range d.Blocks {
-			if b.ID == id {
-				if b.Inline {
-					return b.Parent
-				}
-				return ""
+// parents maps each inline block to its container, across both parses (the
+// current one wins). Built once per call: a lookup per changed block that
+// scanned every block would make a large, fully edited document quadratic.
+func parents(docs ...*document.Document) map[string]string {
+	out := map[string]string{}
+	for i := len(docs) - 1; i >= 0; i-- {
+		for _, b := range docs[i].Blocks {
+			if b.Inline {
+				out[b.ID] = b.Parent
+			} else {
+				out[b.ID] = ""
 			}
 		}
 	}
-	return ""
+	return out
 }
 
 // IDs splits a change list by kind, for a caller that only counts or lists.
