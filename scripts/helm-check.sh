@@ -42,9 +42,11 @@ expect "extra objects, templated" "name: '?check-extra" -- --set-json 'extraObje
 # the host as an integer, not 1e+07.
 numbers="$(mktemp)"
 trap 'rm -f "$numbers"' EXIT
-printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  SOME_NUMBER: 25000000\n' >"$numbers"
+printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  SOME_NUMBER: 25000000\n  A_FRACTION: 0.5\n' >"$numbers"
 expect "numbers from a values file stay integers" 'value: "10000000"' -- -f "$numbers"
 expect "extraEnv numbers too" 'value: "25000000"' -- -f "$numbers"
+expect "a fraction is not truncated" 'value: "0.5"' -- -f "$numbers"
+expect "helm test is let through a narrowed policy" 'component: helm-test' -- --set networkPolicy.enabled=true --set-json 'networkPolicy.from=[{"namespaceSelector":{"matchLabels":{"name":"ingress"}}}]' --show-only templates/networkpolicy.yaml
 
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \

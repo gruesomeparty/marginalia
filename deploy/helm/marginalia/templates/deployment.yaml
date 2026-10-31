@@ -76,8 +76,13 @@ spec:
               protocol: TCP
           env:
             {{- range $name, $value := $env }}
-            {{- /* A number in a values file decodes as a float, which prints as 1e+07: the host's integer parse refuses that. */}}
-            {{- $s := ternary (int64 $value | toString) (toString $value) (kindIs "float64" $value) }}
+            {{- /* A number in a values file decodes as a float, which prints as 1e+07: the host's integer parse refuses that. Only a whole number is rewritten, so 0.5 stays 0.5. */}}
+            {{- $s := toString $value }}
+            {{- if kindIs "float64" $value }}
+            {{- if eq (float64 (int64 $value)) $value }}
+            {{- $s = int64 $value | toString }}
+            {{- end }}
+            {{- end }}
             {{- if ne $s "" }}
             - name: {{ $name }}
               value: {{ $s | quote }}

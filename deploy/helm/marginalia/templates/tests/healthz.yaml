@@ -4,6 +4,7 @@ metadata:
   name: {{ include "marginalia.fullname" . }}-healthz
   labels:
     {{- include "marginalia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
   annotations:
     helm.sh/hook: test
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
