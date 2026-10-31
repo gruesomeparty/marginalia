@@ -57,8 +57,8 @@ the feature quietly missing. Without `mmdc` on your machine,
 anchored source:
 
 ```bash
-npm i -g @mermaid-js/mermaid-cli   # and, as root, the puppeteer args the
-                                   # README's diagram section spells out
+npm i -g @mermaid-js/mermaid-cli   # and, as root, the puppeteer args
+                                   # docs/formats.md spells out
 ```
 
 The script also enforces the product's own rule on the way out — an exported

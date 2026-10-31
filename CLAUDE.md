@@ -793,7 +793,12 @@ line of that block.
 **No `pull_request_target`**: a fork's PR gets no secrets on
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
-Drafts and bots are skipped. It never approves, requests changes or blocks a
+Drafts and bots are skipped. A documentation-only PR (`scripts/ci-changes.sh`'s
+`docs_only`: Markdown such as the README, never `docs/`, skills, `commands/`,
+`.claude/`, CLAUDE.md or the PRD) runs no agent: the apply job re-checks the
+files of that exact head (the compare API, pinned to the sha) and records a
+scripted `review:pass`, domain `clear`, so the merge gate still sees a review
+of the current head. It never approves, requests changes or blocks a
 merge into `main`; `automerge-check.sh` refuses a `review:blocking` PR into a
 feature branch, and the work loop's preflight answers a blocking or concerns
 review on its open PR before it stops.
@@ -862,7 +867,7 @@ template) — done**.
   container, CI included — puppeteer needs `{"args":["--no-sandbox",
   "--disable-setuid-sandbox","--disable-dev-shm-usage"]}` in a file named by
   `MARGINALIA_MMDC_ARGS="-p that.json"`, and `PUPPETEER_EXECUTABLE_PATH` if a
-  Chromium is already on the box. Startup says which mode you got; README and
+  Chromium is already on the box. Startup says which mode you got; docs/formats.md and
   `skills/review-doc` carry the same recipe for agents.
 - Suggestions: `go run . suggestions <doc.md> [--json]`
 - Test: `go test -race ./...`  ·  single: `go test -run TestName ./internal/document/`
@@ -883,11 +888,24 @@ template) — done**.
   native role. Prose
   blocks keep their notes and composer as the *next sibling* (`[data-block] +
   .existing`), not inside; diagram statements put theirs under the figure.
+- Path-based CI: `ci.yml`'s `changes` job feeds the PR's file list to
+  `scripts/ci-changes.sh` (tested in `internal/pipeline`), and each job runs
+  only when its paths changed — a README edit runs none. A job skipped by its
+  `if` reports success, which keeps the ruleset's required checks green; the
+  `test` matrix instead runs both legs and skips their steps, since a skipped
+  matrix job does not report under its per-leg names. CodeQL's required
+  `analyze` gates the same way, `security.yml` (not required) uses a plain
+  `paths:` filter. A change to CI itself, a failed listing or a push to
+  `main` runs everything. A new required check must follow the same pattern,
+  never a workflow-level `paths:`, which leaves the check pending forever.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
 - Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it
   through the `# renovate:` comment) on PRs, `main` and weekly; it gates
   Renovate's automerge too.
+- User docs: `README.md` is a short front page; detail lives in `docs/` (index
+  `docs/README.md`), contributor workflow in `CONTRIBUTING.md`. A behaviour
+  change updates the `docs/` page that covers it, not the README.
 - Skills live in `skills/`; the repo is its own Claude plugin marketplace (`.claude-plugin/`).
 - Loop switches: `scripts/loop-vars.sh` shows and flips the repository
   variables the Actions loops read (`IMPLEMENT_LOOP`, `MERGE_LOOP_AUTO`, …),
