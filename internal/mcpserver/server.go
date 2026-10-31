@@ -131,8 +131,10 @@ type awaitIn struct {
 
 type awaitOut struct {
 	Done   bool        `json:"done"`
-	Reason string      `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), timeout or cancelled"`
+	Reason string      `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), answer (the reviewer picked an option on one of your multiple-choice notes; choices lists every pick past the cursor, whatever the reason), timeout or cancelled"`
 	Docs   []DocEvents `json:"docs"`
+	// Choices are the options picked in Docs' events, whatever the reason.
+	Choices []Choice `json:"choices"`
 }
 
 type closeIn struct {
@@ -256,7 +258,7 @@ func (s *Server) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
-	return nil, awaitOut{Done: done, Reason: reason, Docs: events}, nil
+	return nil, awaitOut{Done: done, Reason: reason, Docs: events, Choices: Choices(events)}, nil
 }
 
 func (s *Server) closeReview(_ context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, closeOut, error) {

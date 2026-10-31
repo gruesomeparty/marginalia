@@ -231,9 +231,13 @@ readonly:
 
 func TestLoadRejectsBadGuidance(t *testing.T) {
 	cases := map[string]string{
-		"note with no block": "notes:\n  - text: why?\n",
-		"note with no text":  "notes:\n  - block: \"1/2\"\n",
-		"empty skip entry":   "skip:\n  - \"\"\n",
+		"note with no text": "notes:\n  - block: \"1/2\"\n",
+		"empty skip entry":  "skip:\n  - \"\"\n",
+		"one option":        "notes:\n  - text: which?\n    options: [a]\n",
+		"five options":      "notes:\n  - text: which?\n    options: [a, b, c, d, e]\n",
+		"empty option":      "notes:\n  - text: which?\n    options: [a, \"\"]\n",
+		"duplicate option":  "notes:\n  - text: which?\n    options: [a, \" a\"]\n",
+		"option too long":   "notes:\n  - text: which?\n    options: [a, " + strings.Repeat("x", 81) + "]\n",
 	}
 	for name, body := range cases {
 		if _, err := load(t, body); err == nil {
@@ -335,6 +339,39 @@ func TestCompletionConfig(t *testing.T) {
 		}
 		if got := cfg.Completion(); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%q: %+v, want %+v", c.yaml, got, c.want)
+		}
+	}
+}
+
+// A note with no block is about the whole document (issue #215), and one
+// with options is answered by a choice the server checks.
+func TestMultipleChoiceNotes(t *testing.T) {
+	c, err := load(t, "notes:\n  - id: store\n    text: Postgres or SQLite?\n    options: [postgres, sqlite]\n  - block: \"1/2\"\n    text: why?\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.NotesFor("", "doc.md"); len(got) != 1 || got[0].ID != "req:store" {
+		t.Fatalf("document-level notes %+v", got)
+	}
+	if got := c.Unanchored(map[string]bool{"1/2": true}, "doc.md"); len(got) != 0 {
+		t.Errorf("a document-level note is not unanchored: %+v", got)
+	}
+	why := c.NotesFor("1/2", "doc.md")[0].ID
+	for _, tc := range []struct {
+		name   string
+		id     string
+		fields map[string]string
+		ok     bool
+	}{
+		{"a plain answer", "req:store", nil, true},
+		{"an offered choice", "req:store", map[string]string{"choice": "sqlite"}, true},
+		{"a choice not offered", "req:store", map[string]string{"choice": "mysql"}, false},
+		{"another field", "req:store", map[string]string{"choice": "sqlite", "why": "x"}, false},
+		{"a choice on an open question", why, map[string]string{"choice": "sqlite"}, false},
+		{"an unknown note", "req:nope", map[string]string{"choice": "sqlite"}, false},
+	} {
+		if err := c.CheckAnswer(tc.id, tc.fields, "doc.md"); (err == nil) != tc.ok {
+			t.Errorf("%s: err = %v", tc.name, err)
 		}
 	}
 }

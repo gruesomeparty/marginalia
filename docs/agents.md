@@ -58,7 +58,7 @@ SIGTERM drains in-flight calls before the process exits, as `serve` does.
 | `review_status` | The log materialized against the document as it now reads: per-block state, what went stale, what is orphaned, and which `suggest_edit`s are safe to apply verbatim. |
 | `reply_to_note` | Answer one of the human's notes in place. |
 | `mark_addressed` | Record that you changed the document in answer to a note. |
-| `await_review_done` | Wait until they finish or ask a question (`reason: "question"`, so you can answer before Done). Short by default (45s, under common client tool timeouts): call it in a loop with the returned cursor. A timeout is not an error — it returns `done: false`. |
+| `await_review_done` | Wait until they finish or ask a question (`reason: "question"`, so you can answer before Done), or pick an option on a multiple-choice note (`reason: "answer"`, the pick in `choices`). Short by default (45s, under common client tool timeouts): call it in a loop with the returned cursor. A timeout is not an error — it returns `done: false`. |
 | `close_review` | Stop serving. Comments already saved stay on disk and stay readable. |
 
 Three things about it are deliberate:

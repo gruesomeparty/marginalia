@@ -80,7 +80,10 @@ func importFrom(path, doc string, warn io.Writer) (added, skipped int, target st
 		if e.Type == "" {
 			return 0, 0, "", fmt.Errorf("%s: event %d has no type", path, i+1)
 		}
-		if e.Block == "" && e.Type != feedback.TypeReviewDone {
+		// An answer to a requester question about the whole document has
+		// no block either, as in the log the server writes.
+		wholeDoc := e.Type == feedback.TypeReply && strings.HasPrefix(e.ReplyTo, review.RequesterPrefix)
+		if e.Block == "" && e.Type != feedback.TypeReviewDone && !wholeDoc {
 			return 0, 0, "", fmt.Errorf("%s: event %d (%s) has no block to anchor to", path, i+1, e.Type)
 		}
 	}

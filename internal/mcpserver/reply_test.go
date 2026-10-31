@@ -344,3 +344,28 @@ func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
 		t.Errorf("feedback_since after one of two Dones: %+v", fb.Docs)
 	}
 }
+
+// The acceptance criterion of issue #215: a document-level question with
+// options; tapping sqlite appends one event and the wait returns reason
+// "answer" with sqlite as the choice, before any Done.
+func TestAwaitReturnsAChoice(t *testing.T) {
+	root := t.TempDir()
+	writeDoc(t, root, "spec.md", specDoc)
+	cfg := writeDoc(t, root, "review.yaml", "notes:\n  - id: db\n    text: Which database?\n    options: [postgres, sqlite]\n")
+	cs, _ := serveMCP(t, root)
+	var started reviewDocumentOut
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}, "config": cfg}, &started); err != nil {
+		t.Fatal(err)
+	}
+	post(t, started.URL, feedback.Event{Type: feedback.TypeReply, Text: "sqlite", ReplyTo: "req:db", Fields: map[string]string{"choice": "sqlite"}})
+	var woke awaitOut
+	if err := call(t, cs, "await_review_done", map[string]any{"session_id": started.SessionID, "timeout_seconds": 5}, &woke); err != nil {
+		t.Fatal(err)
+	}
+	if woke.Done || woke.Reason != "answer" || len(woke.Choices) != 1 || woke.Choices[0].Choice != "sqlite" || woke.Choices[0].Note != "req:db" {
+		t.Fatalf("the wait returned %+v, want reason answer with sqlite", woke)
+	}
+	if n := len(woke.Docs[0].Events); n != 1 {
+		t.Errorf("one tap appended %d events", n)
+	}
+}

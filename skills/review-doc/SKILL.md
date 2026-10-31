@@ -290,6 +290,9 @@ notes:
     doc: spec.md            # which document, when you serve a set
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
+  - id: db                  # no block: about the whole document, heads the page
+    text: Postgres or SQLite for the first release?
+    options: [postgres, sqlite]   # 2–4 options: the human answers in one tap
 skip:
   - "2"                  # folded on the page, and refused if anything posts to it
 ```
@@ -304,6 +307,16 @@ file), so an unnamed note follows its id into every document that has one, and
 startup warns you if a note names a document the review does not serve. Prefer a note on the block over a
 paragraph in `instructions` when the question is *about* something specific —
 that is the whole point of anchoring. Your notes never enter the feedback log.
+
+When you need a decision rather than prose, give the note `options`. A tap
+saves a `reply` to `req:<id>` with `fields.choice` set to the option (the
+server refuses anything you did not offer), and `await_review_done` returns
+at once with reason `answer` and `choices: [{doc, note, choice, author}]`
+(reason `question` if a question arrived in the same batch; `choices` is
+filled either way).
+Act on it, then keep waiting from the returned cursor. The human can still
+answer in words instead, so a reply to that note without `fields.choice` is
+an answer too.
 
 `--theme` picks a palette (`default`, `catppuccin`, `catppuccin-mocha`, …) if
 the human has a preference; light/dark and ligatures are theirs to set on the

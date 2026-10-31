@@ -236,7 +236,9 @@ func Materialize(events []Event, blocks []Block) Resolution {
 		if e.Type == TypeReviewDone {
 			continue
 		}
-		if e.Block == "" {
+		// An event names a block, with one exception: the answer to a
+		// requester note about the whole document (issue #215).
+		if e.Block == "" && (e.Type != TypeReply || !strings.HasPrefix(e.ReplyTo, review.RequesterPrefix)) {
 			continue
 		}
 		hash, known := hashes[e.Block]
@@ -288,13 +290,15 @@ func Materialize(events []Event, blocks []Block) Resolution {
 	for block := range byBlock {
 		settle(byBlock[block], hashes, texts)
 	}
-	for _, block := range order {
+	// Answers to questions about the whole document come first, as the
+	// questions do on the page; they are about no block, so never orphaned.
+	for _, block := range append([]string{""}, order...) {
 		if notes, ok := byBlock[block]; ok {
 			res.States = append(res.States, state(block, notes, false))
 		}
 	}
 	for _, block := range seen {
-		if _, known := hashes[block]; known {
+		if _, known := hashes[block]; known || block == "" {
 			continue
 		}
 		res.States = append(res.States, state(block, byBlock[block], true))
