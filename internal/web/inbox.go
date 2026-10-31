@@ -96,6 +96,8 @@ type InboxRow struct {
 	Overdue      bool       `json:"overdue,omitempty"`
 	WaitingSince time.Time  `json:"waiting_since"`
 	Urgent       bool       `json:"urgent,omitempty"`
+	// Changed is how many blocks moved since the reviewer last finished.
+	Changed int `json:"changed"`
 }
 
 // Ways the inbox can group its rows. Day is the default (issue 134).

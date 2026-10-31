@@ -217,6 +217,11 @@ func TestHostReadsTheStoreOnceAtStartup(t *testing.T) {
 		if code, _ := get(t, ts.URL+"/r/"+a.Meta.ID+"/api/resolution"); code != 200 {
 			t.Fatal(code)
 		}
+		for _, p := range []string{"/", "/api/reviews", "/stats", "/api/stats"} {
+			if code, _ := get(t, ts.URL+p); code != 200 {
+				t.Fatalf("%s: %d", p, code)
+			}
+		}
 	}
 	if got := counting.Reads(); got != 0 {
 		t.Errorf("rendering pages cost %d store reads after startup, want 0", got)

@@ -25,6 +25,9 @@ type live struct {
 	// completion is the review's rule for done, which the reads need and
 	// the disk does not hold.
 	completion review.Completion
+	// srv is the review's server, for what only it knows: the parse the
+	// reviewer last finished, which changed_blocks is measured from.
+	srv *server.Server
 	// seq orders sessions by start, so the newest one's rule wins when two
 	// serve the same path.
 	seq    uint64

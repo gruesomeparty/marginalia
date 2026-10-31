@@ -174,6 +174,8 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&oauthAud, "mcp-oauth-audience", "", "audience those tokens must carry (default: <public-url>/mcp) ($"+OAuthAudEnv+")")
 	cmd.Flags().StringVar(&oauthJWKS, "mcp-oauth-jwks-url", "", "where that server publishes its keys (default: OpenID discovery) ($"+OAuthJWKSEnv+")")
 	cmd.Flags().Int64Var(&limits.DocumentBytes, "limit-document-bytes", 0, fmt.Sprintf("largest document an agent may publish (default %d; $MARGINALIA_LIMIT_DOCUMENT_BYTES)", defaults.DocumentBytes))
+	cmd.Flags().Int64Var(&limits.AssetBytes, "limit-asset-bytes", 0, fmt.Sprintf("largest image an agent may publish beside a document (default %d; $MARGINALIA_LIMIT_ASSET_BYTES)", defaults.AssetBytes))
+	cmd.Flags().IntVar(&limits.AssetsPerPublish, "limit-assets-per-publish", 0, fmt.Sprintf("most images in one publish (default %d; $MARGINALIA_LIMIT_ASSETS_PER_PUBLISH)", defaults.AssetsPerPublish))
 	cmd.Flags().IntVar(&limits.DocumentsPerPublish, "limit-documents-per-publish", 0, fmt.Sprintf("most documents in one publish (default %d; $MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH)", defaults.DocumentsPerPublish))
 	cmd.Flags().IntVar(&limits.RevisionsPerReview, "limit-revisions", 0, fmt.Sprintf("most revisions of one review (default %d; $MARGINALIA_LIMIT_REVISIONS)", defaults.RevisionsPerReview))
 	cmd.Flags().IntVar(&limits.PublishesPerHour, "limit-publishes-per-hour", 0, fmt.Sprintf("most publishes per agent identity per hour (default %d; $MARGINALIA_LIMIT_PUBLISHES_PER_HOUR)", defaults.PublishesPerHour))
@@ -261,6 +263,8 @@ func limitsFromEnv(l *hosted.Limits) error {
 	for _, err := range []error{
 		i64(&l.DocumentBytes, "MARGINALIA_LIMIT_DOCUMENT_BYTES"),
 		i(&l.DocumentsPerPublish, "MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH"),
+		i64(&l.AssetBytes, "MARGINALIA_LIMIT_ASSET_BYTES"),
+		i(&l.AssetsPerPublish, "MARGINALIA_LIMIT_ASSETS_PER_PUBLISH"),
 		i(&l.RevisionsPerReview, "MARGINALIA_LIMIT_REVISIONS"),
 		i(&l.PublishesPerHour, "MARGINALIA_LIMIT_PUBLISHES_PER_HOUR"),
 		i(&l.OpenReviews, "MARGINALIA_LIMIT_OPEN_REVIEWS"),

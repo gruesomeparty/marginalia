@@ -26,6 +26,13 @@ type Entry struct {
 	Store *feedback.Store
 	Label string // display name in the navigation tree
 	Rel   string // path relative to the set root; also this document's URL
+	// Base is the parse the reviewer last finished, which changes are
+	// measured from (issue #214): nil until there is one. The server moves
+	// it to the current parse on every review_done it records, so under
+	// --watch it follows the reviewer; hosted mode seeds it from the
+	// revision the reviewer last finished, since a republish builds a new
+	// server. Read it through BaseOf: it moves under the handlers.
+	Base *document.Document
 }
 
 // Options configures a review Server.
@@ -97,7 +104,7 @@ type Server struct {
 	mux     *http.ServeMux
 
 	// mu guards each entry's parsed document, which --watch replaces while
-	// handlers are reading it.
+	// handlers are reading it, and its Base.
 	mu       sync.RWMutex
 	revision revisionCounter
 	// stamps records each document's file as it was when the server was
@@ -163,6 +170,7 @@ func New(opts Options) *Server {
 	s.mux.HandleFunc("GET /api/doc", s.handleDoc)
 	s.mux.HandleFunc("GET /api/feedback", s.handleGetFeedback)
 	s.mux.HandleFunc("GET /api/resolution", s.handleResolution)
+	s.mux.HandleFunc("GET /api/changes", s.handleChanges)
 	s.mux.HandleFunc("GET /api/revision", s.handleRevision)
 	s.mux.HandleFunc("GET /api/wait", s.handleWait)
 	s.mux.HandleFunc("POST /api/feedback", s.handlePostFeedback)
