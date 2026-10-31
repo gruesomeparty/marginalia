@@ -410,6 +410,23 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
+- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+  through `gotreesitter` — a **pure-Go** runtime, so the build stays
+  `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
+  runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
+  name plus a `decl` function saying which nodes are declarations, what each
+  is called, and which child lists hold its members; comment attachment,
+  `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
+  and highlighting (from node types, not highlight queries, so it is the same
+  for every grammar) are shared. Ids are symbol paths (`Batch/Full`,
+  `const/batchCap`); a method stays in source order with its type in its path.
+  A leaf (a function) hashes all of itself; a container hashes its text
+  outside its children (`Symbol.Head`/`Tail`). `.goreleaser.yaml` builds with
+  `-tags=grammar_subset,grammar_subset_<grammar>…` so a release embeds only
+  the grammars registered — `TestReleaseEmbedsEveryGrammar` fails when a
+  language is added without its tag; an untagged `go build` embeds all ~200
+  and behaves the same, bigger. A directory walk skips `FormatSource`; a
+  source file is reviewed when named or listed in an index.
 - OpenAPI (issue #150, `document/openapi.go`) is not a format: a JSON/YAML/TOML
   document whose one root has an `openapi` or `swagger` key is anchored by
   what the spec names — `GET /orders/{id}`, the path item `/orders/{id}`,
