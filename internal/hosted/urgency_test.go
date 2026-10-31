@@ -86,6 +86,16 @@ func TestBlockingAndOverdueReviewsListFirst(t *testing.T) {
 	if r := h.row(blocking); r.Urgent || r.Status != web.StatusDone {
 		t.Errorf("a finished blocking review is still urgent: %+v", r)
 	}
+	// The agent answers after Done without republishing: replied, and still
+	// not the reviewer's to wait on.
+	events, _ := blocking.Server.Entries()[0].Store.Load()
+	clock = clock.Add(time.Minute)
+	if err := blocking.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Type: feedback.TypeReply, Text: "noted", Author: "agent:a", ReplyTo: feedback.NoteID(events[0]), Ts: clock.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	if r := h.row(blocking); r.Status != web.StatusReplied || r.Urgent || r.Blocking {
+		t.Errorf("an agent's reply after Done made a blocking review urgent again: %+v", r)
+	}
 }
 
 // A republish states its own urgency: one that drops blocking is no longer
