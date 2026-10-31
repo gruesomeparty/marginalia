@@ -109,12 +109,13 @@ jobs:
               --jq '[.[] | select([.labels[].name] | index("triaged") | not) | .number] | sort | .[]' | tr '\n' ' ')"
             # And any issue whose question was answered while nothing was
             # listening (an answer older than the comment trigger, a failed run).
-            waiting="$(for l in needs-info needs-decision; do
-              gh issue list --repo "$REPO" --state open --label "$l" --limit 100 --json number,labels,body,comments
-            done | jq -sc 'add // [] | unique_by(.number)')"
-            answered="$(jq -n --argjson issues "$waiting" \
-              --argjson trusted "$(xargs -n1 <<<"$TRUSTED" | jq -R . | jq -sc .)" \
-              '{issues: $issues, trusted: $trusted}' | scripts/answered-issues.sh | tr '\n' ' ')"
+            # A failure here must not cost the untriaged pass above.
+            answered="$( {
+              for l in needs-info needs-decision; do
+                gh issue list --repo "$REPO" --state open --label "$l" --limit 100 --json number,labels,body,comments
+              done | jq -sc --argjson trusted "$(xargs -n1 <<<"$TRUSTED" | jq -R . | jq -sc .)" \
+                '{issues: (add // [] | unique_by(.number)), trusted: $trusted}' | scripts/answered-issues.sh | tr '\n' ' '
+            } || echo "::warning::could not list answered issues; this sweep takes untriaged ones only" >&2 )"
             if [ -n "${answered// /}" ]; then echo "answered while waiting: $answered"; fi
             list="$list $answered"
           fi
