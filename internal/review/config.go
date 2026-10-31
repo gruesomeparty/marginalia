@@ -63,6 +63,16 @@ type Config struct {
 	// folded and, like ReadOnly, are refused by the server — a sixty-block
 	// document where a third is under review should open on that third.
 	Skip []string `yaml:"skip"`
+	// Reviewers names who is reviewing, when the requester wants to say so
+	// (issue #53). Without it a reviewer is any distinct author. With it,
+	// only these people's Done counts, and "all" means all of them, including
+	// anyone who has not opened the page yet.
+	Reviewers []string `yaml:"reviewers"`
+	// CompleteWhen is when the review as a whole is done: "any" (the
+	// default) on the first reviewer's Done, "all" when every reviewer has
+	// said Done, "quorum:N" when N have. Each Done still records only its
+	// own author's completion; this is a reading of the log, not an event.
+	CompleteWhen string `yaml:"complete_when"`
 }
 
 // Note is one piece of requester guidance, anchored to a block — and, in a
@@ -291,6 +301,24 @@ func (c *Config) validate() error {
 				return fmt.Errorf("%s: an entry is empty", name)
 			}
 		}
+	}
+	if _, _, err := parseCompletion(c.CompleteWhen); err != nil {
+		return err
+	}
+	seenReviewer := map[string]bool{}
+	for i, r := range c.Reviewers {
+		r = strings.TrimSpace(r)
+		if r == "" {
+			return fmt.Errorf("reviewers: an entry is empty")
+		}
+		if seenReviewer[r] {
+			return fmt.Errorf("reviewers: %q is listed twice", r)
+		}
+		seenReviewer[r] = true
+		c.Reviewers[i] = r
+	}
+	if rule, q, _ := parseCompletion(c.CompleteWhen); rule == CompleteQuorum && len(c.Reviewers) > 0 && q > len(c.Reviewers) {
+		return fmt.Errorf("complete_when: quorum:%d needs more reviewers than the %d listed", q, len(c.Reviewers))
 	}
 	seenNote := map[string]bool{}
 	for i := range c.Notes {

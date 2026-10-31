@@ -112,11 +112,30 @@ func (r Reply) note() Note {
 // recently said about it, everything they said before, and whether that still
 // applies to the block as it now reads.
 type State struct {
-	Block    string `json:"block"`
-	Current  Note   `json:"current"`
-	History  []Note `json:"history"`
-	Stale    bool   `json:"stale"`    // the current note predates an edit to the block
-	Orphaned bool   `json:"orphaned"` // the block it was written against is gone
+	Block string `json:"block"`
+	// Current is the note that stands for the block. With one reviewer it is
+	// their latest note; with several it is the weightiest of each
+	// reviewer's latest (see weight), so a later approval never buries an
+	// earlier rejection by someone else.
+	Current Note `json:"current"`
+	// Overall is Current's type: the block's verdict, derived from a stated
+	// rule rather than from arrival order.
+	Overall string `json:"overall"`
+	// ByAuthor is each reviewer's latest note on the block, in the order they
+	// first spoke: two approvals and a rejection read as exactly that.
+	ByAuthor []Verdict `json:"by_author,omitempty"`
+	History  []Note    `json:"history"`
+	Stale    bool      `json:"stale"`    // the current note predates an edit to the block
+	Orphaned bool      `json:"orphaned"` // the block it was written against is gone
+}
+
+// Verdict is one reviewer's standing word on a block: their latest note.
+type Verdict struct {
+	Author string `json:"author"`
+	Type   string `json:"type"`
+	ID     string `json:"id"`
+	Ts     string `json:"ts"`
+	Stale  bool   `json:"stale"`
 }
 
 // Resolution is a feedback log materialized against a document as it reads
@@ -136,12 +155,30 @@ type Resolution struct {
 	Outstanding int `json:"outstanding"`
 	// Addressed counts notes the agent says it acted on and the reviewer has
 	// not yet ruled on — the "is this right now?" queue.
-	Addressed int  `json:"addressed"`
-	Confirmed int  `json:"confirmed"`
-	Reopened  int  `json:"reopened"`
-	Stale     int  `json:"stale"`
-	Orphaned  int  `json:"orphaned"`
-	Done      bool `json:"done"`
+	Addressed int `json:"addressed"`
+	Confirmed int `json:"confirmed"`
+	Reopened  int `json:"reopened"`
+	Stale     int `json:"stale"`
+	Orphaned  int `json:"orphaned"`
+	// Done is whether the review as a whole is complete: by default on any
+	// one review_done, or by the rule Complete applies (issue #53).
+	Done bool `json:"done"`
+	// Finished are the authors who have said Done, in the order they did;
+	// Participants everyone who has reviewed at all — written a note, a
+	// verdict or a Done, as opposed to an agent's reply or claim.
+	Finished     []string `json:"finished,omitempty"`
+	Participants []string `json:"participants,omitempty"`
+	// DoneBy and DoneNeeded are the completion rule's tally: "2 of 3".
+	DoneBy     int `json:"done_by"`
+	DoneNeeded int `json:"done_needed"`
+}
+
+// Complete applies a completion rule to the resolution: Done becomes
+// whether the rule is met, and the tally is what it counted. Nothing is
+// written: completion is a reading of the log, as staleness is.
+func (r *Resolution) Complete(c review.Completion) {
+	r.DoneBy, r.DoneNeeded = c.Tally(r.Finished, r.Participants)
+	r.Done = r.DoneBy >= r.DoneNeeded
 }
 
 // Block is one block of the document as it now reads: what Materialize needs
@@ -174,9 +211,17 @@ func Materialize(events []Event, blocks []Block) Resolution {
 	byBlock := make(map[string][]Note, len(order))
 	replies := map[string][]Reply{}
 	var seen []string // orphan blocks, in the order the log mentions them
+	finished, participating := map[string]bool{}, map[string]bool{}
 	for _, e := range events {
+		if e.Type != TypeReply && e.Type != TypeAddressed && !participating[e.Author] {
+			participating[e.Author] = true
+			res.Participants = append(res.Participants, e.Author)
+		}
 		if e.Type == TypeReviewDone {
-			res.Done = true
+			if !finished[e.Author] {
+				finished[e.Author] = true
+				res.Finished = append(res.Finished, e.Author)
+			}
 			continue
 		}
 		if e.Block == "" {
@@ -242,6 +287,7 @@ func Materialize(events []Event, blocks []Block) Resolution {
 		}
 		res.States = append(res.States, state(block, byBlock[block], true))
 	}
+	res.Complete(review.Completion{Rule: review.CompleteAny})
 	for _, s := range res.States {
 		if s.Stale {
 			res.Stale++
@@ -411,23 +457,70 @@ func settle(notes []Note, hashes, texts map[string]string) {
 	}
 }
 
-// state assembles one block's view. The current note is the latest by
-// timestamp, matching Resolve's rule: later events on a block override
-// earlier ones when materializing.
+// state assembles one block's view.
+//
+// Each reviewer's latest note is their verdict, and the current note is the
+// weightiest of those, the latest breaking a tie. With one reviewer that is
+// simply their latest note, which is what it always was; with several,
+// arrival order stops deciding what the block's state is (issue #53). A
+// reviewer's answer to a requester note, or a reply whose target is gone,
+// is not a verdict on the block, and only stands when nothing else does.
 func state(block string, notes []Note, orphaned bool) State {
+	latest := map[string]int{}
+	var authors []string
+	for i, n := range notes {
+		if n.Dangling || n.Answers != "" {
+			continue
+		}
+		j, ok := latest[n.Event.Author]
+		if !ok {
+			authors = append(authors, n.Event.Author)
+		}
+		if !ok || n.Event.Ts >= notes[j].Event.Ts {
+			latest[n.Event.Author] = i
+		}
+	}
 	current := notes[0]
 	for _, n := range notes[1:] {
 		if n.Event.Ts >= current.Event.Ts {
 			current = n
 		}
 	}
+	var by []Verdict
+	for k, a := range authors {
+		n := notes[latest[a]]
+		by = append(by, Verdict{Author: a, Type: n.Event.Type, ID: n.ID, Ts: n.Event.Ts, Stale: n.Stale})
+		if k == 0 || weight(n.Event.Type) > weight(current.Event.Type) ||
+			(weight(n.Event.Type) == weight(current.Event.Type) && n.Event.Ts >= current.Event.Ts) {
+			current = n
+		}
+	}
 	return State{
 		Block:    block,
 		Current:  current,
+		Overall:  current.Event.Type,
+		ByAuthor: by,
 		History:  notes,
 		Stale:    current.Stale,
 		Orphaned: orphaned,
 	}
+}
+
+// weight orders verdicts when reviewers disagree: a rejection outranks a
+// question, a question outranks anything else said, and an approval ranks
+// last, so one rejection is not buried under two approvals. A configured
+// action ranks with a comment: it asks for something, and only the agent
+// that configured it knows how much.
+func weight(typ string) int {
+	switch typ {
+	case TypeReject:
+		return 3
+	case TypeQuestion:
+		return 2
+	case TypeApprove:
+		return 0
+	}
+	return 1
 }
 
 // Suggestion is a suggest_edit as an applier sees it: which block, the text it
