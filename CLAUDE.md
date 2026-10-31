@@ -345,6 +345,16 @@ users are agents, not humans.
   a sentence" would have cost "select a sentence". Scope is markdown prose:
   trees and fences are skipped because their rendered text and `PlainText` can
   differ.
+- Several reviewers (issue #53): `State.ByAuthor` is each author's latest
+  note on a block, and `Current`/`Overall` is the weightiest of those
+  (reject > question > anything else > approve, latest breaking a tie), so
+  arrival order no longer decides a block's state; one author reads exactly
+  as before. Completion is a reading too: `Resolution.Finished` (authors of a
+  `review_done`) and `Participants` (anyone who wrote other than a `reply` or
+  `addressed`) feed `review.Completion` — the config's `complete_when:
+  any|all|quorum:N` and optional `reviewers:` list, which once set is the
+  denominator and the only Done that counts. `Materialize` applies `any`;
+  `Resolution.Complete(cfg.Completion())` applies the config's rule.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
