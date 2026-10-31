@@ -485,5 +485,8 @@ func (s *Server) append(r *http.Request, target *Entry, e *feedback.Event) error
 		return err
 	}
 	s.recorded(target, *e)
+	if s.opts.Recorded != nil {
+		s.opts.Recorded(target.Rel, *e)
+	}
 	return nil
 }

@@ -40,6 +40,7 @@ type publishIn struct {
 	Config    string       `json:"config,omitempty" jsonschema:"review config YAML, layered over the framing (same schema as --config)"`
 	Theme     string       `json:"theme,omitempty" jsonschema:"page palette"`
 	ReviewID  string       `json:"review_id,omitempty" jsonschema:"an existing review to publish a new revision of; omit for a new review"`
+	Callback  string       `json:"callback_url,omitempty" jsonschema:"https URL to POST a signed, content-free notice to when the reviewer submits Done or asks a question, so a job can stop instead of waiting; the host must allow its domain. Verify X-Marginalia-Signature (sha256=HMAC-SHA256 of the body under callback_secret). A revision without it keeps the review's"`
 }
 
 type publishedDoc struct {
@@ -56,6 +57,10 @@ type publishOut struct {
 	Actions        []review.Action `json:"actions"`
 	Instructions   string          `json:"instructions,omitempty"`
 	RequireVerdict bool            `json:"require_verdict"`
+	// CallbackSecret is the key the callbacks are signed with, returned
+	// when the publish named a callback_url. Keep it; it is not shown
+	// anywhere else.
+	CallbackSecret string `json:"callback_secret,omitempty"`
 }
 
 type readIn struct {
@@ -136,7 +141,7 @@ func (h *Host) tools() {
 }
 
 func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in publishIn) (*mcp.CallToolResult, publishOut, error) {
-	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme}
+	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme, Callback: in.Callback}
 	for _, d := range in.Documents {
 		p.Docs = append(p.Docs, Document{Name: d.Name, Content: []byte(d.Content)})
 	}
@@ -152,7 +157,11 @@ func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, publishOut{}, err
 	}
-	return nil, h.published(r), nil
+	out := h.published(r)
+	if in.Callback != "" {
+		out.CallbackSecret = h.opts.Callbacks.ReviewSecret(r.Meta.ID)
+	}
+	return nil, out, nil
 }
 
 func (h *Host) published(r *Review) publishOut {

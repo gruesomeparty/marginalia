@@ -40,7 +40,7 @@ another machine.
 
 | Tool | What it does |
 |---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config`, `theme` and `callback_url` (below); get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
 | `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
 | `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
 
@@ -48,6 +48,32 @@ A name is one plain file name: `../x.md`, `.env` and `a/b.md` are refused,
 not cleaned up. A publish refuses before writing anything when the format is
 unsupported (naming `request-feature`), the content is empty, the config is
 invalid, or a limit is reached.
+
+**Being called back instead of waiting.** A job that should not hold a
+runner open on `await_review_done` passes `callback_url`, and the host
+POSTs to it when the reviewer submits Done or asks a question:
+
+```json
+{"event":"review_done","review_id":"…","revision":2,"name":"plan.md","done":true,
+ "cursor":{"plan.md":14},"since":14,"at":"2026-10-31T09:00:00Z"}
+```
+
+`cursor` goes back to `feedback_since`/`await_review_done`, `since` to
+`GET /agent/r/{id}/wait`. It never carries a title, a quote or a word of a
+note. `X-Marginalia-Signature: sha256=<hex>` is HMAC-SHA256 of the body under
+the `callback_secret` the publish returned; verify it, and the `at`, before
+acting. Questions in a burst collapse into one call a minute with the latest
+cursor; a Done goes at once. A revision without `callback_url` keeps the
+review's. Delivery is off the request path, with a 5s timeout and one retry.
+
+It is off unless the operator lists the hosts a callback may name, in
+`MARGINALIA_CALLBACK_HOSTS` (comma-separated, `*.example.com` for a domain's
+subdomains), with `MARGINALIA_CALLBACK_SECRET` (at least 32 characters; each
+review's secret is derived from it and the review id, so nothing secret is
+stored, and rotating it rotates them all). A callback must be https, carry no
+credentials, and name a listed host; the host refuses, at publish time and
+again when it connects, any address that is not public (loopback, private,
+link-local, `100.64.0.0/10`), and does not follow redirects.
 
 ### Limits
 

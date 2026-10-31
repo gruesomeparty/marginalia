@@ -118,6 +118,9 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Callback is where the agent asked to be called back (callback.go).
+	// The URL only: the signing secret is derived, never stored.
+	Callback string `json:"callback,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,
