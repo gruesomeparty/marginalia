@@ -463,9 +463,10 @@ users are agents, not humans.
   are the inbox's sibling, human-only and computed the same way — current
   revision, in-memory logs, `feedback.Materialize`, zero store reads. Per
   agent and in total: first look (first human event − `Meta.Created`), time
-  to done (first `review_done` − `Meta.Created`), rounds (`Meta.Rounds`,
-  incremented at republish when the outgoing revision has a `review_done`
-  past `Meta.From`, plus one if the current one does), notes by
+  to done (when every document's log first met the review's completion
+  rule − `Meta.Created`), rounds (`Meta.Rounds`, incremented at republish
+  when the outgoing revision met the rule past `Meta.From`, plus one if the
+  current one does), notes by
   non-protocol type, and claim outcomes (notes with an `addressed`: latest
   status, and `Unclaimed`). Filters: `period=7d|30d|90d` on publish time,
   `agent`, `framing`. Retired documents' logs are not counted.

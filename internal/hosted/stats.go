@@ -39,19 +39,18 @@ type reviewStats struct {
 func (h *Host) statsOf(r *Review) reviewStats {
 	created, _ := time.Parse(time.RFC3339, r.Meta.Created)
 	s := reviewStats{agent: r.Meta.Agent, framing: framingOf(r.Meta), created: created, rounds: r.Meta.Rounds, notes: map[string]int{}}
-	var firstHuman, firstDone time.Time
-	finished := false
-	for _, e := range r.Server.Entries() {
+	rule := r.Server.Review().Completion()
+	var firstHuman, doneAt time.Time
+	entries := r.Server.Entries()
+	allDone := len(entries) > 0
+	for _, e := range entries {
 		events, err := e.Store.Load()
 		if err != nil {
 			h.logf("marginalia: stats: %s: %v\n", e.Store.Path(), err)
+			allDone = false
 			continue
 		}
-		from := min(r.Meta.From[e.Rel], len(events))
-		for i, ev := range events {
-			if ev.Type == review.TypeReviewDone && i >= from {
-				finished = true
-			}
+		for _, ev := range events {
 			if agentSide(ev.Type) {
 				continue
 			}
@@ -65,9 +64,16 @@ func (h *Host) statsOf(r *Review) reviewStats {
 			if firstHuman.IsZero() || ts.Before(firstHuman) {
 				firstHuman = ts
 			}
-			if ev.Type == review.TypeReviewDone && (firstDone.IsZero() || ts.Before(firstDone)) {
-				firstDone = ts
+		}
+		// Done is the review's own rule, as the inbox reads it: a document
+		// is done when its log first meets it, the review when every
+		// document has.
+		if at, ok := firstMet(rule, events); ok {
+			if at.After(doneAt) {
+				doneAt = at
 			}
+		} else {
+			allDone = false
 		}
 		blocks := make([]feedback.Block, 0, len(e.Doc.Blocks))
 		for _, b := range e.Doc.Blocks {
@@ -79,8 +85,12 @@ func (h *Host) statsOf(r *Review) reviewStats {
 			}
 		}
 	}
-	if finished {
+	if finished, _ := revisionFinished(r); finished {
 		s.rounds++
+	}
+	firstDone := time.Time{}
+	if allDone {
+		firstDone = doneAt
 	}
 	if !firstHuman.IsZero() && !created.IsZero() {
 		s.firstLook, s.looked = firstHuman.Sub(created), true
@@ -231,20 +241,36 @@ func (h *Host) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(h.stats(q.Get("period"), q.Get("agent"), q.Get("framing")))
 }
 
-// revisionFinished reports whether a reviewer submitted Done on this
-// revision: a review_done past the point its logs had reached when it was
-// published (Meta.From).
+// revisionFinished reports whether a revision was finished under the
+// review's completion rule: every document's log, from the point it had
+// reached when the revision was published (Meta.From), meets it.
 func revisionFinished(r *Review) (bool, error) {
-	for _, e := range r.Server.Entries() {
+	rule := r.Server.Review().Completion()
+	entries := r.Server.Entries()
+	if len(entries) == 0 {
+		return false, nil
+	}
+	for _, e := range entries {
 		events, err := e.Store.Load()
 		if err != nil {
 			return false, err
 		}
-		for _, ev := range events[min(r.Meta.From[e.Rel], len(events)):] {
-			if ev.Type == review.TypeReviewDone {
-				return true, nil
-			}
+		if !rule.Met(feedback.Reviewers(events[min(r.Meta.From[e.Rel], len(events)):])) {
+			return false, nil
 		}
 	}
-	return false, nil
+	return true, nil
+}
+
+// firstMet is when a log first met the completion rule: the time of the
+// review_done that tipped it.
+func firstMet(rule review.Completion, events []feedback.Event) (time.Time, bool) {
+	for i, ev := range events {
+		if ev.Type != review.TypeReviewDone || !rule.Met(feedback.Reviewers(events[:i+1])) {
+			continue
+		}
+		ts, err := time.Parse(time.RFC3339, ev.Ts)
+		return ts, err == nil
+	}
+	return time.Time{}, false
 }

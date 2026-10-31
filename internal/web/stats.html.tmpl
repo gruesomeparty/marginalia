@@ -62,7 +62,7 @@ tr.total td{font-weight:600}
       <tr{{if .Total}} class="total"{{end}} data-agent="{{.Agent}}"><td>{{.Label}}</td><td>{{.Reviews}}</td><td>{{.Done}}</td><td>{{.FirstLook}}</td><td>{{.FirstLook90}}</td><td>{{.TimeToDone}}</td><td>{{.TimeToDone9}}</td><td>{{.RoundsPerReview}}</td></tr>{{end}}
     </tbody>
   </table></div>
-  <p class="hint">First look is from publishing to the reviewer's first note or Done; to done is from publishing to the first Done. A round is a revision the reviewer finished.</p>
+  <p class="hint">First look is from publishing to the reviewer's first note or Done; to done is from publishing until the review first met its completion rule. A round is a revision the reviewers finished.</p>
   <h2 id="claims">The agent's fixes</h2>
   <div class="scroll"><table aria-labelledby="claims">
     <thead><tr><th scope="col">Agent</th><th scope="col">Addressed</th><th scope="col">Confirmed</th><th scope="col">Reopened</th><th scope="col">Not yet checked</th><th scope="col">Text unchanged</th></tr></thead>

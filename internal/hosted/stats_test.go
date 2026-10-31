@@ -157,3 +157,31 @@ func TestStatsMatchAHandCount(t *testing.T) {
 		t.Errorf("stats cost %d store reads, want 0", got)
 	}
 }
+
+// Done follows the review's completion rule, as the inbox does: with two
+// reviewers required, one Done is neither done nor a finished round.
+func TestStatsFollowTheCompletionRule(t *testing.T) {
+	h, ts := open(t, storage.NewMemory())
+	r, err := h.Publish(context.Background(), Publish{Agent: "a", Config: "complete_when: all\nreviewers: [ana, bo]\n", Docs: []Document{{Name: "spec.md", Content: []byte(specDoc)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := r.Server.Entries()[0].Store
+	read := func() web.AgentStats {
+		var s web.Stats
+		_, body := get(t, ts.URL+"/api/stats")
+		if err := json.Unmarshal([]byte(body), &s); err != nil {
+			t.Fatal(err)
+		}
+		return s.Total
+	}
+	ts0 := time.Now().UTC()
+	_ = store.Append(feedback.Event{Doc: "spec.md", Type: "review_done", Author: "ana", Ts: ts0.Format(time.RFC3339)})
+	if got := read(); got.Done != 0 || got.Rounds != 0 {
+		t.Errorf("one of two Dones: %+v", got)
+	}
+	_ = store.Append(feedback.Event{Doc: "spec.md", Type: "review_done", Author: "bo", Ts: ts0.Add(time.Minute).Format(time.RFC3339)})
+	if got := read(); got.Done != 1 || got.Rounds != 1 || got.TimeToDone.Count != 1 {
+		t.Errorf("both Dones: %+v", got)
+	}
+}
