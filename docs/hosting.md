@@ -40,7 +40,7 @@ another machine.
 
 | Tool | What it does |
 |---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`, and optionally `blocking` and `due_by` (below); get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
 | `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
 | `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
 
@@ -48,6 +48,16 @@ A name is one plain file name: `../x.md`, `.env` and `a/b.md` are refused,
 not cleaned up. A publish refuses before writing anything when the format is
 unsupported (naming `request-feature`), the content is empty, the config is
 invalid, or a limit is reached.
+
+**Saying how urgent it is.** `blocking: true` says the agent cannot go on
+until you answer; `due_by` (RFC 3339, `2026-11-01T17:00:00Z`) says when it
+needs the answer. The inbox lists a review that is blocking, or past its
+due-by, first, under *An agent is waiting*, with how long the agent has waited
+(since the revision it is waiting on) and an *overdue* marker; `/api/reviews`
+carries `blocking`, `due_by`, `overdue`, `waiting_since` and `urgent`. A
+blocking publish is notified at once, past the debounce. Each revision states
+its own urgency, so a republish without `blocking` is no longer blocking, and
+a finished review is never urgent. It orders your inbox; it decides nothing.
 
 ### Limits
 
@@ -80,11 +90,12 @@ gets a POST when an agent publishes a review, publishes a revision, or
 replies or claims after you pressed Done, never on anything you did. The body
 is plain text with the review's title, the agent and what happened, with the
 review URL in the text and in a `Click` header, so an ntfy topic works as is;
-`--notify-format json` sends `{event, review_id, title, agent, url, at}` for a
+`--notify-format json` sends `{event, review_id, title, agent, url, at}` (plus `blocking`) for a
 generic webhook. It never carries a word of a document or a note, and it is
 delivered off the request path with a short timeout and one retry: a dead
 receiver is a line on stderr, never a failed publish. At most one
 notification per review per minute; a burst collapses into one "n updates".
+A blocking publish skips that wait and says so.
 
 ### Who is asking
 

@@ -40,6 +40,8 @@ type publishIn struct {
 	Config    string       `json:"config,omitempty" jsonschema:"review config YAML, layered over the framing (same schema as --config)"`
 	Theme     string       `json:"theme,omitempty" jsonschema:"page palette"`
 	ReviewID  string       `json:"review_id,omitempty" jsonschema:"an existing review to publish a new revision of; omit for a new review"`
+	Blocking  bool         `json:"blocking,omitempty" jsonschema:"true when you cannot go on until the reviewer answers: the inbox lists it first and the reviewer is notified at once. Each revision states its own"`
+	DueBy     string       `json:"due_by,omitempty" jsonschema:"when you need the answer, RFC 3339 (2026-11-01T17:00:00Z); past it the inbox marks the review overdue"`
 }
 
 type publishedDoc struct {
@@ -136,7 +138,14 @@ func (h *Host) tools() {
 }
 
 func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in publishIn) (*mcp.CallToolResult, publishOut, error) {
-	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme}
+	p := Publish{Title: in.Title, Agent: h.agentOf(req), Review: in.Review, Config: in.Config, Theme: in.Theme, Blocking: in.Blocking}
+	if in.DueBy != "" {
+		due, err := time.Parse(time.RFC3339, in.DueBy)
+		if err != nil {
+			return nil, publishOut{}, fmt.Errorf("due_by %q is not an RFC 3339 time (2026-11-01T17:00:00Z): %w", in.DueBy, err)
+		}
+		p.DueBy = due
+	}
 	for _, d := range in.Documents {
 		p.Docs = append(p.Docs, Document{Name: d.Name, Content: []byte(d.Content)})
 	}

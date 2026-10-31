@@ -28,6 +28,10 @@ func (h *Host) rows() []web.InboxRow {
 		out = append(out, h.row(r))
 	}
 	sort.Slice(out, func(i, j int) bool {
+		// A review an agent is stopped on comes first (issue #220).
+		if out[i].Urgent != out[j].Urgent {
+			return out[i].Urgent
+		}
 		if !out[i].LastActivity.Equal(out[j].LastActivity) {
 			return out[i].LastActivity.After(out[j].LastActivity)
 		}
@@ -120,14 +124,30 @@ func (h *Host) row(r *Review) web.InboxRow {
 		row.Status = web.StatusAwaiting
 	}
 	row.StatusLabel = web.StatusLabel(row.Status)
+	h.urgency(r, &row)
 	return row
+}
+
+// urgency copies what the agent said about its wait onto the row: blocking,
+// the due-by and whether it has passed, and since when it has waited (the
+// revision it is waiting on, so a republish restarts the clock). A finished
+// review is never urgent, whatever it was published with.
+func (h *Host) urgency(r *Review, row *web.InboxRow) {
+	row.Blocking = r.Meta.Blocking
+	row.WaitingSince, _ = time.Parse(time.RFC3339, r.Meta.Updated)
+	if t, err := time.Parse(time.RFC3339, r.Meta.DueBy); err == nil {
+		t = t.UTC()
+		row.DueBy = &t
+		row.Overdue = row.Status != web.StatusDone && t.Before(h.opts.Now())
+	}
+	row.Urgent = row.Status != web.StatusDone && (row.Blocking || row.Overdue)
 }
 
 // handleRoot is the inbox. The tab counts are taken after the other
 // filters, so a search says how many of its matches each tab holds.
 func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 	f := web.ParseInboxFilter(r.URL.Query())
-	in := web.Inbox{Tab: f.Tab, Filter: f}
+	in := web.Inbox{Tab: f.Tab, Filter: f, Now: h.opts.Now()}
 	framings, agents := map[string]bool{}, map[string]bool{}
 	for _, row := range h.rows() {
 		if k := web.FramingKey(row.Framing); !framings[k] {

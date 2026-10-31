@@ -51,7 +51,10 @@ document's text instead of `review_document {paths}`, and pass the
 tools below take a `session_id` or a path. To revise, call `publish_document`
 again with the `review_id`: the reviewer's notes re-anchor against the new
 text, stale where a block changed and orphaned where it is gone, exactly as
-`review_status` reports after a local edit.
+`review_status` reports after a local edit. If you cannot go on without the
+answer, say so: `blocking: true` (and `due_by`, RFC 3339, when there is a
+deadline) puts the review at the top of the reviewer's inbox and notifies at
+once. Use it only when you are actually stopped; each revision states its own.
 
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.

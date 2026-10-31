@@ -52,6 +52,7 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .review .lead{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);font-size:var(--fs-sm)}
 .review .need{font-weight:600}
 .review .warn{color:var(--bad)}
+.review .urgent{color:var(--bad);font-weight:600}
 .review .when{margin-left:auto;color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
 .review .title{display:block;margin-top:var(--sp-2);font-weight:600;font-size:var(--fs-md);min-width:0;overflow-wrap:anywhere}
 .review .status{font-size:var(--fs-xs);font-weight:600;padding:var(--sp-1) var(--sp-3);border-radius:var(--r-pill);background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent);color:var(--fg);white-space:nowrap}
@@ -95,7 +96,11 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
     {{if $grouped}}<h2>{{.Label}}</h2>{{end}}
     <ul class="list">{{range .Rows}}
       <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
-        <span class="lead"><span class="status">{{.StatusLabel}}</span>
+        <span class="lead">
+          {{- if .Blocking}}<span class="urgent">blocking</span>{{end}}
+          {{- if .Overdue}}<span class="urgent">overdue</span>{{end}}<span class="status">{{.StatusLabel}}</span>
+          {{- if .Waiting}}<span class="need">agent waiting {{.Waiting}}</span>{{end}}
+          {{- if .Due}}<span{{if .Overdue}} class="warn"{{end}}>due {{.Due}}</span>{{end}}
           {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
           {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
           {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}

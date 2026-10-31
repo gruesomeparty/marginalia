@@ -118,6 +118,12 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Blocking and DueBy are the agent's word on urgency for this revision
+	// (issue #220): it is stopped until the reviewer answers, and by when it
+	// needs the answer (RFC 3339). A presentation hint for the inbox and the
+	// notification, never a verdict; each publish states its own.
+	Blocking bool   `json:"blocking,omitempty"`
+	DueBy    string `json:"due_by,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,
