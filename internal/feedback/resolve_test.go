@@ -184,3 +184,27 @@ func TestReplyToARequesterNoteIsAnAnswerNotDangling(t *testing.T) {
 		t.Errorf("comments=%d replies=%d outstanding=%d, want 0/1/1", res.Comments, res.Replies, res.Outstanding)
 	}
 }
+
+// Sentence suggestions stand side by side; a later note on the same sentence,
+// or on the whole block, supersedes one.
+func TestSentenceSuggestionsSupersedeBySentence(t *testing.T) {
+	text := "One is first. Two is second. Three is third."
+	at := func(q, ts, typ, body string) Event {
+		return Event{Block: "1/1", Hash: "h", Type: typ, Text: body, Sub: MakeSub(text, q), Ts: ts}
+	}
+	blocks := []Block{{ID: "1/1", Hash: "h", Text: text}}
+	events := []Event{
+		at("One is first.", "2026-07-03T10:00:00Z", TypeSuggestEdit, "One comes first."),
+		at("Two is second.", "2026-07-03T10:01:00Z", TypeSuggestEdit, "Two comes second."),
+		at("Three is third.", "2026-07-03T10:02:00Z", TypeSuggestEdit, "Three comes third."),
+		at("Two is second.", "2026-07-03T10:03:00Z", TypeComment, "on second thoughts"),
+	}
+	ready, needs := Materialize(events, blocks).Suggestions()
+	if len(ready) != 2 || len(needs) != 1 || needs[0].Sub.Quote != "Two is second." || needs[0].Reason != ReasonSubLater {
+		t.Fatalf("ready %+v, needs %+v", ready, needs)
+	}
+	events = append(events, Event{Block: "1/1", Hash: "h", Type: TypeApprove, Ts: "2026-07-03T10:04:00Z"})
+	if ready, _ = Materialize(events, blocks).Suggestions(); len(ready) != 0 {
+		t.Errorf("a later note on the block left %+v applicable", ready)
+	}
+}

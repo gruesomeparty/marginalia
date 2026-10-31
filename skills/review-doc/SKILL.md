@@ -454,8 +454,11 @@ It reads the document and its log from disk — no server needed — and splits 
 `suggest_edit` events into `applicable` (the note that stands, with a hash that
 still matches: apply the `replacement` verbatim over the `current` text) and
 `needs_confirmation`, each with a `reason` — the block changed, the note has no
-hash to check, a later note supersedes it, or the block is gone. Marginalia
-never edits the document; applying is yours.
+hash to check, a later note supersedes it, or the block is gone. A
+suggestion with `sub` is about one sentence: replace only `sub.quote` (it sits
+at `at` in the block's text) with the `replacement`, never the whole block; it
+stays applicable while that sentence reads the same. Marginalia never edits
+the document; applying is yours.
 
 ---
 

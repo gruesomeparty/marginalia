@@ -544,6 +544,12 @@ type Suggestion struct {
 	Replacement string `json:"replacement"`
 	Author      string `json:"author"`
 	Ts          string `json:"ts"`
+	// Sub is set when the suggestion replaces one sentence rather than the
+	// block (issue #218): Replacement stands in for Sub.Quote only. At is
+	// where that sentence sits in the block's normalized text now, when it
+	// can still be found, so an applier replaces exactly that span.
+	Sub *Sub     `json:"sub,omitempty"`
+	At  *Located `json:"at,omitempty"`
 	// Reason is why a suggestion needs confirmation before it is applied;
 	// empty for an applicable one.
 	Reason string `json:"reason,omitempty"`
@@ -555,6 +561,8 @@ const (
 	ReasonNoHash     = "written without a hash, so the match cannot be proven"
 	ReasonOrphaned   = "the block no longer exists in the document"
 	ReasonSuperseded = "a later note on this block supersedes it"
+	ReasonSubStale   = "the sentence changed after this was written"
+	ReasonSubLater   = "a later note on this sentence supersedes it"
 )
 
 // Suggestions splits the log's suggest_edit notes into the ones that may be
@@ -581,6 +589,29 @@ func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
 				Replacement: note.Event.Text,
 				Author:      note.Event.Author,
 				Ts:          note.Event.Ts,
+				Sub:         note.Event.Sub,
+				At:          note.At,
+			}
+			if note.Event.Sub != nil {
+				// A sentence suggestion stands or falls by its sentence: other
+				// sentences in the paragraph may move, and several sentences
+				// may each carry a suggestion of their own.
+				switch {
+				case st.Orphaned:
+					s.Reason = ReasonOrphaned
+				case note.Stale || note.At == nil:
+					s.Reason = ReasonSubStale
+				case supersededOnSentence(note, st.History):
+					s.Reason = ReasonSubLater
+				case note.Event.Sub.Hash == "":
+					s.Reason = ReasonNoHash
+				}
+				if s.Reason == "" {
+					applicable = append(applicable, s)
+				} else {
+					needsConfirmation = append(needsConfirmation, s)
+				}
+				continue
 			}
 			switch {
 			case st.Orphaned:
@@ -600,4 +631,27 @@ func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
 		}
 	}
 	return applicable, needsConfirmation
+}
+
+// supersededOnSentence reports whether a later note speaks to the same
+// sentence: a note about the whole block, or one whose sentence overlaps.
+// Answers and dangling replies are not verdicts and do not count.
+func supersededOnSentence(n Note, history []Note) bool {
+	later := false
+	for _, o := range history {
+		if o.ID == n.ID {
+			later = true // history is in log order: what follows came after
+			continue
+		}
+		if !later || o.Dangling || o.Answers != "" {
+			continue
+		}
+		if o.Event.Sub == nil {
+			return true
+		}
+		if o.At != nil && n.At != nil && o.At.Start < n.At.End && n.At.Start < o.At.End {
+			return true
+		}
+	}
+	return false
 }
