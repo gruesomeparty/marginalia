@@ -2,7 +2,14 @@ name: Security
 on:
   push:
     branches: [main]
+  # Not a required check, so a path filter is enough: govulncheck reads only
+  # what the module reaches.
   pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/security.yml'
   # Weekly, so a vulnerability published against code we already ship turns
   # the badge red without waiting for someone to push.
   schedule:
@@ -10,6 +17,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   govulncheck:
     runs-on: ubuntu-latest
