@@ -81,8 +81,10 @@ type awaitIn struct {
 
 type awaitOut struct {
 	Done   bool                  `json:"done"`
-	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), timeout or cancelled"`
+	Reason string                `json:"reason" jsonschema:"review_done, question (the reviewer asked something: answer it with reply_to_note, then wait again from the returned cursor), answer (the reviewer picked an option on one of your multiple-choice notes; choices lists every pick past the cursor, whatever the reason), timeout or cancelled"`
 	Docs   []mcpserver.DocEvents `json:"docs"`
+	// Choices are the options picked in Docs' events, whatever the reason.
+	Choices []mcpserver.Choice `json:"choices"`
 }
 
 type replyIn struct {
@@ -209,6 +211,12 @@ func (h *Host) target(r *Review, e server.Entry) mcpserver.Target {
 		},
 		Store:      e.Store,
 		Completion: r.Server.Review().Completion(),
+		Base: func() *document.Document {
+			if cur := h.Review(id); cur != nil {
+				return cur.Server.BaseOf(e.Rel)
+			}
+			return nil
+		},
 	}
 }
 
@@ -288,7 +296,7 @@ func (h *Host) awaitReviewDone(ctx context.Context, _ *mcp.CallToolRequest, in a
 	if err != nil {
 		return nil, awaitOut{}, err
 	}
-	return nil, awaitOut{Done: done, Reason: reason, Docs: events}, nil
+	return nil, awaitOut{Done: done, Reason: reason, Docs: events, Choices: mcpserver.Choices(events)}, nil
 }
 
 func (h *Host) closeReview(_ context.Context, _ *mcp.CallToolRequest, in closeIn) (*mcp.CallToolResult, closeOut, error) {

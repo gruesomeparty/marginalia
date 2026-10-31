@@ -123,6 +123,11 @@ type Meta struct {
 	// took without keeping every revision's metadata in memory. Metadata
 	// written before it existed reads as zero.
 	Rounds int `json:"rounds,omitempty"`
+	// Baseline is, per document, the last revision the reviewer finished
+	// before this one: what the page's changes are measured from (issue
+	// #214). Absent for a document nobody has finished yet, which marks
+	// nothing as changed.
+	Baseline map[string]int `json:"baseline,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

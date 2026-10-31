@@ -318,3 +318,22 @@ func TestAddressedOnASentenceIsJudgedByThatSentence(t *testing.T) {
 		t.Errorf("the listing should name the sentence the note is about: %q", out)
 	}
 }
+
+// A share-mode tap on a whole-document question (issue #215) is a reply
+// with no block; import takes it, choice and all, rather than refusing the
+// reviewer's whole file.
+func TestImportTakesAnAnswerAboutTheWholeDocument(t *testing.T) {
+	doc := seed(t, replyDoc)
+	body := `{"doc":"` + doc + `","events":[{"block":"1/2","type":"comment","text":"ok","author":"a","ts":"2026-07-03T10:00:00Z"},` +
+		`{"type":"reply","text":"sqlite","author":"a","ts":"2026-07-03T11:00:00Z","reply_to":"req:db","fields":{"choice":"sqlite"}}]}`
+	shared := filepath.Join(t.TempDir(), "review.json")
+	if err := os.WriteFile(shared, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "import", shared); err != nil {
+		t.Fatal(err)
+	}
+	if got := mustLoad(t, doc); len(got) != 2 || got[1].Block != "" || got[1].Fields["choice"] != "sqlite" {
+		t.Fatalf("merged %+v", got)
+	}
+}
