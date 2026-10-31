@@ -147,6 +147,13 @@ func (h *Host) urgency(r *Review, row *web.InboxRow) {
 		row.Overdue = t.Before(h.opts.Now())
 	}
 	row.Urgent = open && (row.Blocking || row.Overdue)
+	// The status is read off the whole log, where the last round's Done
+	// still stands. A review the agent is waiting on again is not done:
+	// file it where the reviewer looks.
+	if row.Urgent && (row.Status == web.StatusDone || row.Status == web.StatusReplied) {
+		row.Status = web.StatusInProgress
+		row.StatusLabel = web.StatusLabel(row.Status)
+	}
 }
 
 // handleRoot is the inbox. The tab counts are taken after the other

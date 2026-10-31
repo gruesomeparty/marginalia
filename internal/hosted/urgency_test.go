@@ -86,6 +86,21 @@ func TestBlockingAndOverdueReviewsListFirst(t *testing.T) {
 	if r := h.row(blocking); r.Urgent || r.Status != web.StatusDone {
 		t.Errorf("a finished blocking review is still urgent: %+v", r)
 	}
+	// Republished blocking with no reply in between, the status was done.
+	other, err := h.Publish(context.Background(), Publish{Title: "again", Docs: docs(), Blocking: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone, Author: "dev@example.com", Ts: clock.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(time.Minute)
+	if _, err := h.Republish(context.Background(), other.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nv2\n")}}, Blocking: true}); err != nil {
+		t.Fatal(err)
+	}
+	if r := h.row(h.Review(other.Meta.ID)); !r.Urgent || r.Status != web.StatusInProgress {
+		t.Errorf("a blocking republish straight after Done files as %q (urgent %v)", r.Status, r.Urgent)
+	}
 	// The agent answers after Done without republishing: replied, and still
 	// not the reviewer's to wait on.
 	events, _ := blocking.Server.Entries()[0].Store.Load()
@@ -102,8 +117,8 @@ func TestBlockingAndOverdueReviewsListFirst(t *testing.T) {
 	if _, err := h.Republish(context.Background(), blocking.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nrevised\n")}}, Blocking: true}); err != nil {
 		t.Fatal(err)
 	}
-	if r := h.row(h.Review(blocking.Meta.ID)); !r.Urgent || !r.Blocking {
-		t.Errorf("a blocking republish after Done is not urgent: %+v", r)
+	if r := h.row(h.Review(blocking.Meta.ID)); !r.Urgent || !r.Blocking || r.Status != web.StatusInProgress || !web.InTab(r.Status, web.TabNeedsMe) {
+		t.Errorf("a blocking republish after Done is not urgent under Needs me: %+v", r)
 	}
 	// And a finished review shows no due-by.
 	if err := overdue.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone, Author: "dev@example.com", Ts: clock.Format(time.RFC3339)}); err != nil {
