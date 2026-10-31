@@ -59,6 +59,11 @@ type Options struct {
 	// leaves it nil and records what the page sends, which on loopback is
 	// the reviewer's own name.
 	AuthorOf func(*http.Request) string
+	// Recorded, when set, is told of every event this server appended,
+	// after it is on disk: the document's Rel and the event as written. A
+	// hosted instance uses it to call an agent back (issue #219). It runs
+	// on the request's goroutine and must not block.
+	Recorded func(rel string, e feedback.Event)
 	// Token, when set, is required on every request (token.go), and every
 	// event is then written under Author whatever the body claims: past
 	// the token the network is not what vouches for the reviewer, the

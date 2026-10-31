@@ -76,6 +76,9 @@ type Options struct {
 	// Notify tells the human when an agent publishes or replies; nil is
 	// off. See notify.go.
 	Notify *Notifier
+	// Callbacks call an agent back when the reviewer finishes or asks;
+	// nil is off. See callback.go.
+	Callbacks *Callbacks
 	// Diagrams draws mermaid when set; nil shows the anchored source. Off
 	// by default in hosted mode: mermaid-cli is the expensive path, and an
 	// agent's input is not something to shell out for unless the operator
@@ -265,6 +268,7 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		// The inbox is at the host's root: --public-url is an origin and
 		// nothing else (publicOrigin), so a host is never mounted below "/".
 		InboxURL: "/",
+		Recorded: func(rel string, e feedback.Event) { h.recorded(meta.ID, rel, e) },
 	})
 	return &Review{Meta: meta, Server: srv}, nil
 }
@@ -304,6 +308,10 @@ type Publish struct {
 	Review string // shipped preset
 	Config string // inline review YAML
 	Theme  string
+	// Callback is the URL to call back (callback.go), checked against the
+	// allow-list before anything is written. A republish without one keeps
+	// the review's.
+	Callback string
 }
 
 // Publish stores a new review — revision 1 of every document, then its
@@ -316,7 +324,7 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 	now := h.opts.Now().UTC().Format(time.RFC3339)
 	meta := Meta{
 		ID: id, Title: p.Title, Agent: p.Agent, Revision: 1,
-		Review: p.Review, Config: p.Config, Theme: p.Theme,
+		Review: p.Review, Config: p.Config, Theme: p.Theme, Callback: p.Callback,
 		Created: now, Updated: now,
 	}
 	return h.publish(ctx, meta, p)
@@ -349,6 +357,9 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 	}
 	if p.Theme != "" {
 		meta.Theme = p.Theme
+	}
+	if p.Callback != "" {
+		meta.Callback = p.Callback
 	}
 	meta.Docs = nil
 	// A document this revision drops keeps its events in the wait's count;
@@ -389,6 +400,11 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	// limit and its value.
 	if err := h.checkPublish(meta, p); err != nil {
 		return nil, err
+	}
+	if p.Callback != "" {
+		if err := h.opts.Callbacks.Check(p.Callback); err != nil {
+			return nil, err
+		}
 	}
 	id, n := meta.ID, meta.Revision
 	var docBytes int64
@@ -592,6 +608,10 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), strings.Join(how, " or "))
 	h.logf("marginalia: limits: %s\n", h.describeLimits())
 	go h.sweeper(ctx)
+	if h.opts.Callbacks != nil {
+		go h.opts.Callbacks.Run(ctx)
+		defer h.opts.Callbacks.Close()
+	}
 	if h.opts.Notify != nil {
 		go h.opts.Notify.run(ctx)
 		defer h.opts.Notify.Close()

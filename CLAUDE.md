@@ -565,6 +565,15 @@ users are agents, not humans.
   and never a human's note. `Sweep` (startup, then hourly) moves a review
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
+  Callbacks (`hosted/callback.go`, issue #219) call an agent back on a
+  human's `review_done` or `question` (`server.Options.Recorded`, told of
+  every appended event): `publish_document`'s `callback_url` lands on
+  `Meta.Callback` (inherited by a republish), the body is ids, cursor and
+  event only, signed HMAC-SHA256 under a per-review secret derived from
+  `MARGINALIA_CALLBACK_SECRET` and returned once. Off without
+  `MARGINALIA_CALLBACK_HOSTS`; https and listed hosts only, and the dialer
+  refuses a non-public address after resolution (no proxy, no redirects).
+  Questions debounce per review; a Done is never held.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a

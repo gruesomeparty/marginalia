@@ -52,6 +52,10 @@ tools below take a `session_id` or a path. To revise, call `publish_document`
 again with the `review_id`: the reviewer's notes re-anchor against the new
 text, stale where a block changed and orphaned where it is gone, exactly as
 `review_status` reports after a local edit.
+A job that should stop rather than wait (CI, say) can pass `callback_url`:
+the host POSTs a signed notice, with the cursor to read from, when the
+reviewer submits Done or asks a question, if the operator allows that host.
+Keep the `callback_secret` the publish returns and verify the signature.
 
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.

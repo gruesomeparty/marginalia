@@ -140,12 +140,19 @@ whose email becomes the author of what they write; and an agent, holding
 			if err != nil {
 				return err
 			}
+			callbacks, err := hosted.NewCallbacks(os.Getenv(CallbackHostsEnv), os.Getenv(CallbackSecretEnv))
+			if err != nil {
+				return err
+			}
+			if callbacks != nil {
+				callbacks.Log = cmd.ErrOrStderr()
+			}
 			h, err := hosted.Open(ctx, hosted.Options{
 				Store: store, PublicURL: publicURL, Token: token, Log: cmd.ErrOrStderr(),
 				AgentName: firstOf(agentName, os.Getenv(AgentNameEnv)),
 				HumanAuth: humanAuth, DevIdentity: devIdentity, Reviewers: reviewersFrom(reviewers, os.Getenv(ReviewersEnv)),
 				OAuth: oauth, OAuthIssuer: oauthIssuer, OAuthAudience: oauthAud,
-				Limits: limits, Diagrams: drawer, Notify: notifier,
+				Limits: limits, Diagrams: drawer, Notify: notifier, Callbacks: callbacks,
 			})
 			if err != nil {
 				return err
@@ -187,6 +194,15 @@ whose email becomes the author of what they write; and an agent, holding
 	cmd.Flags().StringVar(&mmdc, "mmdc", "", "path to mermaid-cli (default: mmdc on PATH)")
 	return cmd
 }
+
+// CallbackHostsEnv is the allow-list of hosts an agent's callback_url may
+// name (comma-separated; "*.example.com" for a domain's subdomains). Unset,
+// callbacks are off. CallbackSecretEnv is the key every review's signing
+// secret is derived from. Env only, like every credential.
+const (
+	CallbackHostsEnv  = "MARGINALIA_CALLBACK_HOSTS"
+	CallbackSecretEnv = "MARGINALIA_CALLBACK_SECRET"
+)
 
 // NotifyURLEnv stands in for --notify-url: a comma-separated list.
 const NotifyURLEnv = "MARGINALIA_NOTIFY_URL"
