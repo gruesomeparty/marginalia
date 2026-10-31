@@ -1,0 +1,33 @@
+name: Bug report
+description: Something Marginalia does is wrong or broken.
+body:
+  - type: markdown
+    attributes:
+      value: "This repository is public. Describe the structure of the document involved, never its content, and include no secrets."
+  - type: input
+    id: invocation
+    attributes:
+      label: What you ran
+      placeholder: marginalia serve spec.md --review schema
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The error, or what the page or the log did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `marginalia version`, and the mode (serve, mcp, export/import, host).
+    validations:
+      required: true

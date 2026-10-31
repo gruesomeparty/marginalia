@@ -1,0 +1,25 @@
+name: Feature request
+description: A format, option or behaviour Marginalia should have.
+body:
+  - type: markdown
+    attributes:
+      value: "This repository is public. Describe the structure of the documents involved, never their content, and include no secrets."
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The review you wanted to run and where Marginalia fell short.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What Marginalia should do instead.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Done when
+      description: How you would check that it works.
