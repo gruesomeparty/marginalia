@@ -7,6 +7,7 @@
 //	reviews/<id>/meta/<n>.json   versioned metadata; the highest n wins
 //	reviews/<id>/rev/<n>/<name>  revision n of each document, immutable
 //	reviews/<id>/log/<name>      the document's append-only feedback log
+//	reviews/<id>/asset/<n>/<name> an image published with revision n, immutable
 //
 // Startup lists that prefix once and rebuilds every review in memory; from
 // then on the process is the single writer, logs are served from memory and
@@ -118,6 +119,9 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Assets is every image the current revision serves, by name, with the
+	// revision whose blob holds it (reviews/<id>/asset/<rev>/<name>).
+	Assets map[string]AssetMeta `json:"assets,omitempty"`
 }
 
 // maxNameLen bounds a document name. Long enough for any real file name,

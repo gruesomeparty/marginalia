@@ -40,7 +40,7 @@ another machine.
 
 | Tool | What it does |
 |---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. Images the documents show go in `assets: [{name, content_base64, type}]` (PNG, JPEG, WebP, SVG): a markdown image or link naming one points at the review's copy, served from `/r/<id>/assets/<rev>/<name>` under a sandboxing policy, and a revision keeps the assets it does not resend. Review pages load images from this host only. |
 | `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
 | `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
 
@@ -59,6 +59,8 @@ blindly:
 |---|---|---|
 | bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
 | documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
+| bytes per asset (image) | 2 MiB | `--limit-asset-bytes` / `MARGINALIA_LIMIT_ASSET_BYTES` |
+| assets per publish | 20 | `--limit-assets-per-publish` / `MARGINALIA_LIMIT_ASSETS_PER_PUBLISH` |
 | revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
 | publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
 | open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |

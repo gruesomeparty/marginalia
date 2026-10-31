@@ -132,6 +132,9 @@ func (h *Host) untilClosed(ctx context.Context) (context.Context, context.Cancel
 type Review struct {
 	Meta   Meta
 	Server *server.Server
+	// assets is every asset's bytes (Meta.Assets), held from publish or
+	// startup on so serving one never reads the store.
+	assets map[string][]byte
 }
 
 // Open loads every review in opts.Store and returns a host serving them. A
@@ -220,7 +223,7 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 		if err != nil {
 			return nil, err
 		}
-		doc, err := document.ParseBytes(name, src)
+		doc, err := document.ParseBytesWith(name, src, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -229,6 +232,14 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 	r, err := h.build(meta, docs)
 	if err != nil {
 		return nil, err
+	}
+	r.assets = make(map[string][]byte, len(meta.Assets))
+	for name, a := range meta.Assets {
+		raw, err := h.store.GetBlob(ctx, assetKey(id, a.Rev, name))
+		if err != nil {
+			return nil, fmt.Errorf("asset %s: %w", name, err)
+		}
+		r.assets[name] = raw
 	}
 	// Warm the logs: a read through now is the last time the backend sees a
 	// read for them.
@@ -304,6 +315,9 @@ type Publish struct {
 	Review string // shipped preset
 	Config string // inline review YAML
 	Theme  string
+	// Assets are images published beside the documents. A republish adds
+	// or replaces the ones it sends and keeps the rest.
+	Assets []Asset
 }
 
 // Publish stores a new review — revision 1 of every document, then its
@@ -395,6 +409,30 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	for _, d := range p.Docs {
 		docBytes += int64(len(d.Content))
 	}
+	// Assets: the earlier revision's carry over, the ones sent now are
+	// added or replace them, and only the new bytes count as stored.
+	meta.Assets = maps.Clone(meta.Assets)
+	assets := map[string][]byte{}
+	if prev := h.Review(id); prev != nil {
+		maps.Copy(assets, prev.assets)
+	}
+	sent := map[string]bool{}
+	for _, a := range p.Assets {
+		typ, err := checkAsset(a)
+		if err != nil {
+			return nil, err
+		}
+		if sent[a.Name] {
+			return nil, fmt.Errorf("asset %q is listed twice", a.Name)
+		}
+		sent[a.Name] = true
+		if meta.Assets == nil {
+			meta.Assets = map[string]AssetMeta{}
+		}
+		meta.Assets[a.Name] = AssetMeta{Rev: n, Type: typ, Bytes: int64(len(a.Content))}
+		assets[a.Name] = a.Content
+		docBytes += int64(len(a.Content))
+	}
 	meta.Bytes += docBytes
 	seen := map[string]bool{}
 	entries := make([]server.Entry, 0, len(p.Docs))
@@ -412,7 +450,7 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 		if document.FormatFor(d.Name) == "" {
 			return nil, session.UnsupportedInput(filepath.Ext(d.Name))
 		}
-		doc, err := document.ParseBytes(d.Name, d.Content)
+		doc, err := document.ParseBytesWith(d.Name, d.Content, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
@@ -441,9 +479,15 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish) (*Review, erro
 	if err != nil {
 		return nil, err
 	}
+	r.assets = assets
 	for _, d := range p.Docs {
 		if err := h.store.PutBlob(ctx, revKey(id, n, d.Name), d.Content); err != nil {
 			return nil, fmt.Errorf("hosted: storing %s: %w", d.Name, err)
+		}
+	}
+	for _, a := range p.Assets {
+		if err := h.store.PutBlob(ctx, assetKey(id, n, a.Name), a.Content); err != nil {
+			return nil, fmt.Errorf("hosted: storing asset %s: %w", a.Name, err)
 		}
 	}
 	raw, err := json.Marshal(meta)
@@ -515,6 +559,7 @@ func (h *Host) routes() {
 	// the other.
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
+	mux.Handle("GET /r/{id}/assets/{rev}/{name}", h.requireHuman(http.HandlerFunc(h.handleAsset)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {
@@ -547,8 +592,15 @@ func (h *Host) handleReview(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Images come from this host or nowhere: a published asset is served
+	// here, and an image a document links elsewhere is not fetched.
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	http.StripPrefix("/r/"+id, rv.Server.Handler()).ServeHTTP(w, r)
 }
+
+// pageCSP is the policy on a hosted review page. It restricts images only;
+// the page's own script and styles are inline, and it makes no other request.
+const pageCSP = "img-src 'self' data:"
 
 // Handler is the whole listener's mux.
 func (h *Host) Handler() http.Handler { return h.mux }
