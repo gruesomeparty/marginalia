@@ -80,7 +80,7 @@ that log is the human's answers, not your questions.
 Hand one document to several people and each one's **Done** records only their
 own completion; the review is done when `complete_when` says so — `any` (the
 default), `all`, or `quorum:N` — counted among `reviewers:` when you name them,
-or among everyone who has commented. The page names each note's author once
+or among everyone who has commented — in any round, so with `all` and no list, someone who commented once and moved on holds a later round open; name `reviewers:` for a review that runs several rounds. The page names each note's author once
 more than one person has spoken, marks your own, shows "Done (1 of 3)", and
 picks up the others' notes as they are saved. Each block reports every
 reviewer's latest word (`by_author`) and an `overall` verdict where a rejection
