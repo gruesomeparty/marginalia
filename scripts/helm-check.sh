@@ -51,6 +51,10 @@ if render --set networkPolicy.enabled=true --set networkPolicy.allowHelmTest=fal
   echo "helm-check: allowHelmTest=false still admits the test pod" >&2; exit 1
 fi
 echo "helm-check: ok: the helm test exception can be turned off"
+if render --show-only templates/tests/healthz.yaml | grep -q 'app.kubernetes.io/name:'; then
+  echo "helm-check: the test pod carries the Service's selector labels" >&2; exit 1
+fi
+echo "helm-check: ok: the test pod is not a Service endpoint"
 
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \

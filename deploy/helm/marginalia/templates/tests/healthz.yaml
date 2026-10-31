@@ -3,7 +3,10 @@ kind: Pod
 metadata:
   name: {{ include "marginalia.fullname" . }}-healthz
   labels:
-    {{- include "marginalia.labels" . | nindent 4 }}
+    {{- /* Not marginalia.labels: those carry the Service's selector, and the test pod must not become its endpoint. */}}
+    helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/component: helm-test
   annotations:
     helm.sh/hook: test
