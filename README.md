@@ -493,6 +493,8 @@ actions:
 
 builtins: true           # false drops comment/suggest_edit/question/approve/reject
 require_verdict: false   # true: no review_done until every block is answered
+complete_when: any       # all, or quorum:2 — when several reviewers' Dones finish the review
+reviewers: [ana, bo]     # optional: who counts; with it, "all" means these people
 
 readonly:
   - "2"                  # section 2 is context: shown, muted, not commentable

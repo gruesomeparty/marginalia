@@ -1,11 +1,14 @@
 package mcpserver
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
 // ask puts one question in a document's log, the way a reviewer would, and
@@ -263,4 +266,38 @@ func mustLoadN(t *testing.T, doc string) int {
 		t.Fatal(err)
 	}
 	return len(events)
+}
+
+// The reads report done by the review's completion rule (#53): with two
+// reviewers named and complete_when: all, one Done is half of it.
+func TestReadsFollowTheCompletionRule(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "spec.md")
+	if err := os.WriteFile(path, []byte("# Spec\n\nText.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := TargetOf(path)
+	target.Completion = review.Completion{Rule: review.CompleteAll, Reviewers: []string{"ana", "bo"}}
+	if err := target.Store.Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"}); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := EventsSince(target, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Done || ev.DoneBy != 1 || ev.DoneNeeded != 2 {
+		t.Errorf("feedback_since: done %v, %d of %d", ev.Done, ev.DoneBy, ev.DoneNeeded)
+	}
+	st, err := StatusOf(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Done || st.DoneBy != 1 || st.DoneNeeded != 2 {
+		t.Errorf("review_status: done %v, %d of %d", st.Done, st.DoneBy, st.DoneNeeded)
+	}
+	if err := target.Store.Append(feedback.Event{Type: feedback.TypeReviewDone, Author: "bo"}); err != nil {
+		t.Fatal(err)
+	}
+	if ev, _ := EventsSince(target, 0); !ev.Done {
+		t.Error("both reviewers done, the read still says not done")
+	}
 }

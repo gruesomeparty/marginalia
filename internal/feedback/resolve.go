@@ -173,6 +173,26 @@ type Resolution struct {
 	DoneNeeded int `json:"done_needed"`
 }
 
+// Reviewers reads who has reviewed a log: finished are the authors of a
+// review_done, in the order they first said it; participants everyone who
+// wrote anything but a reply or an addressed claim, which are the agent's
+// side of the loop (a reviewer who only ever replied is not counted, and is
+// counted the moment they say Done).
+func Reviewers(events []Event) (finished, participants []string) {
+	done, seen := map[string]bool{}, map[string]bool{}
+	for _, e := range events {
+		if e.Type != TypeReply && e.Type != TypeAddressed && !seen[e.Author] {
+			seen[e.Author] = true
+			participants = append(participants, e.Author)
+		}
+		if e.Type == TypeReviewDone && !done[e.Author] {
+			done[e.Author] = true
+			finished = append(finished, e.Author)
+		}
+	}
+	return finished, participants
+}
+
 // Complete applies a completion rule to the resolution: Done becomes
 // whether the rule is met, and the tally is what it counted. Nothing is
 // written: completion is a reading of the log, as staleness is.
@@ -211,17 +231,9 @@ func Materialize(events []Event, blocks []Block) Resolution {
 	byBlock := make(map[string][]Note, len(order))
 	replies := map[string][]Reply{}
 	var seen []string // orphan blocks, in the order the log mentions them
-	finished, participating := map[string]bool{}, map[string]bool{}
+	res.Finished, res.Participants = Reviewers(events)
 	for _, e := range events {
-		if e.Type != TypeReply && e.Type != TypeAddressed && !participating[e.Author] {
-			participating[e.Author] = true
-			res.Participants = append(res.Participants, e.Author)
-		}
 		if e.Type == TypeReviewDone {
-			if !finished[e.Author] {
-				finished[e.Author] = true
-				res.Finished = append(res.Finished, e.Author)
-			}
 			continue
 		}
 		if e.Block == "" {

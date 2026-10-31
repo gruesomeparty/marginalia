@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/server"
 	"github.com/gruesomeparty/marginalia/internal/session"
 )
@@ -18,11 +19,14 @@ import (
 // disk-backed: when the agent's session ends, the human's page stops saving,
 // but nothing already said is lost and the next agent turn still reads it all.
 type live struct {
-	id     string
-	url    string
-	docs   []string
-	cancel context.CancelFunc
-	done   chan error // closed when Serve returns, after its shutdown drain
+	id   string
+	url  string
+	docs []string
+	// completion is the review's rule for done, which the reads need and
+	// the disk does not hold.
+	completion review.Completion
+	cancel     context.CancelFunc
+	done       chan error // closed when Serve returns, after its shutdown drain
 }
 
 func (s *Server) lookup(id string) *live {

@@ -67,7 +67,9 @@ func (s *Server) resolution(e *Entry, events []feedback.Event) feedback.Resoluti
 	for _, b := range doc.Blocks {
 		blocks = append(blocks, feedback.Block{ID: b.ID, Hash: b.Hash, Text: b.PlainText})
 	}
-	return feedback.Materialize(events, blocks)
+	res := feedback.Materialize(events, blocks)
+	res.Complete(s.Review().Completion())
+	return res
 }
 
 // renderPage renders one document plus the navigation state of the whole set,
