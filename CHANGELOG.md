@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0](https://github.com/gruesomeparty/marginalia/compare/v0.5.0...v0.6.0) (2026-10-31)
+
+
+### Features
+
+* agent-facing done signals follow the review's completion rule ([#211](https://github.com/gruesomeparty/marginalia/issues/211)) ([9d8a9c0](https://github.com/gruesomeparty/marginalia/commit/9d8a9c074b76bf57cda2ccfcbd3bc1b13819ef3b))
+* **feedback:** per-reviewer verdicts and a completion rule ([#208](https://github.com/gruesomeparty/marginalia/issues/208)) ([c069c01](https://github.com/gruesomeparty/marginalia/commit/c069c016b7b768c3096dd34270aa36236ce9b0fe))
+* **web:** show who wrote each note and follow other reviewers live ([#212](https://github.com/gruesomeparty/marginalia/issues/212)) ([00d5b96](https://github.com/gruesomeparty/marginalia/commit/00d5b9608f9885fd929a7390b36fddc7b9a9701f))
+
 ## [0.5.0](https://github.com/gruesomeparty/marginalia/compare/v0.4.0...v0.5.0) (2026-10-31)
 
 
