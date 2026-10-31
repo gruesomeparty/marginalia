@@ -23,6 +23,8 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-
 header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--rule);padding:var(--sp-4) var(--sp-5);display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5)}
 header strong{font-size:var(--fs-lg)}
 header .count{color:var(--muted)}
+header .stats{margin-left:auto;color:var(--accent)}
+header .stats:focus-visible{outline:none;box-shadow:var(--ring)}
 main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .tabs{display:flex;gap:var(--sp-2);margin:0 0 var(--sp-5);padding:0;list-style:none;flex-wrap:wrap}
 .tabs a{display:inline-block;padding:var(--sp-2) var(--sp-4);border:1px solid var(--rule);border-radius:var(--r-pill);color:var(--fg);text-decoration:none}
@@ -74,6 +76,7 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 <header>
   <strong>Marginalia</strong>
   <span class="count">{{.All}} review{{if ne .All 1}}s{{end}}</span>
+  <a class="stats" href="/stats">Stats</a>
 </header>
 <main>
   <nav aria-label="Which reviews to show">

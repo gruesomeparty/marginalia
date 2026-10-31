@@ -14,7 +14,7 @@ import (
 // pages are the templates that carry a stylesheet. Each includes tokens.css
 // — the token and palette declarations, the one place literal values may
 // live — and then its own rules, which must speak only in tokens.
-var pages = []string{"review.html.tmpl", "inbox.html.tmpl"}
+var pages = []string{"review.html.tmpl", "inbox.html.tmpl", "stats.html.tmpl"}
 
 // tokens is the declarations file, shared by every page.
 func tokens(t *testing.T) string {
