@@ -24,6 +24,7 @@ One listener, four surfaces:
 | | |
 |---|---|
 | `/` | The **inbox**: every review, newest activity first, with what each one is waiting on (*awaiting you*, *in progress*, *done*, or *agent replied since you finished*) and its counts. Tabs *Needs me* / *Done* / *All* and the filters live in the query string, so a filtered inbox is a link; `GET /api/reviews` is the same list as JSON. Server-rendered, readable with no script, works on a phone. |
+| `/stats` | **How the loop is doing**: per agent, reviews, time to first look and to Done (median and p90, from publishing), rounds per finished review, notes by type, and what became of the agent's `addressed` claims (confirmed, reopened, not yet checked, text unchanged). Filter by period (`period=7d|30d|90d`), `agent` and `framing`; `GET /api/stats` is the same as JSON. Counts and timings only, never document or note text. Only the documents a review's current revision serves are counted. |
 | `/r/<id>/` | One review's pages and API, exactly as `serve` mounts them at `/`, plus an **← Inbox** link and the `i` key. |
 | `/mcp` | The tools over Streamable HTTP. |
 | `/healthz` | For the platform. |
@@ -40,7 +41,7 @@ another machine.
 
 | Tool | What it does |
 |---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. Images the documents show go in `assets: [{name, content_base64, type}]` (PNG, JPEG, WebP, SVG): a markdown image or link naming one points at the review's copy, served from `/r/<id>/assets/<rev>/<name>` under a sandboxing policy, and a revision keeps the assets it does not resend. Review pages load images from this host only. |
 | `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
 | `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
 
@@ -59,6 +60,8 @@ blindly:
 |---|---|---|
 | bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
 | documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
+| bytes per asset (image) | 2 MiB | `--limit-asset-bytes` / `MARGINALIA_LIMIT_ASSET_BYTES` |
+| assets per publish | 20 | `--limit-assets-per-publish` / `MARGINALIA_LIMIT_ASSETS_PER_PUBLISH` |
 | revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
 | publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
 | open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
@@ -250,7 +253,7 @@ HEAD):
 |---|---|
 | publish, `n` documents | `n + 1` PUT (documents and metadata), plus `n + 1` one-key LIST (the guard that keeps a blob off a log's key) |
 | one comment, reply, claim or `review_done` | exactly **1 PUT** |
-| serving the inbox or a review page | **0** — state is in memory after startup |
+| serving the inbox, stats or a review page | **0** — state is in memory after startup |
 | `await_review_done`, `feedback_since`, `review_status` | **0** — the change token is in memory |
 | startup | 1 LIST per 1000 keys, then per review: 1 GET for the metadata, 1 GET per document of the current revision, and 1 LIST plus 1 GET per event for each log |
 | archiving a review | 1 COPY + 1 DELETE per object |

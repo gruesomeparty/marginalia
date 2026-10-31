@@ -23,6 +23,10 @@ type Limits struct {
 	DocumentBytes int64
 	// DocumentsPerPublish caps one publish's document set.
 	DocumentsPerPublish int
+	// AssetBytes caps one image published beside the documents;
+	// AssetsPerPublish caps how many one publish may carry.
+	AssetBytes       int64
+	AssetsPerPublish int
 	// RevisionsPerReview caps how often a review may be republished.
 	RevisionsPerReview int
 	// PublishesPerHour caps publishes per agent identity, sliding.
@@ -44,6 +48,8 @@ func DefaultLimits() Limits {
 	return Limits{
 		DocumentBytes:       512 << 10,
 		DocumentsPerPublish: 20,
+		AssetBytes:          2 << 20,
+		AssetsPerPublish:    20,
 		RevisionsPerReview:  50,
 		PublishesPerHour:    30,
 		OpenReviews:         200,
@@ -62,6 +68,12 @@ func (l Limits) withDefaults() Limits {
 	}
 	if l.DocumentsPerPublish <= 0 {
 		l.DocumentsPerPublish = d.DocumentsPerPublish
+	}
+	if l.AssetBytes <= 0 {
+		l.AssetBytes = d.AssetBytes
+	}
+	if l.AssetsPerPublish <= 0 {
+		l.AssetsPerPublish = d.AssetsPerPublish
 	}
 	if l.RevisionsPerReview <= 0 {
 		l.RevisionsPerReview = d.RevisionsPerReview
@@ -124,6 +136,15 @@ func (h *Host) checkPublish(meta Meta, p Publish) error {
 			return limited("bytes per document", l.DocumentBytes, fmt.Sprintf("%d in %s", n, d.Name))
 		}
 		bytes += int64(len(d.Content))
+	}
+	if n := len(p.Assets); n > l.AssetsPerPublish {
+		return limited("assets per publish", l.AssetsPerPublish, n)
+	}
+	for _, a := range p.Assets {
+		if n := int64(len(a.Content)); n > l.AssetBytes {
+			return limited("bytes per asset", l.AssetBytes, fmt.Sprintf("%d in %s", n, a.Name))
+		}
+		bytes += int64(len(a.Content))
 	}
 	if meta.Revision > l.RevisionsPerReview {
 		return limited("revisions per review", l.RevisionsPerReview, meta.Revision)
