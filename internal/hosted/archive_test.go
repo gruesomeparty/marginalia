@@ -155,3 +155,37 @@ func TestWithdrawIsThePublishersUntilTheReviewerStarts(t *testing.T) {
 		t.Errorf("archive holds %v", got)
 	}
 }
+
+// A note routed to a review's server just as it is archived must not land
+// beside the archive, where a restore would have to pick one log over the
+// other: once archiving starts, the old server's appends are refused.
+func TestArchiveFreezesTheOldServersAppends(t *testing.T) {
+	store := storage.NewMemory()
+	h, _ := open(t, store)
+	ctx := context.Background()
+	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
+	stale := r.Server.Entries()[0].Store
+	if err := stale.Append(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "before", Ts: "2026-10-01T09:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Archive(ctx, r.Meta.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := stale.Append(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "late", Ts: "2026-10-01T09:00:01Z"}); err == nil {
+		t.Fatal("an append to an archived review's old server was accepted")
+	}
+	if keys, _ := store.List(ctx, prefixReviews); len(keys) != 0 {
+		t.Fatalf("something landed beside the archive: %v", keys)
+	}
+	back, err := h.Restore(ctx, r.Meta.ID, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := back.Server.Entries()[0].Store.Load()
+	if err != nil || len(events) != 1 || events[0].Text != "before" {
+		t.Fatalf("restored log = %v, %v", events, err)
+	}
+	if err := back.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "after", Ts: "2026-10-01T09:00:02Z"}); err != nil {
+		t.Errorf("a restored review refuses notes: %v", err)
+	}
+}

@@ -111,6 +111,9 @@ type Host struct {
 	// limits and use are the caps and what counts against them.
 	limits Limits
 	use    usage
+	// meter is the layer under the cache that measures logs and freezes a
+	// review's appends while it is archived (metered.go).
+	meter *metered
 }
 
 func (h *Host) interrupt() { h.closeOnce.Do(func() { close(h.closing) }) }
@@ -160,7 +163,8 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	}
 	h := &Host{opts: opts, reviews: map[string]*Review{}, archived: map[string]*Archived{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
 	h.use.publishes = map[string][]time.Time{}
-	h.store = storage.NewWriteThrough(&metered{Store: opts.Store, h: h, bytes: map[string]int64{}})
+	h.meter = &metered{Store: opts.Store, h: h, bytes: map[string]int64{}}
+	h.store = storage.NewWriteThrough(h.meter)
 	if err := h.load(ctx); err != nil {
 		return nil, err
 	}

@@ -105,11 +105,25 @@ func (h *Host) ArchivedReviews() []*Archived {
 // knows when; a move interrupted halfway is finished by the next one.
 func (h *Host) archiveLocked(ctx context.Context, r *Review, by string) error {
 	id := r.Meta.ID
+	prefix := prefixReviews + id + "/"
+	// Appends stop first, and stay stopped: the old server may still be
+	// answering a request routed before the review left the table.
+	h.meter.freeze(prefix)
+	return h.moveFrozen(ctx, r, by)
+}
+
+// moveFrozen is archiveLocked once the review's appends are frozen; on a
+// failure it lets them through again, since the review is still served.
+func (h *Host) moveFrozen(ctx context.Context, r *Review, by string) error {
+	id := r.Meta.ID
+	prefix := prefixReviews + id + "/"
 	now := h.opts.Now().UTC()
 	if err := h.mark(ctx, markKey(prefixReviews, id, markArchived, now), by); err != nil {
+		h.meter.thaw(prefix)
 		return fmt.Errorf("hosted: archiving %s: %w", id, err)
 	}
-	if err := h.store.Move(ctx, prefixReviews+id+"/", prefixArchive+id+"/"); err != nil {
+	if err := h.store.Move(ctx, prefix, prefixArchive+id+"/"); err != nil {
+		h.meter.thaw(prefix)
 		return fmt.Errorf("hosted: archiving %s: %w", id, err)
 	}
 	h.mu.Lock()
@@ -157,16 +171,22 @@ func (h *Host) Withdraw(ctx context.Context, id, agent string) error {
 	if r.Meta.Agent != agent {
 		return fmt.Errorf("review %s was published by another agent; only its publisher can withdraw it", id)
 	}
+	// Freeze before looking, so a first note cannot land between the check
+	// and the move.
+	prefix := prefixReviews + id + "/"
+	h.meter.freeze(prefix)
 	for _, e := range r.Server.Entries() {
 		events, err := e.Store.Load()
 		if err != nil {
+			h.meter.thaw(prefix)
 			return fmt.Errorf("hosted: %s: %w", e.Store.Path(), err)
 		}
 		if len(events) > 0 {
+			h.meter.thaw(prefix)
 			return fmt.Errorf("review %s cannot be withdrawn: the reviewer has started on it, so archiving it is theirs to do — publish a revision with review_id instead", id)
 		}
 	}
-	return h.archiveLocked(ctx, r, "agent:"+agent)
+	return h.moveFrozen(ctx, r, "agent:"+agent)
 }
 
 // Restore brings an archived review back to the inbox, as it was. The
@@ -187,6 +207,8 @@ func (h *Host) Restore(ctx context.Context, id, by string) (*Review, error) {
 	if err := h.store.Move(ctx, prefixArchive+id+"/", prefixReviews+id+"/"); err != nil {
 		return nil, fmt.Errorf("hosted: restoring %s: %w", id, err)
 	}
+	// The tree is back where its server will write; let appends through.
+	h.meter.thaw(prefixReviews + id + "/")
 	r, err := h.open(ctx, id, a.version)
 	if err != nil {
 		return nil, fmt.Errorf("hosted: restoring %s: %w", id, err)

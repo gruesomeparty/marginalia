@@ -2,6 +2,7 @@ package hosted
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
@@ -22,6 +23,34 @@ type metered struct {
 	mu sync.Mutex
 	// bytes is each log's size as this layer last knew it, by key.
 	bytes map[string]int64
+	// gate and frozen stop appends under a review's prefix while it is
+	// moved, and after: an append already routed to the review's server
+	// finishes before the move starts (freeze waits for it), and one
+	// arriving later is refused rather than landing beside the archived
+	// tree, where a restore would have to choose between the two logs.
+	gate   sync.RWMutex
+	frozen map[string]bool
+}
+
+// errArchived is what an append to a frozen review gets.
+var errArchived = errors.New("hosted: this review has been archived")
+
+// freeze refuses appends under prefix from now on, once every append in
+// flight has finished.
+func (m *metered) freeze(prefix string) {
+	m.gate.Lock()
+	defer m.gate.Unlock()
+	if m.frozen == nil {
+		m.frozen = map[string]bool{}
+	}
+	m.frozen[prefix] = true
+}
+
+// thaw lets appends under prefix through again.
+func (m *metered) thaw(prefix string) {
+	m.gate.Lock()
+	defer m.gate.Unlock()
+	delete(m.frozen, prefix)
 }
 
 func (m *metered) ReadLog(ctx context.Context, key string) ([][]byte, error) {
@@ -43,6 +72,13 @@ func (m *metered) ReadLog(ctx context.Context, key string) ([][]byte, error) {
 }
 
 func (m *metered) AppendLog(ctx context.Context, key string, line []byte) error {
+	m.gate.RLock()
+	defer m.gate.RUnlock()
+	for prefix := range m.frozen {
+		if strings.HasPrefix(key, prefix) {
+			return errArchived
+		}
+	}
 	if err := m.Store.AppendLog(ctx, key, line); err != nil {
 		return err
 	}

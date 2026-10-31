@@ -572,7 +572,11 @@ users are agents, not humans.
   empty — once the reviewer has written, archiving is their decision. Each
   move writes a marker blob first (`<id>/archived/<ns>`, `<id>/restored/<ns>`,
   time in the key so startup's listing already knows it); a restore counts
-  as activity, so the sweep does not take it straight back. Archived
+  as activity, so the sweep does not take it straight back. Before a
+  move, `metered.freeze` waits out in-flight appends under the review's
+  prefix and refuses later ones until a restore thaws it, so a note
+  routed to the old server cannot split the log across both trees (and
+  `Withdraw` freezes before its emptiness check). Archived
   reviews' metadata is read once at startup for the tab; their logs are not.
   Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
