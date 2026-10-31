@@ -96,6 +96,22 @@ func TestBlockingAndOverdueReviewsListFirst(t *testing.T) {
 	if r := h.row(blocking); r.Status != web.StatusReplied || r.Urgent || r.Blocking {
 		t.Errorf("an agent's reply after Done made a blocking review urgent again: %+v", r)
 	}
+	// A second round: the agent republishes, still blocking. The reviewer's
+	// Done was for the last revision, so this one is urgent again.
+	clock = clock.Add(time.Minute)
+	if _, err := h.Republish(context.Background(), blocking.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nrevised\n")}}, Blocking: true}); err != nil {
+		t.Fatal(err)
+	}
+	if r := h.row(h.Review(blocking.Meta.ID)); !r.Urgent || !r.Blocking {
+		t.Errorf("a blocking republish after Done is not urgent: %+v", r)
+	}
+	// And a finished review shows no due-by.
+	if err := overdue.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone, Author: "dev@example.com", Ts: clock.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	if r := h.row(overdue); r.DueBy != nil || r.Overdue || r.Urgent {
+		t.Errorf("a finished review still shows its due-by: %+v", r)
+	}
 }
 
 // A republish states its own urgency: one that drops blocking is no longer
@@ -142,6 +158,23 @@ func TestABlockingPublishSkipsTheDebounce(t *testing.T) {
 	}
 	if !strings.Contains(posts[1].body, "blocking") {
 		t.Errorf("the notification does not say it is blocking: %q", posts[1].body)
+	}
+	// A plain republish inside the window waits; a blocking one after it
+	// carries it along rather than leaving it to follow a minute later.
+	clock = clock.Add(5 * time.Second)
+	if _, err := h.Republish(ctx, r.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\ny\n")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rc.wait(2); len(got) != 2 {
+		t.Fatalf("a plain republish inside the window went out: %d POSTs", len(got))
+	}
+	clock = clock.Add(5 * time.Second)
+	if _, err := h.Republish(ctx, r.Meta.ID, Publish{Docs: []Document{{Name: "spec.md", Content: []byte(specDoc + "\nz\n")}}, Blocking: true}); err != nil {
+		t.Fatal(err)
+	}
+	posts = rc.wait(3)
+	if len(posts) != 3 || !strings.Contains(posts[2].body, "2 updates") {
+		t.Fatalf("the blocking republish did not fold the waiting one in: %d POSTs, last %q", len(posts), posts[len(posts)-1].body)
 	}
 }
 

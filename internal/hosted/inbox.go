@@ -130,20 +130,21 @@ func (h *Host) row(r *Review) web.InboxRow {
 
 // urgency copies what the agent said about its wait onto the row: blocking,
 // the due-by and whether it has passed, and since when it has waited (the
-// revision it is waiting on, so a republish restarts the clock). A review
-// the reviewer has finished (done, or replied to since) is never urgent and
-// is not shown as blocking, whatever it was published with.
+// revision it is waiting on, so a republish restarts the clock). Once that
+// revision is finished none of it shows, whatever it was published with.
 func (h *Host) urgency(r *Review, row *web.InboxRow) {
-	// The reviewer has finished once the status is done or replied: an
-	// agent's reply after Done is the agent's move, not a wait on the
-	// reviewer, so it must not put the review back on top.
-	open := row.Status != web.StatusDone && row.Status != web.StatusReplied
+	// The wait is on the revision the agent published: it is over once that
+	// revision has its Dones under the review's rule, as the agent's own
+	// wait reads it. So a blocking republish after Done is urgent again,
+	// and an agent's reply after Done (no new revision) is not.
+	_, finished, err := h.tally(r.Meta.ID)
+	open := err == nil && !finished
 	row.Blocking = r.Meta.Blocking && open
 	row.WaitingSince, _ = time.Parse(time.RFC3339, r.Meta.Updated)
-	if t, err := time.Parse(time.RFC3339, r.Meta.DueBy); err == nil {
+	if t, err := time.Parse(time.RFC3339, r.Meta.DueBy); err == nil && open {
 		t = t.UTC()
 		row.DueBy = &t
-		row.Overdue = open && t.Before(h.opts.Now())
+		row.Overdue = t.Before(h.opts.Now())
 	}
 	row.Urgent = open && (row.Blocking || row.Overdue)
 }
