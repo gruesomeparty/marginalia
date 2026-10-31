@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       test: ${{ steps.paths.outputs.test }}
       go: ${{ steps.paths.outputs.go }}
@@ -39,13 +38,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # A listing that fails or is cut short (the API stops at 3000 files)
-          # runs everything.
-          if [ -n "$PR" ] && files="$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
-                --jq '.[] | .filename, (.previous_filename // empty)')" \
-              && [ "$(wc -l <<<"$files")" -lt 3000 ]; then
+          # The files of exactly this commit, from the event's own shas (three
+          # dots, as the PR's diff), so a listing that lags a push cannot skip
+          # checks for code it has not seen. A failed comparison, or one cut
+          # short (it stops at 300 files), runs everything.
+          if [ -n "$PR" ] && files="$(gh api "repos/$REPO/compare/$BASE...$HEAD" \
+                --jq 'select((.files | length) < 300) | .files[] | .filename, (.previous_filename // empty)')" \
+              && [ -n "$files" ]; then
             scripts/ci-changes.sh <<<"$files" | tee -a "$GITHUB_OUTPUT"
           else
             scripts/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"

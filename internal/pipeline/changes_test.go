@@ -50,6 +50,7 @@ func TestCIChanges(t *testing.T) {
 		{"homepage", []string{"site/index.html"}, ""},
 		// Tests read testdata, Markdown included.
 		{"testdata", []string{"internal/document/testdata/list.md"}, "test go image"},
+		{"markdown the binary could embed", []string{"internal/web/help.md"}, "test go image"},
 		{"go", []string{"internal/web/page.go"}, "test go image codeql"},
 		{"embedded template", []string{"internal/web/review.html.tmpl"}, "test go image"},
 		{"module", []string{"go.sum"}, "test go image deps codeql"},

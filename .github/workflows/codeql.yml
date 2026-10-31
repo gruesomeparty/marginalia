@@ -19,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       codeql: ${{ steps.paths.outputs.codeql }}
     steps:
@@ -33,11 +32,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if files="$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
-                --jq '.[] | .filename, (.previous_filename // empty)')" \
-              && [ "$(wc -l <<<"$files")" -lt 3000 ]; then
+          # The files of exactly this commit; see ci.yml.
+          if files="$(gh api "repos/$REPO/compare/$BASE...$HEAD" \
+                --jq 'select((.files | length) < 300) | .files[] | .filename, (.previous_filename // empty)')" \
+              && [ -n "$files" ]; then
             scripts/ci-changes.sh <<<"$files" | tee -a "$GITHUB_OUTPUT"
           else
             scripts/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"

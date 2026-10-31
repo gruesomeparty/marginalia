@@ -30,7 +30,8 @@
 #
 # Fails open: no paths, or a change to CI itself (its workflows or this
 # script), means every check runs. Documentation is a Markdown file or docs/,
-# never testdata, which tests read; site/ is the homepage, which only the
+# never testdata, which tests read, nor under internal/ or cmd/, which the
+# binary may embed; site/ is the homepage, which only the
 # Pages workflow builds.
 set -euo pipefail
 
@@ -76,7 +77,8 @@ docs=true
 for p in "${paths[@]}"; do
   [[ "$p" =~ $ci_itself ]] && all
   doc=false
-  if [[ "$p" =~ $inert ]] && ! [[ "$p" =~ $testdata ]]; then doc=true; fi
+  # Markdown under internal/ or cmd/ may be embedded; it counts as code.
+  if [[ "$p" =~ $inert ]] && ! [[ "$p" =~ $testdata ]] && ! [[ "$p" =~ ^(internal|cmd)/ ]]; then doc=true; fi
   if [ "$doc" = false ] || [[ "$p" =~ $steers ]] || [[ "$p" =~ ^site/ ]]; then docs=false; fi
   [ "$doc" = true ] && continue
   on_test=true
