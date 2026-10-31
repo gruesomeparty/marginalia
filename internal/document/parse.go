@@ -68,9 +68,24 @@ func Parse(path string) (*Document, error) {
 // ParseBytes parses document bytes into a Document. The path decides the
 // format and is recorded on the document and on every feedback event.
 func ParseBytes(path string, src []byte) (*Document, error) {
+	return ParseBytesWith(path, src, Options{})
+}
+
+// Options adjust how a document renders, never how it anchors.
+type Options struct {
+	// Link resolves a markdown image or link destination to the URL the
+	// page should use, or reports false to leave it as written. Hosted mode
+	// uses it to point `![mock](mock.png)` at the asset published beside
+	// the document. Only the rendered HTML changes: a block's text and hash
+	// do not, so a note survives the asset moving.
+	Link func(dest string) (string, bool)
+}
+
+// ParseBytesWith is ParseBytes with rendering options.
+func ParseBytesWith(path string, src []byte, opts Options) (*Document, error) {
 	switch FormatFor(path) {
 	case FormatMarkdown:
-		return parseMarkdown(path, src)
+		return parseMarkdown(path, src, opts)
 	case FormatProto:
 		return parseProto(path, src)
 	case FormatJSON:
@@ -101,8 +116,11 @@ type mdParser struct {
 	diagram string
 }
 
-func parseMarkdown(path string, src []byte) (*Document, error) {
+func parseMarkdown(path string, src []byte, opts Options) (*Document, error) {
 	root := md.Parser().Parse(text.NewReader(src))
+	if opts.Link != nil {
+		relink(root, opts.Link)
+	}
 	p := &mdParser{src: src}
 	sec := newSectioner()
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
@@ -170,4 +188,25 @@ func parseMarkdown(path string, src []byte) (*Document, error) {
 		p.blocks[at].HTML = html
 	}
 	return &Document{Path: path, Format: FormatMarkdown, Blocks: p.blocks}, nil
+}
+
+// relink rewrites image and link destinations the resolver claims, before
+// anything is rendered.
+func relink(root ast.Node, resolve func(string) (string, bool)) {
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch v := n.(type) {
+		case *ast.Image:
+			if to, ok := resolve(string(v.Destination)); ok {
+				v.Destination = []byte(to)
+			}
+		case *ast.Link:
+			if to, ok := resolve(string(v.Destination)); ok {
+				v.Destination = []byte(to)
+			}
+		}
+		return ast.WalkContinue, nil
+	})
 }
