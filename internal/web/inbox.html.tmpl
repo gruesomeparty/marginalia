@@ -63,6 +63,16 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 .review.s-done{border-left-color:var(--ok)}
 .review.s-done .status{background:color-mix(in srgb,var(--ok) var(--tint-strong),transparent)}
 .review .meta{display:flex;flex-wrap:wrap;gap:var(--sp-1) var(--sp-4);margin-top:var(--sp-1);color:var(--muted);font-size:var(--fs-xs)}
+/* Archive and Restore sit on the card's last line, outside the link: a
+   button inside an anchor is neither. Nothing is deleted either way, so
+   neither asks to confirm. */
+.item{position:relative}
+.review .meta{padding-right:6rem}
+.act{position:absolute;right:var(--sp-5);bottom:var(--sp-3);margin:0}
+.act button{font:inherit;font-size:var(--fs-xs);color:var(--muted);background:var(--card);border:1px solid var(--rule);border-radius:var(--r-pill);padding:var(--sp-1) var(--sp-3);cursor:pointer}
+.act button:hover{color:var(--fg);border-color:var(--accent)}
+.act button:focus-visible{outline:none;box-shadow:var(--ring)}
+.review.s-archived{border-left-color:var(--rule)}
 .empty{color:var(--muted);padding:var(--sp-6) 0;text-align:center}
 @media (max-width:40rem){
   main{margin:var(--sp-5) auto;padding:0 var(--sp-4)}
@@ -94,21 +104,12 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
   <section class="group" aria-label="{{.Label}}">
     {{if $grouped}}<h2>{{.Label}}</h2>{{end}}
     <ul class="list">{{range .Rows}}
-      <li><a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">
-        <span class="lead"><span class="status">{{.StatusLabel}}</span>
-          {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
-          {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
-          {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
-          <time class="when" datetime="{{.WhenISO}}" title="last activity">{{.When}}</time></span>
-        <span class="title">{{.Title}}</span>
-        <span class="meta">
-          {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
-          {{if .HasCounts}}<span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>{{end}}
-          <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
-          <span>revision {{.Revision}}</span>
-          <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
-        </span>
-      </a></li>{{end}}
+      <li class="item">{{if eq .Status "archived"}}<div class="review {{.Class}}" data-review="{{.ID}}" data-status="{{.Status}}">{{template "inbox-row" .}}</div>
+        {{- else}}<a class="review {{.Class}}" href="{{.URL}}" data-review="{{.ID}}" data-status="{{.Status}}">{{template "inbox-row" .}}</a>{{end}}
+        <form class="act" method="post" action="/api/reviews/{{.ID}}/{{if eq .Status "archived"}}restore{{else}}archive{{end}}">
+          <input type="hidden" name="back" value="{{$.Back}}">
+          <button type="submit" aria-label="{{if eq .Status "archived"}}Restore{{else}}Archive{{end}} {{.Title}}">{{if eq .Status "archived"}}Restore{{else}}Archive{{end}}</button>
+        </form></li>{{end}}
     </ul>
   </section>{{end}}{{else}}<p class="empty">{{.Empty}}</p>{{end}}
 </main>
@@ -123,3 +124,18 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
 </script>
 </body>
 </html>
+{{define "inbox-row"}}
+        <span class="lead"><span class="status">{{.StatusLabel}}</span>
+          {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
+          {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
+          {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
+          <time class="when" datetime="{{.WhenISO}}" title="{{if eq .Status "archived"}}archived{{else}}last activity{{end}}">{{.When}}</time></span>
+        <span class="title">{{.Title}}</span>
+        <span class="meta">
+          {{if .Agent}}<span>from {{.Agent}}</span>{{end}}
+          {{if .HasCounts}}<span>{{.Comments}} note{{if ne .Comments 1}}s{{end}}</span>{{end}}
+          <span>published <time datetime="{{.SinceISO}}">{{.Since}}</time></span>
+          <span>revision {{.Revision}}</span>
+          <span>{{.Docs}} document{{if ne .Docs 1}}s{{end}}</span>
+        </span>
+{{end}}

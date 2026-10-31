@@ -216,9 +216,13 @@ func isDone(r *Review) bool {
 	return true
 }
 
-// lastActivity is the latest of a review's publish and its events.
+// lastActivity is the latest of a review's publish, its events and its
+// restore from the archive.
 func lastActivity(r *Review) time.Time {
 	last, _ := time.Parse(time.RFC3339, r.Meta.Updated)
+	if r.Restored.After(last) {
+		last = r.Restored
+	}
 	for _, e := range r.Server.Entries() {
 		events, err := e.Store.Load()
 		if err != nil {
@@ -248,39 +252,35 @@ func (h *Host) Sweep(ctx context.Context) (archived []string, err error) {
 	h.mu.RUnlock()
 	sort.Strings(ids)
 	for _, id := range ids {
-		r := h.Review(id)
-		if r == nil {
-			continue
-		}
-		keep := h.limits.RetainOpen
-		if isDone(r) {
-			keep = h.limits.RetainDone
-		}
-		if now.Sub(lastActivity(r)) <= keep {
-			continue
-		}
-		if err := h.archive(ctx, r); err != nil {
+		ok, err := h.sweepOne(ctx, id, now)
+		if err != nil {
 			return archived, err
 		}
-		archived = append(archived, id)
+		if ok {
+			archived = append(archived, id)
+		}
 	}
 	return archived, nil
 }
 
-// archive moves one review out of the served set.
-func (h *Host) archive(ctx context.Context, r *Review) error {
-	id := r.Meta.ID
-	if err := h.store.Move(ctx, prefixReviews+id+"/", prefixArchive+id+"/"); err != nil {
-		return fmt.Errorf("hosted: archiving %s: %w", id, err)
+// sweepOne archives one review if it has outlived its retention, deciding
+// under the publish lock so a republish cannot land between the decision
+// and the move.
+func (h *Host) sweepOne(ctx context.Context, id string, now time.Time) (bool, error) {
+	h.pub.Lock()
+	defer h.pub.Unlock()
+	r := h.Review(id)
+	if r == nil {
+		return false, nil
 	}
-	h.mu.Lock()
-	delete(h.reviews, id)
-	h.mu.Unlock()
-	// The documents' bytes leave the budget here; the logs' left it in the
-	// metering layer, as the move went through it.
-	h.recordStored(-r.Meta.Bytes)
-	h.logf("marginalia: review %s archived (last activity %s)\n", id, lastActivity(r).Format(time.RFC3339))
-	return nil
+	keep := h.limits.RetainOpen
+	if isDone(r) {
+		keep = h.limits.RetainDone
+	}
+	if now.Sub(lastActivity(r)) <= keep {
+		return false, nil
+	}
+	return true, h.archiveLocked(ctx, r, "sweep")
 }
 
 // sweeper runs Sweep hourly until ctx is cancelled.

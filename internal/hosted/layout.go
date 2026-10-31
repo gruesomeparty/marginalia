@@ -7,6 +7,12 @@
 //	reviews/<id>/meta/<n>.json   versioned metadata; the highest n wins
 //	reviews/<id>/rev/<n>/<name>  revision n of each document, immutable
 //	reviews/<id>/log/<name>      the document's append-only feedback log
+//	reviews/<id>/archived/<ns>   when it was archived, and by whom
+//	reviews/<id>/restored/<ns>   when it was brought back, and by whom
+//
+// An archived review is the same tree under archive/<id>/, moved whole. The
+// two markers carry their time in the key, so the one listing startup does
+// already says when each happened; the blob's bytes name who, for a reader.
 //
 // Startup lists that prefix once and rebuilds every review in memory; from
 // then on the process is the single writer, logs are served from memory and
@@ -20,6 +26,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -59,9 +66,37 @@ func revKey(id string, n int, name string) string {
 
 func logKey(id, name string) string { return prefixReviews + id + "/log/" + name }
 
+// Marker kinds: an archive or a restore, recorded as its own blob.
+const (
+	markArchived = "archived"
+	markRestored = "restored"
+)
+
+// markKey is a marker under prefix ("reviews/" or "archive/"), named by its
+// time: zero-padded nanoseconds, so keys sort in the order they happened.
+func markKey(prefix, id, kind string, at time.Time) string {
+	return fmt.Sprintf("%s%s/%s/%020d", prefix, id, kind, at.UnixNano())
+}
+
+// markTime reads the time out of a marker key, or reports it is not one.
+func markTime(prefix, id, kind, key string) (time.Time, bool) {
+	rest, ok := strings.CutPrefix(key, prefix+id+"/"+kind+"/")
+	if !ok {
+		return time.Time{}, false
+	}
+	ns, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || ns <= 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(0, ns).UTC(), true
+}
+
 // metaVersion reads n out of "reviews/<id>/meta/<n>.json", or -1.
-func metaVersion(id, key string) int {
-	rest, ok := strings.CutPrefix(key, prefixReviews+id+"/meta/")
+func metaVersion(id, key string) int { return metaVersionUnder(prefixReviews, id, key) }
+
+// metaVersionUnder is metaVersion under either prefix.
+func metaVersionUnder(prefix, id, key string) int {
+	rest, ok := strings.CutPrefix(key, prefix+id+"/meta/")
 	if !ok {
 		return -1
 	}
@@ -77,8 +112,11 @@ func metaVersion(id, key string) int {
 }
 
 // reviewOf reads the id out of any key under reviews/.
-func reviewOf(key string) (string, bool) {
-	rest, ok := strings.CutPrefix(key, prefixReviews)
+func reviewOf(key string) (string, bool) { return idUnder(prefixReviews, key) }
+
+// idUnder reads the id out of any key under prefix.
+func idUnder(prefix, key string) (string, bool) {
+	rest, ok := strings.CutPrefix(key, prefix)
 	if !ok {
 		return "", false
 	}

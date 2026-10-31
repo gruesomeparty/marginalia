@@ -123,13 +123,40 @@ func (h *Host) row(r *Review) web.InboxRow {
 	return row
 }
 
+// archivedRows is the archive as the inbox lists it: what the metadata
+// says, stamped with when it was archived. No counts — nothing renders an
+// archived review, so its logs are not read.
+func (h *Host) archivedRows() []web.InboxRow {
+	var out []web.InboxRow
+	for _, a := range h.ArchivedReviews() {
+		published, _ := time.Parse(time.RFC3339, a.Meta.Created)
+		row := web.InboxRow{
+			ID: a.Meta.ID, Title: a.Meta.Title, Agent: a.Meta.Agent,
+			Docs: len(a.Meta.Docs), Revision: a.Meta.Revision, Published: published, LastActivity: a.At,
+			Names: append([]string(nil), a.Meta.Docs...), Status: web.StatusArchived,
+		}
+		switch {
+		case a.Meta.Review != "":
+			row.Framing = a.Meta.Review
+		case a.Meta.Config != "":
+			row.Framing = web.FramingCustom
+		}
+		if row.Title == "" && len(a.Meta.Docs) > 0 {
+			row.Title = a.Meta.Docs[0]
+		}
+		row.StatusLabel = web.StatusLabel(row.Status)
+		out = append(out, row)
+	}
+	return out
+}
+
 // handleRoot is the inbox. The tab counts are taken after the other
 // filters, so a search says how many of its matches each tab holds.
 func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 	f := web.ParseInboxFilter(r.URL.Query())
 	in := web.Inbox{Tab: f.Tab, Filter: f}
 	framings, agents := map[string]bool{}, map[string]bool{}
-	for _, row := range h.rows() {
+	for _, row := range append(h.rows(), h.archivedRows()...) {
 		if k := web.FramingKey(row.Framing); !framings[k] {
 			framings[k] = true
 			in.Framings = append(in.Framings, k)
@@ -141,10 +168,14 @@ func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 		if !f.Match(row) {
 			continue
 		}
-		in.All++
-		if row.Status == web.StatusDone {
+		switch row.Status {
+		case web.StatusArchived:
+			in.Archived++
+		case web.StatusDone:
+			in.All++
 			in.Done++
-		} else {
+		default:
+			in.All++
 			in.NeedsMe++
 		}
 		if web.InTab(row.Status, f.Tab) {
@@ -165,12 +196,21 @@ func (h *Host) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReviews is the inbox as JSON: the same rows, the same statuses, the
-// same filters.
+// same filters. With no tab it is every open review; the archive is
+// tab=archived.
 func (h *Host) handleReviews(w http.ResponseWriter, r *http.Request) {
 	f := web.ParseInboxFilter(r.URL.Query())
+	tab := f.Tab
+	if tab == "" {
+		tab = web.TabAll
+	}
+	all := h.rows()
+	if tab == web.TabArchived {
+		all = h.archivedRows()
+	}
 	rows := []web.InboxRow{}
-	for _, row := range h.rows() {
-		if (f.Tab == "" || web.InTab(row.Status, f.Tab)) && f.Match(row) {
+	for _, row := range all {
+		if web.InTab(row.Status, tab) && f.Match(row) {
 			rows = append(rows, row)
 		}
 	}
