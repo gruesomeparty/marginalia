@@ -236,7 +236,7 @@ func (h *Host) answerAction(w http.ResponseWriter, r *http.Request, id, state st
 // Anything that could leave the origin — a scheme, "//host", a backslash
 // some browsers read as a slash — is refused.
 func localBack(back string) string {
-	if !strings.HasPrefix(back, "/") || strings.HasPrefix(back, "//") || strings.ContainsAny(back, "\\\r\n") {
+	if back == "" || back[0] != '/' || (len(back) > 1 && (back[1] == '/' || back[1] == '\\')) || strings.ContainsAny(back, "\\\r\n") {
 		return "/"
 	}
 	return back
