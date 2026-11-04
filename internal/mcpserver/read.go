@@ -1,8 +1,10 @@
 package mcpserver
 
 import (
+	"github.com/gruesomeparty/marginalia/internal/changeset"
 	"github.com/gruesomeparty/marginalia/internal/document"
 	"github.com/gruesomeparty/marginalia/internal/feedback"
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/reviewset"
 	"github.com/gruesomeparty/marginalia/internal/session"
 )
@@ -15,7 +17,12 @@ type DocEvents struct {
 	Doc    string  `json:"doc"`
 	Events []Noted `json:"events"`
 	Cursor int     `json:"cursor"`
-	Done   bool    `json:"done"`
+	// Done is whether this document's review is complete under the review's
+	// completion rule; DoneBy and DoneNeeded are its tally ("2 of 3"), so an
+	// agent can say who it is still waiting for.
+	Done       bool `json:"done"`
+	DoneBy     int  `json:"done_by"`
+	DoneNeeded int  `json:"done_needed"`
 }
 
 // Noted is an event as a tool reports it: the event, flattened, plus the id
@@ -40,16 +47,28 @@ type DocStatus struct {
 	// The revision loop, as a queue length: what still wants doing, what the
 	// agent says it did and the reviewer has not ruled on yet, and what is
 	// settled. Reading these beats re-reading every state.
-	Outstanding int                   `json:"outstanding"`
-	Addressed   int                   `json:"addressed"`
-	Confirmed   int                   `json:"confirmed"`
-	Reopened    int                   `json:"reopened"`
-	Stale       int                   `json:"stale"`
-	Orphaned    int                   `json:"orphaned"`
-	Done        bool                  `json:"done"`
-	States      []feedback.State      `json:"states"`
-	Ready       []ReadySuggestion     `json:"applicable_suggestions"`
-	Needs       []feedback.Suggestion `json:"suggestions_needing_confirmation"`
+	Outstanding int              `json:"outstanding"`
+	Addressed   int              `json:"addressed"`
+	Confirmed   int              `json:"confirmed"`
+	Reopened    int              `json:"reopened"`
+	Stale       int              `json:"stale"`
+	Orphaned    int              `json:"orphaned"`
+	Done        bool             `json:"done"`
+	DoneBy      int              `json:"done_by"`
+	DoneNeeded  int              `json:"done_needed"`
+	States      []feedback.State `json:"states"`
+	// Changed is what moved since the reviewer last finished the document:
+	// the blocks to look at again, whether or not anyone wrote on them.
+	Changed ChangedBlocks         `json:"changed_blocks"`
+	Ready   []ReadySuggestion     `json:"applicable_suggestions"`
+	Needs   []feedback.Suggestion `json:"suggestions_needing_confirmation"`
+}
+
+// ChangedBlocks lists block ids by how they moved since the baseline.
+type ChangedBlocks struct {
+	Added   []string `json:"added"`
+	Edited  []string `json:"edited"`
+	Removed []string `json:"removed"`
 }
 
 // ReadySuggestion carries the block's current text beside the replacement, so
@@ -69,6 +88,12 @@ type Target struct {
 	Name  string
 	Parse func() (*document.Document, error)
 	Store *feedback.Store
+	// Completion is when the review counts as done (issue #53). The zero
+	// value is "any one reviewer's Done", which is what it always was.
+	Completion review.Completion
+	// Base is the parse the reviewer last finished, which changed_blocks is
+	// measured from (issue #214); nil, or returning nil, reports nothing.
+	Base func() *document.Document
 }
 
 // TargetOf is the disk-backed Target: the document at path and the log
@@ -77,10 +102,31 @@ func TargetOf(path string) Target {
 	return Target{Name: path, Parse: func() (*document.Document, error) { return document.Parse(path) }, Store: feedback.NewStore(path)}
 }
 
-func targetsOf(paths []string) []Target {
+// targetsOf is the documents as targets, each carrying the completion rule
+// of the review this process is serving it in. Reads are disk-backed and a
+// path from another process has no config here, so it completes on any one
+// Done, as it always did.
+func (s *Server) targetsOf(paths []string) []Target {
+	s.mu.Lock()
+	rules := map[string]*live{}
+	for _, l := range s.sessions {
+		for _, d := range l.docs {
+			if r := rules[d]; r == nil || l.seq > r.seq {
+				rules[d] = l
+			}
+		}
+	}
+	s.mu.Unlock()
 	out := make([]Target, 0, len(paths))
 	for _, p := range paths {
-		out = append(out, TargetOf(p))
+		t := TargetOf(p)
+		if l := rules[p]; l != nil {
+			t.Completion = l.completion
+			if srv, path := l.srv, p; srv != nil {
+				t.Base = func() *document.Document { return srv.BaseAt(path) }
+			}
+		}
+		out = append(out, t)
 	}
 	return out
 }
@@ -144,11 +190,9 @@ func EventsSince(t Target, cursor int) (DocEvents, error) {
 		return DocEvents{}, err
 	}
 	out := DocEvents{Doc: t.Name, Cursor: len(events), Events: []Noted{}}
-	for _, e := range events {
-		if e.Type == feedback.TypeReviewDone {
-			out.Done = true
-		}
-	}
+	finished, participants := feedback.Reviewers(events)
+	out.DoneBy, out.DoneNeeded = t.Completion.Tally(finished, participants)
+	out.Done = out.DoneBy >= out.DoneNeeded
 	// A cursor past the end can only mean the log was rewritten, which the
 	// append-only rule forbids. Start over rather than skip silently.
 	if cursor < 0 || cursor > len(events) {
@@ -179,6 +223,7 @@ func StatusOf(t Target) (DocStatus, error) {
 		text[b.ID] = b.PlainText
 	}
 	res := feedback.Materialize(events, blocks)
+	res.Complete(t.Completion)
 	ready, needs := res.Suggestions()
 	out := DocStatus{
 		Doc: t.Name, Blocks: len(doc.Blocks),
@@ -186,6 +231,7 @@ func StatusOf(t Target) (DocStatus, error) {
 		Outstanding: res.Outstanding, Addressed: res.Addressed,
 		Confirmed: res.Confirmed, Reopened: res.Reopened,
 		Stale: res.Stale, Orphaned: res.Orphaned, Done: res.Done,
+		DoneBy: res.DoneBy, DoneNeeded: res.DoneNeeded,
 		States: res.States,
 		Ready:  make([]ReadySuggestion, 0, len(ready)),
 		Needs:  needs,
@@ -193,6 +239,12 @@ func StatusOf(t Target) (DocStatus, error) {
 	for _, s := range ready {
 		out.Ready = append(out.Ready, ReadySuggestion{Suggestion: s, Current: text[s.Block]})
 	}
+	var base *document.Document
+	if t.Base != nil {
+		base = t.Base()
+	}
+	a, e, r := changeset.IDs(changeset.Without(base, doc))
+	out.Changed = ChangedBlocks{Added: nonNil(a), Edited: nonNil(e), Removed: nonNil(r)}
 	if out.Needs == nil {
 		out.Needs = []feedback.Suggestion{}
 	}
@@ -200,4 +252,11 @@ func StatusOf(t Target) (DocStatus, error) {
 		out.States = []feedback.State{}
 	}
 	return out, nil
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

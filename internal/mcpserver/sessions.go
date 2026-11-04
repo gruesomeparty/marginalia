@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/gruesomeparty/marginalia/internal/review"
 	"github.com/gruesomeparty/marginalia/internal/server"
 	"github.com/gruesomeparty/marginalia/internal/session"
 )
@@ -18,9 +19,18 @@ import (
 // disk-backed: when the agent's session ends, the human's page stops saving,
 // but nothing already said is lost and the next agent turn still reads it all.
 type live struct {
-	id     string
-	url    string
-	docs   []string
+	id   string
+	url  string
+	docs []string
+	// completion is the review's rule for done, which the reads need and
+	// the disk does not hold.
+	completion review.Completion
+	// srv is the review's server, for what only it knows: the parse the
+	// reviewer last finished, which changed_blocks is measured from.
+	srv *server.Server
+	// seq orders sessions by start, so the newest one's rule wins when two
+	// serve the same path.
+	seq    uint64
 	cancel context.CancelFunc
 	done   chan error // closed when Serve returns, after its shutdown drain
 }
@@ -57,6 +67,8 @@ func (s *Server) start(paths []string, opts session.Options) (*live, *server.Ser
 func (s *Server) remember(l *live) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.started++
+	l.seq = s.started
 	s.sessions[l.id] = l
 }
 

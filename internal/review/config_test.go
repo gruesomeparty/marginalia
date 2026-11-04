@@ -3,6 +3,7 @@ package review
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -301,5 +302,39 @@ notes:
 	// And nothing is unanchored once the block is there.
 	if got := c.Unanchored(map[string]bool{"9/9": true}, "spec.md"); len(got) != 0 {
 		t.Errorf("anchored note reported as lost: %+v", got)
+	}
+}
+
+func TestCompletionConfig(t *testing.T) {
+	for _, c := range []struct {
+		yaml string
+		want Completion
+		err  string
+	}{
+		{"title: x\n", Completion{Rule: CompleteAny}, ""},
+		{"complete_when: all\nreviewers: [ana, bo]\n", Completion{Rule: CompleteAll, Reviewers: []string{"ana", "bo"}}, ""},
+		{"complete_when: quorum:2\n", Completion{Rule: CompleteQuorum, Quorum: 2}, ""},
+		{"complete_when: most\n", Completion{}, "not any, all or quorum:N"},
+		{"complete_when: quorum:0\n", Completion{}, "whole number"},
+		{"complete_when: quorum:3\nreviewers: [ana, bo]\n", Completion{}, "more reviewers"},
+		{"reviewers: [ana, ana]\n", Completion{}, "listed twice"},
+	} {
+		path := filepath.Join(t.TempDir(), "r.yaml")
+		if err := os.WriteFile(path, []byte(c.yaml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if c.err != "" {
+			if err == nil || !strings.Contains(err.Error(), c.err) {
+				t.Errorf("%q: error %v, want %q", c.yaml, err, c.err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", c.yaml, err)
+		}
+		if got := cfg.Completion(); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q: %+v, want %+v", c.yaml, got, c.want)
+		}
 	}
 }

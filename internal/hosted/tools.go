@@ -207,7 +207,14 @@ func (h *Host) target(r *Review, e server.Entry) mcpserver.Target {
 			}
 			return nil, fmt.Errorf("review %s no longer has %s", id, e.Rel)
 		},
-		Store: e.Store,
+		Store:      e.Store,
+		Completion: r.Server.Review().Completion(),
+		Base: func() *document.Document {
+			if cur := h.Review(id); cur != nil {
+				return cur.Server.BaseOf(e.Rel)
+			}
+			return nil
+		},
 	}
 }
 

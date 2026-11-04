@@ -120,9 +120,10 @@ func (h *Host) tokens(id string) ([]storage.Token, error) {
 }
 
 // tally counts a review's events across its documents, and whether every
-// document's log carries a review_done for the current revision: one written
-// after it was published (Meta.From), since the logs outlive a republish and
-// the last round's review_done must not end this round's wait.
+// document is done for the current revision under the review's completion
+// rule, counting only review_done written after it was published (Meta.From):
+// the logs outlive a republish, and the last round's Done must not end this
+// round's wait.
 func (h *Host) tally(id string) (n uint64, done bool, err error) {
 	r, targets, err := h.targets(id, "")
 	if err != nil {
@@ -137,12 +138,13 @@ func (h *Host) tally(id string) (n uint64, done bool, err error) {
 		if err != nil {
 			return 0, false, err
 		}
-		finished := false
-		for i, e := range events {
-			finished = finished || (e.Type == feedback.TypeReviewDone && i >= r.Meta.From[t.Name])
-		}
+		// The participants are everyone who has reviewed this document; the
+		// Dones are only this revision's.
+		from := min(r.Meta.From[t.Name], len(events))
+		finished, _ := feedback.Reviewers(events[from:])
+		_, participants := feedback.Reviewers(events)
 		n += uint64(len(events))
-		done = done && finished
+		done = done && t.Completion.Met(finished, participants)
 	}
 	return n, done, nil
 }

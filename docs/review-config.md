@@ -49,6 +49,8 @@ actions:
 
 builtins: true           # false drops comment/suggest_edit/question/approve/reject
 require_verdict: false   # true: no review_done until every block is answered
+complete_when: any       # all, or quorum:2 — when several reviewers' Dones finish the review
+reviewers: [ana, bo]     # optional: who counts; with it, "all" means these people
 
 readonly:
   - "2"                  # section 2 is context: shown, muted, not commentable
@@ -74,6 +76,17 @@ per-document, so `1/2` exists in every markdown file and an unnamed note would
 follow its id into all of them. Startup names any note whose document is not in
 the set rather than dropping it. **Notes never enter `<doc>.feedback.jsonl`** —
 that log is the human's answers, not your questions.
+
+Hand one document to several people and each one's **Done** records only their
+own completion; the review is done when `complete_when` says so — `any` (the
+default), `all`, or `quorum:N` — counted among `reviewers:` when you name them,
+or among everyone who has commented — in any round, so with `all` and no list, someone who commented once and moved on holds a later round open; name `reviewers:` for a review that runs several rounds. The page names each note's author once
+more than one person has spoken, marks your own, shows "Done (1 of 3)", and
+picks up the others' notes as they are saved. Each block reports every
+reviewer's latest word (`by_author`) and an `overall` verdict where a rejection
+outranks a question, a question outranks any other note, and an approval ranks
+last — never just whoever spoke most recently. Authors mean something once the
+reviewer is authenticated: hosted mode, or `serve` with `MARGINALIA_SERVE_TOKEN`.
 
 **The server enforces all of it.** An event whose `type` is not in the
 configured set is refused; so is one for a read-only block, a field that was not

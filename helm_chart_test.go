@@ -31,16 +31,7 @@ func TestChartIsTheRelease(t *testing.T) {
 		}
 	}
 
-	var config struct {
-		Packages map[string]struct {
-			ExtraFiles []string `json:"extra-files"`
-		} `json:"packages"`
-	}
-	readJSON(t, "release-please-config.json", &config)
-	listed := false
-	for _, f := range config.Packages["."].ExtraFiles {
-		listed = listed || f == chartDir+"/Chart.yaml"
-	}
+	listed := extraFiles(t)[chartDir+"/Chart.yaml"]
 	if !listed {
 		t.Errorf("release-please-config.json does not list %s/Chart.yaml in extra-files", chartDir)
 	}

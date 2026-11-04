@@ -160,3 +160,34 @@ func TestShutdownAnswersAParkedWait(t *testing.T) {
 		t.Errorf("the parked wait got %d, want an answer", code)
 	}
 }
+
+// With complete_when: all, one reviewer's Done records only their own
+// completion; the review is done once everyone listed has said so (#53).
+func TestDoneFollowsTheCompletionRule(t *testing.T) {
+	s, _ := framed(t, config(t, "complete_when: all\nreviewers: [ana, bo]\n"))
+	if rr := post(t, s, "/api/feedback", feedback.Event{Type: feedback.TypeReviewDone, Author: "ana"}); rr.Code != 201 {
+		t.Fatalf("post: %d %s", rr.Code, rr.Body.String())
+	}
+	select {
+	case <-s.Done():
+		t.Fatal("one of two reviewers finished the review")
+	default:
+	}
+	var res feedback.Resolution
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/resolution", nil))
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Done || res.DoneBy != 1 || res.DoneNeeded != 2 {
+		t.Errorf("resolution after ana: done %v, %d of %d", res.Done, res.DoneBy, res.DoneNeeded)
+	}
+	if rr := post(t, s, "/api/feedback", feedback.Event{Type: feedback.TypeReviewDone, Author: "bo"}); rr.Code != 201 {
+		t.Fatalf("post: %d %s", rr.Code, rr.Body.String())
+	}
+	select {
+	case <-s.Done():
+	case <-time.After(time.Second):
+		t.Fatal("Done did not close once both reviewers finished")
+	}
+}
