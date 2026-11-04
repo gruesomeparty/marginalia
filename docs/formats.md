@@ -14,7 +14,7 @@ the document around it changes.
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
-| source: `.go`, `.py`, `.ts`/`.tsx`, `.js`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
+| source: `.go`, `.py`/`.pyi`, `.ts`/`.mts`/`.cts`/`.tsx`, `.js`/`.mjs`/`.cjs`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
