@@ -379,6 +379,13 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 	if p.Theme != "" {
 		meta.Theme = p.Theme
 	}
+	finished, err := revisionFinished(prev)
+	if err != nil {
+		return nil, err
+	}
+	if finished {
+		meta.Rounds++
+	}
 	meta.Docs = nil
 	// A document this revision drops keeps its events in the wait's count;
 	// one it brings back is counted live again.
@@ -590,6 +597,8 @@ func (h *Host) routes() {
 	}
 	mux.Handle("POST /api/reviews/{id}/archive", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleArchive))))
 	mux.Handle("POST /api/reviews/{id}/restore", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleRestore))))
+	mux.Handle("GET /stats", h.requireHuman(http.HandlerFunc(h.handleStats)))
+	mux.Handle("GET /api/stats", h.requireHuman(http.HandlerFunc(h.handleAPIStats)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {
