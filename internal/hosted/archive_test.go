@@ -1,7 +1,9 @@
 package hosted
 
 import (
+	"bytes"
 	"context"
+	"image/color"
 	"net/http"
 	"net/url"
 	"strings"
@@ -202,5 +204,29 @@ func TestArchiveFreezesTheOldServersAppends(t *testing.T) {
 	}
 	if err := back.Server.Entries()[0].Store.Append(feedback.Event{Doc: "spec.md", Block: "1/2", Type: "comment", Text: "after", Ts: "2026-10-01T09:00:02Z"}); err != nil {
 		t.Errorf("a restored review refuses notes: %v", err)
+	}
+}
+
+// A review's images go to the archive with it and come back on restore.
+func TestArchiveCarriesAssets(t *testing.T) {
+	h, ts := open(t, storage.NewMemory())
+	ctx := context.Background()
+	mock := pngOf(t, color.Black)
+	r, err := h.Publish(ctx, Publish{Agent: "a", Docs: []Document{{Name: "plan.md", Content: []byte("# Plan\n\n![m](mock.png)\n")}}, Assets: []Asset{{Name: "mock.png", Content: mock}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset := ts.URL + "/r/" + r.Meta.ID + "/assets/1/mock.png"
+	if err := h.Archive(ctx, r.Meta.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := get(t, asset); code != http.StatusNotFound {
+		t.Errorf("an archived review's image is still served: %d", code)
+	}
+	if _, err := h.Restore(ctx, r.Meta.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := fetch(t, asset); res.StatusCode != 200 || !bytes.Equal(body, mock) {
+		t.Errorf("restored image: %d", res.StatusCode)
 	}
 }

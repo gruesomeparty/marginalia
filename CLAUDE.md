@@ -631,6 +631,19 @@ users are agents, not humans.
   `Withdraw` freezes before its emptiness check). Archived
   reviews' metadata is read once at startup for the tab; their logs are not.
   Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
+  Assets (issue #217, `hosted/assets.go`): `publish_document` takes
+  `assets` (base64 PNG/JPEG/WebP/SVG, type checked against extension and
+  content), stored put-if-absent at `reviews/<id>/asset/<n>/<name>`,
+  recorded in `Meta.Assets` (name → rev, type, bytes) and carried over by a
+  republish that does not resend them. Their bytes are held in memory
+  (`Review.assets`), so serving `/r/{id}/assets/{rev}/{name}` reads nothing;
+  it answers with nosniff and a `sandbox` CSP. Markdown image and link
+  destinations naming an asset are rewritten at parse time through
+  `document.Options.Link` (HTML only; text and hash unchanged), and hosted
+  review pages carry `img-src 'self' data:` so a remote image is not
+  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes,
+  and `AssetMemory` (256 MiB) on what every review holds in RAM together,
+  checked at publish, since that, not stored bytes, bounds the container.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a

@@ -23,6 +23,14 @@ type Limits struct {
 	DocumentBytes int64
 	// DocumentsPerPublish caps one publish's document set.
 	DocumentsPerPublish int
+	// AssetBytes caps one image published beside the documents;
+	// AssetsPerPublish caps how many one publish may carry.
+	AssetBytes       int64
+	AssetsPerPublish int
+	// AssetMemory caps the image bytes the instance holds in memory across
+	// every review: assets are served from RAM, so this, not StoredBytes,
+	// is what keeps them inside the container.
+	AssetMemory int64
 	// RevisionsPerReview caps how often a review may be republished.
 	RevisionsPerReview int
 	// PublishesPerHour caps publishes per agent identity, sliding.
@@ -44,6 +52,9 @@ func DefaultLimits() Limits {
 	return Limits{
 		DocumentBytes:       512 << 10,
 		DocumentsPerPublish: 20,
+		AssetBytes:          2 << 20,
+		AssetsPerPublish:    20,
+		AssetMemory:         256 << 20,
 		RevisionsPerReview:  50,
 		PublishesPerHour:    30,
 		OpenReviews:         200,
@@ -62,6 +73,15 @@ func (l Limits) withDefaults() Limits {
 	}
 	if l.DocumentsPerPublish <= 0 {
 		l.DocumentsPerPublish = d.DocumentsPerPublish
+	}
+	if l.AssetBytes <= 0 {
+		l.AssetBytes = d.AssetBytes
+	}
+	if l.AssetsPerPublish <= 0 {
+		l.AssetsPerPublish = d.AssetsPerPublish
+	}
+	if l.AssetMemory <= 0 {
+		l.AssetMemory = d.AssetMemory
 	}
 	if l.RevisionsPerReview <= 0 {
 		l.RevisionsPerReview = d.RevisionsPerReview
@@ -124,6 +144,24 @@ func (h *Host) checkPublish(meta Meta, p Publish) error {
 			return limited("bytes per document", l.DocumentBytes, fmt.Sprintf("%d in %s", n, d.Name))
 		}
 		bytes += int64(len(d.Content))
+	}
+	if n := len(p.Assets); n > l.AssetsPerPublish {
+		return limited("assets per publish", l.AssetsPerPublish, n)
+	}
+	for _, a := range p.Assets {
+		if n := int64(len(a.Content)); n > l.AssetBytes {
+			return limited("bytes per asset", l.AssetBytes, fmt.Sprintf("%d in %s", n, a.Name))
+		}
+		bytes += int64(len(a.Content))
+	}
+	if len(p.Assets) > 0 {
+		var sent int64
+		for _, a := range p.Assets {
+			sent += int64(len(a.Content))
+		}
+		if held := h.assetMemory(); held+sent > l.AssetMemory {
+			return limited("asset bytes in memory", l.AssetMemory, held+sent)
+		}
 	}
 	if meta.Revision > l.RevisionsPerReview {
 		return limited("revisions per review", l.RevisionsPerReview, meta.Revision)
@@ -192,6 +230,21 @@ func (h *Host) openReviews() int {
 	for _, r := range h.reviews {
 		if !isDone(r) {
 			n++
+		}
+	}
+	return n
+}
+
+// assetMemory is the image bytes every review holds in memory now. A
+// replaced asset still counts until its review is rebuilt, which errs on
+// the side of refusing.
+func (h *Host) assetMemory() int64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var n int64
+	for _, r := range h.reviews {
+		for _, b := range r.assets {
+			n += int64(len(b))
 		}
 	}
 	return n
@@ -305,6 +358,7 @@ func (h *Host) describeLimits() string {
 	return strings.Join([]string{
 		fmt.Sprintf("%d KiB/document", l.DocumentBytes>>10),
 		fmt.Sprintf("%d documents/publish", l.DocumentsPerPublish),
+		fmt.Sprintf("%d MiB images in memory", l.AssetMemory>>20),
 		fmt.Sprintf("%d revisions/review", l.RevisionsPerReview),
 		fmt.Sprintf("%d publishes/agent/hour", l.PublishesPerHour),
 		fmt.Sprintf("%d open reviews", l.OpenReviews),

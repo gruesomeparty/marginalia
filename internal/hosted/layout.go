@@ -7,6 +7,7 @@
 //	reviews/<id>/meta/<n>.json   versioned metadata; the highest n wins
 //	reviews/<id>/rev/<n>/<name>  revision n of each document, immutable
 //	reviews/<id>/log/<name>      the document's append-only feedback log
+//	reviews/<id>/asset/<n>/<name> an image published with revision n, immutable
 //	reviews/<id>/archived/<ns>   when it was archived, and by whom
 //	reviews/<id>/restored/<ns>   when it was brought back, and by whom
 //
@@ -156,6 +157,9 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Assets is every image the current revision serves, by name, with the
+	// revision whose blob holds it (reviews/<id>/asset/<rev>/<name>).
+	Assets map[string]AssetMeta `json:"assets,omitempty"`
 	// Rounds is how many earlier revisions a reviewer finished, counted at
 	// each republish, so the stats page can say how many rounds a review
 	// took without keeping every revision's metadata in memory. Metadata
