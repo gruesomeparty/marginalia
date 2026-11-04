@@ -24,7 +24,7 @@ func TestUnsupportedInputAdvertisesSkill(t *testing.T) {
 }
 
 func TestSupportedExtensionsPass(t *testing.T) {
-	for _, name := range []string{"README.md", "doc.markdown", "api.proto", "payload.json", "k8s.yaml", "k8s.yml", "config.toml", "flow.mmd", "flow.mermaid", "0042_add_index.sql"} {
+	for _, name := range []string{"README.md", "doc.markdown", "api.proto", "payload.json", "k8s.yaml", "k8s.yml", "config.toml", "flow.mmd", "flow.mermaid", "0042_add_index.sql", "handler.go"} {
 		if _, err := reviewset.Load([]string{write(t, name)}); err != nil {
 			t.Errorf("%s should be supported: %v", name, err)
 		}

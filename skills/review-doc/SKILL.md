@@ -1,6 +1,6 @@
 ---
 name: review-doc
-description: Use when you need a human to review a document, schema, config or diagram you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML file, mermaid diagram) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
+description: Use when you need a human to review a document, schema, config, diagram or change you produced (spec, plan, PRD, ADR, report, .proto schema, JSON/YAML/TOML or OpenAPI file, mermaid diagram, SQL migration, Terraform/HCL, a diff or patch) and you want their feedback back as structured data. Renders the file as a block-anchored review page, waits for the human, then reads their feedback events.
 ---
 
 # Reviewing a document with Marginalia
@@ -56,6 +56,16 @@ text, stale where a block changed and orphaned where it is gone, exactly as
 content_base64}]` (PNG, JPEG, WebP or SVG): `![mock](mock.png)` then shows
 the review's own copy, and a revision keeps assets it does not resend.
 
+On a hosted instance the review also lands in the owner's **inbox** (`/`), so
+the URL you hand over is a convenience, not the only way in. A publish can be
+refused by a limit (document size, publishes per hour, open reviews, stored
+bytes); the error names the limit and its value — tell the human rather than
+retrying. Finished reviews are archived after 30 days without activity (open
+ones after 90), so republish within that window or start a new review. If you
+have a shell and the bearer but no MCP client, `GET
+/agent/r/<review_id>/wait?since=<events>` is the same long-poll as
+`await_review_done`, over plain HTTP.
+
 1. `review_document {paths, review}` — serves the document and returns the URL
    to give the human, plus the action vocabulary you will read back.
 2. Give the human that URL and say what you want looked at.
@@ -75,6 +85,10 @@ the review's own copy, and a revision keeps assets it does not resend.
    whether or not anyone commented on them. It is empty until a Done
    recorded by the running session (hosted mode keeps it across restarts),
    so an empty list is not proof that nothing changed.
+
+`close_review {session_id}` when you are finished: it stops serving and
+returns the final status. Saved notes stay on disk (or, hosted, at the review's
+URL) and stay readable.
 
 `feedback_since {cursor}` reads incrementally if you want to react while the
 review is still open. Every read works from the log on disk, so pass `paths`
@@ -122,6 +136,11 @@ This prints the URL and the feedback file path (`<path>.feedback.jsonl`). The
 server writes every comment to that file the instant it is saved — there is no
 export step.
 
+`serve` trusts whoever can reach it. On `127.0.0.1` or a tailnet you trust
+that is fine; anywhere else, set `MARGINALIA_SERVE_TOKEN` in the environment
+(never a flag) and hand over the URL with `?token=…` once — notes are then
+written under `--author`.
+
 To wait for the human from a shell, add `--until-done --timeout 30m`: `serve`
 exits 0 once every served document is marked done, and 124 if the timeout
 passes first, with the log complete either way. To react while the review is
@@ -138,7 +157,9 @@ Supported inputs and how their blocks are anchored:
 | OpenAPI/Swagger in any of those | `GET /orders/{id}`, `components/schemas/Order` (`definitions/Order`), the rest as above |
 | `.mmd`, `.mermaid`, and `mermaid` fences in markdown | `client-->api`, `payments/worker-->queue`; sequence messages `C->A` (repeats `C->A#2`), state transitions `Pending-->Paid`, ER relationships `CUSTOMER--ORDER`; inside a fence, under the fence's block — `1/3/client-->api` |
 | `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
+| `.diff`, `.patch` | the file, and each hunk under it by ordinal — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |
+| `.go` (name the file; a directory walk skips source) | `Ingest`, `Batch`, `Batch/Cap` (field), `Batch/Full` (method), `const/batchCap` |
 
 Anchoring by path is what makes feedback on a schema, config or diagram
 mechanically applicable: the human's note points at the field, node or edge
