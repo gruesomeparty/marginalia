@@ -95,7 +95,7 @@ func TestLanguagesAnchorBySymbolPath(t *testing.T) {
 			"Color enum", "  Color/Red variant", "  Color/Green variant",
 			"Doer trait", "  Doer/run method",
 			"impl Batch impl", "  Batch/full method",
-			"impl Display for Batch impl", "  Batch/fmt method",
+			"impl Display for Batch impl", "  Batch/Display/fmt method",
 			"inner mod", "  inner/f fn", "m macro", "Id type", "main fn",
 		},
 		"A.java": {
@@ -300,5 +300,24 @@ func TestHTMLKeepsIndentationInsideStrings(t *testing.T) {
 	out := html.UnescapeString(tag.ReplaceAllString(f.HTML(src, start, len(src)-3), ""))
 	if !strings.Contains(out, "\n\t\tSELECT 1\n\t`") {
 		t.Errorf("raw string re-indented: %q", out)
+	}
+}
+
+// Bytes no top-level symbol holds — the rest of a file whose parse stopped
+// early — are an `unknown` block, the id notes on them were written against.
+func TestUncoveredBytesAreUnknown(t *testing.T) {
+	src := []byte("package p\n\nleftover tail\n")
+	w := &walker{src: src}
+	pkg := &Symbol{Path: "package", Kind: "package", Start: 0, End: 9}
+	out := w.cover([]*Symbol{pkg}, 0, len(src))
+	if len(out) != 2 {
+		t.Fatalf("got %d symbols, want the package and one gap", len(out))
+	}
+	gap := out[1]
+	if gap.Path != KindUnknown || gap.Kind != KindUnknown {
+		t.Errorf("gap is %s (%s), want %s", gap.Path, gap.Kind, KindUnknown)
+	}
+	if got := string(src[gap.Start:gap.End]); got != "leftover tail" {
+		t.Errorf("gap holds %q", got)
 	}
 }

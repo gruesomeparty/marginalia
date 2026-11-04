@@ -45,11 +45,15 @@ func rustDecl(w *walker, n *ts.Node) (decl, bool) {
 		return d, true
 	case "impl_item":
 		self := rustTypeName(w, n.ChildByFieldName("type", w.lang))
-		name := "impl " + self
+		name, scope := "impl "+self, self
+		// A trait's methods sit under the type and the trait, so that
+		// `fmt` from Display and from Debug keep their own ids whichever
+		// impl comes first.
 		if trait := n.ChildByFieldName("trait", w.lang); trait != nil {
-			name = "impl " + rustTypeName(w, trait) + " for " + self
+			t := rustTypeName(w, trait)
+			name, scope = "impl "+t+" for "+self, self+"/"+t
 		}
-		return decl{name: name, kind: "impl", scope: self, members: w.named(n, "declaration_list")}, true
+		return decl{name: name, kind: "impl", scope: scope, members: w.named(n, "declaration_list")}, true
 	case "const_item", "static_item", "type_item", "macro_definition", "associated_type":
 		return decl{name: w.field(n, "name"), kind: strings.TrimSuffix(strings.TrimSuffix(typ, "_item"), "_definition")}, true
 	case "field_declaration", "enum_variant":

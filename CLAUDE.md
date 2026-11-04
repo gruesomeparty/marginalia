@@ -433,7 +433,8 @@ users are agents, not humans.
   runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
   name plus a `decl` function saying which nodes are declarations, what each
   is called, and which child lists hold its members (`scope` re-roots them,
-  so a Rust impl's methods sit under its type; `skip` leaves a docstring in
+  so a Rust impl's methods sit under its type, a trait impl's under
+  type/trait; `skip` leaves a docstring in
   its container's text; `attached` node types — Rust attributes — join the
   declaration below like a comment); comment attachment,
   `unknown` cover for unparsed bytes (top level only, so no byte is hidden),

@@ -14,7 +14,7 @@ the document around it changes.
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
-| source: `.go`, `.py`, `.ts`/`.tsx`, `.js`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/fmt` (Rust); named on the command line, never picked up by a directory walk |
+| source: `.go`, `.py`, `.ts`/`.tsx`, `.js`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -104,8 +104,9 @@ reviewed declaration by declaration, each anchored by the name the code
 already uses: a function by its name, a method by its type and name
 (`Batch/Full`), a field or interface method under its type. Go puts a constant
 under `const` whether it sits in a group or not; Rust puts an impl block's
-methods under the type it implements (`Batch/fmt`), so a method reads the
-same whichever impl declares it; an overloaded Java method is `Batch/full`,
+methods under the type it implements (`Batch/full`), and a trait impl's under
+the type and the trait (`Batch/Display/fmt`), so `fmt` from Display and from
+Debug never trade ids when their impls are reordered; an overloaded Java method is `Batch/full`,
 then `Batch/full#2`. A Go method stays where the file put it rather than
 moving under its type, so the page reads in source order. Comments, Python
 decorators and Rust attributes directly above a declaration are part of it.

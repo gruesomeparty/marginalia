@@ -327,7 +327,7 @@ func (w *walker) symbol(n *ts.Node, scope string) *Symbol {
 	return s
 }
 
-// cover adds a code symbol for any run of non-whitespace bytes between
+// cover adds an unknown symbol for any run of non-whitespace bytes between
 // the file's top-level symbols that none of them holds — a stray token, or
 // the rest of a file after a parse that stopped early — so nothing in the
 // file goes unshown. Inside a container the gaps are the container's own
@@ -344,7 +344,7 @@ func (w *walker) cover(syms []*Symbol, from, to int) []*Symbol {
 			hi--
 		}
 		if lo < hi {
-			out = append(out, &Symbol{Path: KindCode, Kind: KindCode, Start: lo, End: hi})
+			out = append(out, &Symbol{Path: KindUnknown, Kind: KindUnknown, Start: lo, End: hi})
 		}
 	}
 	for _, s := range syms {
