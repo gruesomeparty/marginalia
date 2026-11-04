@@ -355,9 +355,11 @@ users are agents, not humans.
   `POST /api/feedback` returns `at` for the same reason it returns `id`. The
   offer is a button on a selection, never a hijacked mouseup, and the block's
   click handler ignores a click that ends a drag-select — otherwise "comment on
-  a sentence" would have cost "select a sentence". Scope is markdown prose:
-  trees and fences are skipped because their rendered text and `PlainText` can
-  differ.
+  a sentence" would have cost "select a sentence". Scope is markdown prose
+  and source-file declarations (`main.tree.source`, issue #31 — a declaration
+  renders its own source, so `PlainText` and the DOM agree; `paint` skips the
+  fold caret): other trees and fences are skipped because their rendered text
+  and `PlainText` can differ.
 - Several reviewers (issue #53): `State.ByAuthor` is each author's latest
   note on a block, and `Current`/`Overall` is the weightiest of those
   (reject > question > anything else > approve, latest breaking a tie), so
