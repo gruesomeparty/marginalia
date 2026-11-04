@@ -89,6 +89,12 @@ func TestLanguagesAnchorBySymbolPath(t *testing.T) {
 			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method", "  Batch/size method",
 			"ingest function", "default export", "handler const", "NS namespace", "  NS/f function",
 		},
+		"a.js": {
+			"import code", "batchCap const",
+			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method",
+			"ingest function", "default export", "handler const",
+		},
+		"a.tsx": {"import code", "Props type", "Hello function", "Card const"},
 		"a.rs": {
 			"use code", "CAP const", "NAME static",
 			"Batch struct", "  Batch/cap field", "  Batch/items field",
@@ -270,25 +276,38 @@ func FuzzParse(f *testing.F) {
 	f.Add(string(load(&testing.T{}, "ingest.go")))
 	f.Add("package p\nfunc (")
 	f.Add("type ( A struct { B interface { C } } )")
+	for _, name := range []string{"a.py", "a.ts", "a.rs", "A.java"} {
+		f.Add(string(load(&testing.T{}, name)))
+	}
+	f.Add("class A:\n    # c\n    \"\"\"doc\"\"\"\n    def f(self): pass\n")
+	f.Add("/// d\n#[a]\nimpl X for Y { fn f() {} }\n")
 	f.Fuzz(func(t *testing.T, src string) {
-		file, err := Parse(Detect("x.go"), []byte(src))
-		if err != nil {
-			return // refused whole; the caller shows the file
+		// Every language reads every input, so the walker's per-language
+		// paths (scope, skip, attached) all meet malformed bytes.
+		for _, name := range []string{"x.go", "x.py", "x.ts", "x.rs", "x.java"} {
+			fuzzOne(t, name, src)
 		}
-		var walk func([]*Symbol, int, int)
-		walk = func(syms []*Symbol, lo, hi int) {
-			at := lo
-			for _, s := range syms {
-				if s.Start < at || s.End < s.Start || s.End > hi {
-					t.Fatalf("%s at [%d,%d) outside [%d,%d) after %d", s.Path, s.Start, s.End, lo, hi, at)
-				}
-				walk(s.Children, s.Start, s.End)
-				at = s.End
-			}
-		}
-		walk(file.Symbols, 0, len(src))
-		_ = file.HTML([]byte(src), 0, len(src))
 	})
+}
+
+func fuzzOne(t *testing.T, name, src string) {
+	file, err := Parse(Detect(name), []byte(src))
+	if err != nil {
+		return // refused whole; the caller shows the file
+	}
+	var walk func([]*Symbol, int, int)
+	walk = func(syms []*Symbol, lo, hi int) {
+		at := lo
+		for _, s := range syms {
+			if s.Start < at || s.End < s.Start || s.End > hi {
+				t.Fatalf("%s: %s at [%d,%d) outside [%d,%d) after %d", name, s.Path, s.Start, s.End, lo, hi, at)
+			}
+			walk(s.Children, s.Start, s.End)
+			at = s.End
+		}
+	}
+	walk(file.Symbols, 0, len(src))
+	_ = file.HTML([]byte(src), 0, len(src))
 }
 
 // Dedenting a method read out of a type leaves a raw string's own
