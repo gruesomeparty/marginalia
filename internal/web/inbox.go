@@ -106,7 +106,7 @@ type InboxRow struct {
 	Blocking     bool       `json:"blocking,omitempty"`
 	DueBy        *time.Time `json:"due_by,omitempty"`
 	Overdue      bool       `json:"overdue,omitempty"`
-	WaitingSince time.Time  `json:"waiting_since"`
+	WaitingSince time.Time  `json:"waiting_since,omitzero"`
 	Urgent       bool       `json:"urgent,omitempty"`
 	// Changed is how many blocks moved since the reviewer last finished.
 	Changed int `json:"changed"`
