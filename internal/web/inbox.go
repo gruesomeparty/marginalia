@@ -85,6 +85,8 @@ type InboxRow struct {
 	Outstanding int      `json:"outstanding"`
 	Stale       int      `json:"stale"`
 	Unclaimed   int      `json:"unclaimed"`
+	// Changed is how many blocks moved since the reviewer last finished.
+	Changed int `json:"changed"`
 }
 
 // Ways the inbox can group its rows. Day is the default (issue 134).

@@ -76,8 +76,12 @@ have a shell and the bearer but no MCP client, `GET
    - `review_done` — they submitted the Done sheet. Its `text` is their
      overall note, if they wrote one, so read it before acting on the
      per-block notes.
-4. `review_status {session_id}` — per-block state, what went stale, and the
-   suggested edits that are safe to apply verbatim.
+4. `review_status {session_id}` — per-block state, what went stale, the
+   suggested edits that are safe to apply verbatim, and `changed_blocks`:
+   the blocks added, edited or removed since a reviewer last finished,
+   whether or not anyone commented on them. It is empty until a Done
+   recorded by the running session (hosted mode keeps it across restarts),
+   so an empty list is not proof that nothing changed.
 
 `close_review {session_id}` when you are finished: it stops serving and
 returns the final status. Saved notes stay on disk (or, hosted, at the review's
