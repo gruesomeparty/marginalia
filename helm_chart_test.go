@@ -31,7 +31,8 @@ func TestChartIsTheRelease(t *testing.T) {
 		}
 	}
 
-	if !extraFiles(t)[chartDir+"/Chart.yaml"] {
+	listed := extraFiles(t)[chartDir+"/Chart.yaml"]
+	if !listed {
 		t.Errorf("release-please-config.json does not list %s/Chart.yaml in extra-files", chartDir)
 	}
 }
