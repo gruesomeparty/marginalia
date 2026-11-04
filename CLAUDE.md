@@ -649,6 +649,16 @@ users are agents, not humans.
   `Withdraw` freezes before its emptiness check). Archived
   reviews' metadata is read once at startup for the tab; their logs are not.
   Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
+  Callbacks (`hosted/callback.go`, issue #219) call an agent back on a
+  human's `review_done` or `question` (`server.Options.Recorded`, told of
+  every appended event): `publish_document`'s `callback_url` lands on
+  `Meta.Callback` (inherited by a republish), the body is ids, cursor and
+  event only, signed HMAC-SHA256 under a secret derived from
+  `MARGINALIA_CALLBACK_SECRET`, the review id and the URL (so a republish
+  naming another URL cannot learn it), returned by a publish that names one. Off without
+  `MARGINALIA_CALLBACK_HOSTS`; https and listed hosts only, and the dialer
+  refuses a non-public address after resolution (no proxy, no redirects).
+  Questions debounce per review; a Done is never held.
   Assets (issue #217, `hosted/assets.go`): `publish_document` takes
   `assets` (base64 PNG/JPEG/WebP/SVG, type checked against extension and
   content), stored put-if-absent at `reviews/<id>/asset/<n>/<name>`,

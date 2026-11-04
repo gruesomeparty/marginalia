@@ -59,6 +59,10 @@ If the document shows images (screenshots, mockups), send them in the same
 call as `assets: [{name, content_base64}]` (PNG, JPEG, WebP or SVG):
 `![mock](mock.png)` then shows the review's own copy, and a revision keeps
 assets it does not resend.
+A job that should stop rather than wait (CI, say) can pass `callback_url`:
+the host POSTs a signed notice, with the cursor to read from, when the
+reviewer submits Done or asks a question, if the operator allows that host.
+Keep the `callback_secret` the publish returns and verify the signature.
 
 On a hosted instance the review also lands in the owner's **inbox** (`/`), so
 the URL you hand over is a convenience, not the only way in. A publish can be
