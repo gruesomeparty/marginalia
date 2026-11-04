@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.0](https://github.com/gruesomeparty/marginalia/compare/v0.5.0...v0.6.0) (2026-11-04)
+
+
+### Features
+
+* agent-facing done signals follow the review's completion rule ([#211](https://github.com/gruesomeparty/marginalia/issues/211)) ([9d8a9c0](https://github.com/gruesomeparty/marginalia/commit/9d8a9c074b76bf57cda2ccfcbd3bc1b13819ef3b))
+* **codetree:** review Go source files by symbol path on tree-sitter ([#222](https://github.com/gruesomeparty/marginalia/issues/222)) ([3aab900](https://github.com/gruesomeparty/marginalia/commit/3aab90015e9a1178fc6d1a4660688dad5e4b0e5a))
+* **codetree:** review Python, TypeScript, JavaScript, Rust and Java source ([#234](https://github.com/gruesomeparty/marginalia/issues/234)) ([41a2675](https://github.com/gruesomeparty/marginalia/commit/41a2675baaf634fc4eb3a626124447c9fb25eaa2))
+* **feedback:** per-reviewer verdicts and a completion rule ([#208](https://github.com/gruesomeparty/marginalia/issues/208)) ([c069c01](https://github.com/gruesomeparty/marginalia/commit/c069c016b7b768c3096dd34270aa36236ce9b0fe))
+* **hosted:** add a stats page for how reviews and agents are doing ([#225](https://github.com/gruesomeparty/marginalia/issues/225)) ([e5415b6](https://github.com/gruesomeparty/marginalia/commit/e5415b6f4a6170674bd3aea2b1ec7346daed247f))
+* **hosted:** archive, restore and withdraw reviews on demand ([#223](https://github.com/gruesomeparty/marginalia/issues/223)) ([2dedd83](https://github.com/gruesomeparty/marginalia/commit/2dedd830dccc01b10d169a1d9a442984f92969c1))
+* **hosted:** call an agent back when the reviewer is done or asks ([#229](https://github.com/gruesomeparty/marginalia/issues/229)) ([cdfb617](https://github.com/gruesomeparty/marginalia/commit/cdfb617f508fb8fa255db5456dcc3f95927d1a78))
+* **hosted:** let an agent mark a review blocking with a due-by ([#228](https://github.com/gruesomeparty/marginalia/issues/228)) ([f4aab58](https://github.com/gruesomeparty/marginalia/commit/f4aab5882bdc85e70d609cc73dea53146e1b5902))
+* **hosted:** publish images beside documents ([#226](https://github.com/gruesomeparty/marginalia/issues/226)) ([79c9772](https://github.com/gruesomeparty/marginalia/commit/79c97728c6c0e24fc605ab889c150e8cdc97f386))
+* let an agent ask a multiple-choice question answered in one tap ([#224](https://github.com/gruesomeparty/marginalia/issues/224)) ([abb8883](https://github.com/gruesomeparty/marginalia/commit/abb8883897158f5e965ac299df5e1eb955a77879))
+* suggest an edit to one sentence and see it as a redline ([#227](https://github.com/gruesomeparty/marginalia/issues/227)) ([6e7c2c8](https://github.com/gruesomeparty/marginalia/commit/6e7c2c8d6c84d023d3e84f04388d34a13c15407d))
+* track what changed since the reviewer last finished ([#221](https://github.com/gruesomeparty/marginalia/issues/221)) ([c847ea7](https://github.com/gruesomeparty/marginalia/commit/c847ea7a286010535327e283a7ffd8e24ec95a12))
+* **web:** notes on a few lines inside a source declaration ([#236](https://github.com/gruesomeparty/marginalia/issues/236)) ([78412eb](https://github.com/gruesomeparty/marginalia/commit/78412ebe69a34d3057b5138d5e1dabd0a12df022))
+* **web:** show who wrote each note and follow other reviewers live ([#212](https://github.com/gruesomeparty/marginalia/issues/212)) ([00d5b96](https://github.com/gruesomeparty/marginalia/commit/00d5b9608f9885fd929a7390b36fddc7b9a9701f))
+
+
+### Bug Fixes
+
+* **deps:** update go modules (non-major) ([#232](https://github.com/gruesomeparty/marginalia/issues/232)) ([71ee0bc](https://github.com/gruesomeparty/marginalia/commit/71ee0bc19f1cdfdcffb22a4e43485b4e710ee2f7))
+
 ## [0.5.0](https://github.com/gruesomeparty/marginalia/compare/v0.4.0...v0.5.0) (2026-10-31)
 
 
