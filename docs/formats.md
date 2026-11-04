@@ -14,7 +14,7 @@ the document around it changes.
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
-| source: `.go`, `.py`, `.ts`/`.tsx`, `.js`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
+| source: `.go`, `.py`/`.pyi`, `.ts`/`.mts`/`.cts`/`.tsx`, `.js`/`.mjs`/`.cjs`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -164,11 +164,14 @@ answering a typo with "install the thing you just said you had" would be worse.
 
 ## Where sentence-level notes apply
 
-Deliberately narrow: markdown prose. A tree node and a diagram statement are
-already fine-grained, and inside a code fence the rendered text and the block's
-plain text can differ — so the page simply does not offer there, and a note on
-the whole block is what you get. That is better than an anchor nothing can
-resolve.
+Deliberately narrow: markdown prose, and the declarations of a source file. A
+tree node and a diagram statement are already fine-grained, and inside a code
+fence the rendered text and the block's plain text can differ — so the page
+simply does not offer there, and a note on the whole block is what you get.
+That is better than an anchor nothing can resolve. A source declaration is the
+exception among trees because it renders exactly its own source: select a few
+lines inside a long function and the note anchors to them, re-found after
+unrelated edits and stale once those lines change.
 
 ## Code in a document
 
