@@ -44,7 +44,8 @@ func tsDecl(w *walker, n *ts.Node) (decl, bool) {
 	case "lexical_declaration", "variable_declaration":
 		var names []string
 		for _, v := range w.named(n, "variable_declarator") {
-			names = append(names, w.field(v, "name"))
+			// A destructuring pattern is its own text, less the layout.
+			names = append(names, strings.Join(strings.Fields(w.field(v, "name")), ""))
 		}
 		kind := "var"
 		if n.ChildCount() > 0 {

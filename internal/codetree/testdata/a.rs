@@ -4,6 +4,8 @@ use std::fmt;
 const CAP: usize = 10;
 static NAME: &str = "x";
 
+/// A batch.
+#[derive(Debug)]
 pub struct Batch<T> {
     pub cap: usize,
     items: Vec<T>,

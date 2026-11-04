@@ -321,3 +321,35 @@ func TestUncoveredBytesAreUnknown(t *testing.T) {
 		t.Errorf("gap holds %q", got)
 	}
 }
+
+// A Rust item's doc comment and attributes are part of it, though the
+// grammar ends a line comment after its newline.
+func TestRustDocsAndAttributesJoinTheirItem(t *testing.T) {
+	src := load(t, "a.rs")
+	f := parse(t, "a.rs", src)
+	for path, want := range map[string]string{
+		"CAP":   "/// Cap.\nconst CAP",
+		"Batch": "/// A batch.\n#[derive(Debug)]\npub struct Batch",
+	} {
+		var got *Symbol
+		for _, s := range f.Symbols {
+			if s.Path == path {
+				got = s
+			}
+		}
+		if got == nil {
+			t.Fatalf("no %s in %v", path, flat(f.Symbols, 0))
+		}
+		if text := string(src[got.Start:got.End]); !strings.HasPrefix(text, want) {
+			t.Errorf("%s starts %q, want %q", path, text[:min(len(text), 40)], want)
+		}
+	}
+}
+
+func TestTypeScriptDestructuringNamesHaveNoLayout(t *testing.T) {
+	src := []byte("const {\n  a,\n  b,\n} = load();\n")
+	f := parse(t, "a.ts", src)
+	if len(f.Symbols) != 1 || f.Symbols[0].Path != "{a,b,}" {
+		t.Errorf("got %v, want one symbol {a,b,}", flat(f.Symbols, 0))
+	}
+}
