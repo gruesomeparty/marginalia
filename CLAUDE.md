@@ -57,8 +57,13 @@ users are agents, not humans.
   all three of: the suggestion is the note that stands for its block, its hash
   matches the block now, and it has a hash at all — `Materialize` treats a
   hash-less note as not-stale, which is right for reading and not good enough
-  for editing. The tool never applies anything: *never mutate the source
-  document*.
+  for editing. A suggestion with `sub` (issue #218) is judged by its
+  sentence instead: applicable while `Locate` still finds it (`At` says
+  where), superseded only by a later note on the whole block or an
+  overlapping sentence, so one paragraph can carry several. The page
+  starts a selection's suggestion from the sentence and draws it as a
+  redline (word diff in page script, text nodes only). The tool never
+  applies anything: *never mutate the source document*.
 - `internal/mcpserver` is the agent-facing surface (`marginalia mcp`, stdio):
   `review_document`, `feedback_since`, `review_status`, `reply_to_note`,
   `mark_addressed`, `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the

@@ -186,4 +186,13 @@ carries a hash at all. Everything else comes back under `needs_confirmation`
 with the reason — the block changed since, a later note supersedes it, the block
 is gone, or there is no hash to check.
 
+A suggestion the reviewer made on one sentence carries `sub` (the sentence) and
+`at` (where it sits in the block's rendered text now, not its source, so match
+the quote by text): its `replacement` stands in for that sentence only. It is applicable while that sentence still reads the same,
+whatever happened to the rest of the paragraph, and a later note on the same
+sentence or on the whole block supersedes it.
+Several sentences of one paragraph can each carry an applicable suggestion.
+Apply them by text one at a time, or from the last `at` back to the first, since
+an earlier edit shifts the offsets after it.
+
 Marginalia never edits your document. This reports; you apply.
