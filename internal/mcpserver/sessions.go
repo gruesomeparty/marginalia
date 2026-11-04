@@ -84,7 +84,7 @@ func (s *Server) stop(id string) error {
 	}
 	l.cancel()
 	if err := <-l.done; err != nil {
-		s.logf("marginalia: review %s stopped: %v\n", id, err)
+		s.logf("marginalia: review session %s: %v\n", id, err)
 	}
 	return nil
 }

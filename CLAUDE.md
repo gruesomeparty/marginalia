@@ -221,6 +221,14 @@ users are agents, not humans.
   is outstanding work for the agent, counted in `Replies` and not `Comments`;
   the page shows it under the sidenote and not in the block's notes. `import`
   lets a `req:` reply through, since no log holds the question.
+  A note may carry 2–4 `options` and may have no `block` (issue #215): the
+  page heads itself with block-less notes and draws one button per option;
+  a tap is that same `reply` with `fields.choice`, and `check()` admits fields
+  on a protocol event only there, through `Config.CheckAnswer` (the choice
+  must be offered). Materialize keeps a block-less requester answer as a
+  state for block `""`, first and never orphaned. `await_review_done` returns
+  reason `answer` with `choices` (`mcpserver.Choices`); `question` outranks it, and `choices` is filled whatever the reason. `import` admits a block-less `req:` reply.
+  An agent cannot tap: its two write tools carry no fields.
 - `internal/review/presets/*.yaml` are framings embedded in the binary
   (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
   than inventing one and the events compare across runs. `Config.Overlay`
