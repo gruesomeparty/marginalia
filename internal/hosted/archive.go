@@ -175,6 +175,14 @@ func (h *Host) Withdraw(ctx context.Context, id, agent string) error {
 	// and the move.
 	prefix := prefixReviews + id + "/"
 	h.meter.freeze(prefix)
+	// A document a republish dropped still has its log, and its notes are
+	// the reviewer's too.
+	for _, n := range r.Meta.Retired {
+		if n > 0 {
+			h.meter.thaw(prefix)
+			return fmt.Errorf("review %s cannot be withdrawn: the reviewer has started on it, so archiving it is theirs to do — publish a revision with review_id instead", id)
+		}
+	}
 	for _, e := range r.Server.Entries() {
 		events, err := e.Store.Load()
 		if err != nil {

@@ -137,7 +137,22 @@ func TestWithdrawIsThePublishersUntilTheReviewerStarts(t *testing.T) {
 		t.Fatal(code)
 	}
 
+	// Notes on a document a later revision dropped still count.
+	retired, err := h.Publish(ctx, Publish{Title: "retired", Agent: "agent", Docs: []Document{{Name: "a.md", Content: []byte(specDoc)}, {Name: "b.md", Content: []byte(specDoc)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := post(t, ts.URL+"/r/"+retired.Meta.ID+"/api/feedback", feedback.Event{Doc: "b.md", Block: "1/2", Type: "comment", Text: "n"}); code != http.StatusCreated {
+		t.Fatal(code)
+	}
+	if _, err := h.Republish(ctx, retired.Meta.ID, Publish{Agent: "agent", Docs: []Document{{Name: "a.md", Content: []byte(specDoc)}}}); err != nil {
+		t.Fatal(err)
+	}
+
 	cs := connect(t, ts)
+	if err := call(t, cs, "withdraw_review", map[string]any{"review_id": retired.Meta.ID}, &withdrawOut{}); err == nil || !strings.Contains(err.Error(), "started on it") {
+		t.Errorf("withdrawing a review whose noted document was dropped: %v", err)
+	}
 	var out withdrawOut
 	if err := call(t, cs, "withdraw_review", map[string]any{"review_id": theirs.Meta.ID}, &out); err == nil || !strings.Contains(err.Error(), "another agent") {
 		t.Errorf("withdrawing another agent's review: %v", err)
