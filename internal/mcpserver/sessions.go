@@ -83,7 +83,9 @@ func (s *Server) stop(id string) error {
 		return errUnknownSession(id)
 	}
 	l.cancel()
-	<-l.done
+	if err := <-l.done; err != nil {
+		s.logf("marginalia: review session %s: %v\n", id, err)
+	}
 	return nil
 }
 

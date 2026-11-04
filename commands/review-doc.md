@@ -1,10 +1,13 @@
 ---
-description: Serve a markdown document for human review and consume the returned feedback events.
+description: Hand a document to a human for block-anchored review and consume the returned feedback events.
 argument-hint: <path-to-doc>
 ---
 
 Use the `review-doc` skill to run a Marginalia review for `$ARGUMENTS`.
 
-Follow `skills/review-doc/SKILL.md` exactly: start the server, tell the human the
-URL and what you need reviewed, watch `<doc>.feedback.jsonl` for the `review_done`
-event, then address every event grouped by block, quoting `block` + `quote`.
+Follow `skills/review-doc/SKILL.md` exactly: prefer the marginalia MCP tools
+(`review_document`, or `publish_document` on a hosted instance) and wait with
+`await_review_done` in a loop; fall back to `marginalia serve` and the
+`<doc>.feedback.jsonl` log only when no server is connected. Answer questions
+with `reply_to_note` as they come, then address every event grouped by block,
+quoting `block` + `quote`, and record each change with `mark_addressed`.

@@ -11,6 +11,12 @@ builds:
       - CGO_ENABLED=0
     goos: [linux, darwin]
     goarch: [amd64, arm64]
+    # Embed only the tree-sitter grammars internal/codetree reads source
+    # files with, not gotreesitter's ~200: one grammar_subset_<name> per
+    # language (TestReleaseEmbedsEveryGrammar keeps the list complete). A
+    # plain `go build` embeds them all and behaves the same, only bigger.
+    flags:
+      - -tags=grammar_subset,grammar_subset_go
     ldflags:
       - -s -w
       - -X github.com/gruesomeparty/marginalia/cmd.version={{.Version}}

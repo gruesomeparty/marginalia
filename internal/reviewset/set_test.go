@@ -77,6 +77,7 @@ func TestLoadDirectoryDiscovers(t *testing.T) {
 		".dotfile.md":             "# nope\n",
 		"node_modules/pkg/p.json": "{}\n",
 		"vendor/dep/d.yaml":       "a: 1\n",
+		"cmd/main.go":             "package main\n",
 	})
 	set, err := Load([]string{root})
 	if err != nil {
@@ -84,7 +85,20 @@ func TestLoadDirectoryDiscovers(t *testing.T) {
 	}
 	want := "README.md,docs/deep/config.toml,docs/plan.md"
 	if got := strings.Join(rels(set), ","); got != want {
-		t.Errorf("rels = %s, want %s", got, want)
+		t.Errorf("rels = %s, want %s (source files only when named)", got, want)
+	}
+}
+
+// A source file is reviewed when it is named, though a directory walk
+// passes it by.
+func TestLoadNamedSourceFile(t *testing.T) {
+	root := tree(t, map[string]string{"handler.go": "package ingest\n"})
+	set, err := Load([]string{filepath.Join(root, "handler.go")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(rels(set), ","); got != "handler.go" {
+		t.Errorf("rels = %s", got)
 	}
 }
 
