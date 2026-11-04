@@ -47,12 +47,10 @@ func pyDecl(w *walker, n *ts.Node) (decl, bool) {
 	case "import_statement", "import_from_statement", "future_import_statement":
 		return decl{name: "import", kind: "import"}, true
 	case "string":
-		// A docstring: part of the class or function it documents, or the
-		// module's own block at the top.
-		if w.in != "" {
-			return decl{skip: true}, true
-		}
-		return decl{name: "docstring", kind: "doc"}, true
+		// A docstring: part of the class or function it documents when it
+		// leads the body, otherwise (the module's, or an attribute's) a
+		// block of its own.
+		return decl{name: "docstring", kind: "doc", skip: w.in != ""}, true
 	}
 	return decl{}, false
 }

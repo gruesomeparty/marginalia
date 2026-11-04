@@ -7,8 +7,10 @@ RETRIES = 3
 
 @dataclass
 class Batch(Base):
+    # Batches.
     """Doc."""
     cap: int = 0
+    """Cap doc."""
 
     def full(self) -> bool:
         return self.cap > 0

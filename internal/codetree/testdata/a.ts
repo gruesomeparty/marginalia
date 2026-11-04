@@ -27,3 +27,5 @@ export default function () {}
 const handler = async (req) => { return 1; };
 
 namespace NS { export function f() {} }
+
+declare module "a/b" { export function g(): void; }

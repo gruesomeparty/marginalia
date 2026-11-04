@@ -102,8 +102,10 @@ type decl struct {
 	// scope, when set, is the path members hang under instead of this
 	// one's: a Rust `impl Display for Batch` holds `Batch/fmt`.
 	scope string
-	// skip leaves the node out of the members list, so it stays part of
-	// its container's own text: a Python docstring.
+	// skip leaves the node out of the members list when it leads them, so
+	// it stays part of its container's own text: a Python docstring. Placed
+	// after a member it would fall between children, outside both the head
+	// and the tail, so there it is a member like any other.
 	skip bool
 }
 
@@ -276,8 +278,11 @@ func (w *walker) members(lists []*ts.Node, scope string) []*Symbol {
 				lastWasSymbol = false
 				continue
 			}
-			s := w.symbol(n, scope)
+			s := w.symbol(n, scope, len(out) == 0)
 			if s == nil {
+				// Comments above a skipped docstring stay with it, in the
+				// container's head, rather than stretching the next member.
+				run = nil
 				continue
 			}
 			if len(run) > 0 {
@@ -298,10 +303,11 @@ func (w *walker) members(lists []*ts.Node, scope string) []*Symbol {
 
 // symbol reads one node: a declaration if the language says so, otherwise a
 // statement named by its node type, or an unknown for a syntax error. It
-// is nil for a node the language skips.
-func (w *walker) symbol(n *ts.Node, scope string) *Symbol {
+// is nil for a node the language skips while lead says no member precedes
+// it.
+func (w *walker) symbol(n *ts.Node, scope string, lead bool) *Symbol {
 	d, ok := w.l.decl(w, n)
-	if ok && d.skip {
+	if ok && d.skip && lead {
 		return nil
 	}
 	switch {

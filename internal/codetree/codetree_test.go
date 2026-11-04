@@ -79,7 +79,7 @@ func TestLanguagesAnchorBySymbolPath(t *testing.T) {
 	cases := map[string][]string{
 		"a.py": {
 			"docstring doc", "import import", "import#2 import", "RETRIES assign",
-			"Batch class", "  Batch/cap assign", "  Batch/full method", "  Batch/size method",
+			"Batch class", "  Batch/cap assign", "  Batch/docstring doc", "  Batch/full method", "  Batch/size method",
 			"ingest def", "if code",
 		},
 		"a.ts": {
@@ -88,6 +88,7 @@ func TestLanguagesAnchorBySymbolPath(t *testing.T) {
 			"Id type", "Color enum",
 			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method", "  Batch/size method",
 			"ingest function", "default export", "handler const", "NS namespace", "  NS/f function",
+			`"a/b" namespace`, `  "a/b"/g function`,
 		},
 		"a.js": {
 			"import code", "batchCap const",
@@ -370,5 +371,37 @@ func TestTypeScriptDestructuringNamesHaveNoLayout(t *testing.T) {
 	f := parse(t, "a.ts", src)
 	if len(f.Symbols) != 1 || f.Symbols[0].Path != "{a,b,}" {
 		t.Errorf("got %v, want one symbol {a,b,}", flat(f.Symbols, 0))
+	}
+}
+
+// A docstring that leads a body is the container's own text; one after a
+// member is a block, since it would otherwise sit between children and be
+// neither shown nor hashed.
+func TestPythonDocstringsAreNeverHidden(t *testing.T) {
+	src := load(t, "a.py")
+	f := parse(t, "a.py", src)
+	var batch *Symbol
+	for _, s := range f.Symbols {
+		if s.Path == "Batch" {
+			batch = s
+		}
+	}
+	if batch == nil {
+		t.Fatalf("no Batch in %v", flat(f.Symbols, 0))
+	}
+	head := string(src[batch.Start:batch.Head()])
+	for _, want := range []string{"# Batches.", `"""Doc."""`} {
+		if !strings.Contains(head, want) {
+			t.Errorf("class head %q lacks %s", head, want)
+		}
+	}
+	for _, c := range batch.Children {
+		text := string(src[c.Start:c.End])
+		if c.Path == "Batch/docstring" && text != `"""Cap doc."""` {
+			t.Errorf("attribute docstring reads %q", text)
+		}
+		if c.Path == "Batch/cap" && strings.Contains(text, "Doc.") {
+			t.Errorf("Batch/cap took the class docstring: %q", text)
+		}
 	}
 }

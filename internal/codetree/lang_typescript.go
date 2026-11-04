@@ -59,7 +59,9 @@ func tsDecl(w *walker, n *ts.Node) (decl, bool) {
 	case "interface_declaration":
 		return decl{name: w.field(n, "name"), kind: "interface", members: w.named(n, "interface_body", "object_type")}, true
 	case "internal_module", "module":
-		return decl{name: strings.Trim(w.field(n, "name"), `"'`), kind: "namespace", members: w.named(n, "statement_block")}, true
+		// `declare module "a/b"` keeps its quotes: unquoted, its slash
+		// would read as namespace a's member b.
+		return decl{name: w.field(n, "name"), kind: "namespace", members: w.named(n, "statement_block")}, true
 	case "type_alias_declaration":
 		return decl{name: w.field(n, "name"), kind: "type"}, true
 	case "enum_declaration":
