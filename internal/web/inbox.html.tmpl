@@ -99,6 +99,7 @@ main{max-width:68ch;margin:var(--sp-6) auto;padding:0 var(--sp-5)}
           {{- if .Outstanding}}<span class="need">{{.Outstanding}} outstanding</span>{{end}}
           {{- if .Stale}}<span class="warn">{{.Stale}} stale</span>{{end}}
           {{- if .Unclaimed}}<span class="warn">{{.Unclaimed}} unclaimed</span>{{end}}
+          {{- if .Changed}}<span>{{.Changed}} changed</span>{{end}}
           <time class="when" datetime="{{.WhenISO}}" title="last activity">{{.When}}</time></span>
         <span class="title">{{.Title}}</span>
         <span class="meta">

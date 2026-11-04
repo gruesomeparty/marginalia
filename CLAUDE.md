@@ -345,6 +345,48 @@ users are agents, not humans.
   a sentence" would have cost "select a sentence". Scope is markdown prose:
   trees and fences are skipped because their rendered text and `PlainText` can
   differ.
+- Several reviewers (issue #53): `State.ByAuthor` is each author's latest
+  note on a block, and `Current`/`Overall` is the weightiest of those
+  (reject > question > anything else > approve, latest breaking a tie), so
+  arrival order no longer decides a block's state; one author reads exactly
+  as before. Completion is a reading too: `Resolution.Finished` (authors of a
+  `review_done`) and `Participants` (anyone who wrote other than a `reply` or
+  `addressed`) feed `review.Completion` — the config's `complete_when:
+  any|all|quorum:N` and optional `reviewers:` list, which once set is the
+  denominator and the only Done that counts. `Materialize` applies `any`;
+  `Resolution.Complete(cfg.Completion())` applies the config's rule, and every
+  agent-facing signal does: the page's resolution, `serve --until-done`
+  (counting this process's Dones), `mcpserver.Target.Completion` (stdio reads
+  take it from the live session serving the path, else `any`), the hosted
+  tools, inbox status, archiving and `/agent/r/{id}/wait` (this revision's
+  Dones only). The page (page script only) names each note's author once a
+  log has more than one participant, marks the reviewer's own "(you)" — the
+  payload's `author` is the request's resolved identity (`Server.authorOf`) —
+  reads "Done (n of m)" when the rule needs more than one Done, and follows
+  `/api/wait`: on any append it re-reads `/api/resolution` and redraws only
+  blocks whose notes changed, never one with a reply or a new note being
+  typed (it catches up when the composer closes). It parks while the tab is
+  hidden or after 20 minutes without input, because an open request holds a
+  hosted container awake.
+  A set's nav tick and "Finish" state follow the rule too (`rule.Met` in
+  `renderPage`; the page re-reads the resolution after Done rather than
+  ticking on the click).
+- Changes since the last round (issue #214): `internal/changeset` diffs two
+  parses by block id (same id, new hash = edited; the rule Materialize
+  applies to notes) and gives an edited block a word-level redline; a
+  container whose inline children moved is left out. The baseline is the
+  parse the reviewer last finished: `server.Entry.Base`, moved to the
+  current parse on every `review_done` the server records (so `--watch`
+  follows the reviewer), and in hosted mode seeded from `Meta.Baseline` —
+  per document, the last revision finished before this one, computed at
+  republish from the log window `Meta.From` opens, parsed from the
+  immutable snapshot at startup and carried in memory after. No Done, no
+  baseline, nothing marked. `GET /api/changes`, `review_status`'s
+  `changed_blocks` (`Target.Base`) and the inbox's "n changed" all read it;
+  the last two count with `changeset.Without`, which skips the redlines.
+  The baseline is shared: any reviewer's Done moves it, whatever the
+  completion rule. Under `serve` and stdio it lives in memory, so a restart
+  or a read no live session serves has none until the next Done.
 - `feedback.Materialize` takes `[]feedback.Block{ID, Hash, Text}` rather than a
   `hashes` map plus an `order` slice. The pair could express a block that was
   known but unlisted, five callers each built it with the same loop, and a
@@ -384,6 +426,23 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
+- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+  through `gotreesitter` — a **pure-Go** runtime, so the build stays
+  `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
+  runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
+  name plus a `decl` function saying which nodes are declarations, what each
+  is called, and which child lists hold its members; comment attachment,
+  `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
+  and highlighting (from node types, not highlight queries, so it is the same
+  for every grammar) are shared. Ids are symbol paths (`Batch/Full`,
+  `const/batchCap`); a method stays in source order with its type in its path.
+  A leaf (a function) hashes all of itself; a container hashes its text
+  outside its children (`Symbol.Head`/`Tail`). `.goreleaser.yaml` builds with
+  `-tags=grammar_subset,grammar_subset_<grammar>…` so a release embeds only
+  the grammars registered — `TestReleaseEmbedsEveryGrammar` fails when a
+  language is added without its tag; an untagged `go build` embeds all ~200
+  and behaves the same, bigger. A directory walk skips `FormatSource`; a
+  source file is reviewed when named or listed in an index.
 - OpenAPI (issue #150, `document/openapi.go`) is not a format: a JSON/YAML/TOML
   document whose one root has an `openapi` or `swagger` key is anchored by
   what the spec names — `GET /orders/{id}`, the path item `/orders/{id}`,
@@ -598,7 +657,8 @@ users are agents, not humans.
   a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
-  hence the rebuild. `deploy_template_test.go` pins that tag to
+  hence the rebuild. `deploy_template_test.go` pins that tag (and
+  `.claude-plugin/plugin.json`'s version, also a release-please extra file) to
   `.release-please-manifest.json`, pins the `durable_object` scheduling
   policy and a single unnamed `getContainer` (that policy has no
   `max_instances`; one Durable Object is what keeps the host its store's
@@ -730,7 +790,10 @@ Claude Code") or any `<!-- agent:… -->` block. `scripts/comment-from.sh`
 (tested in `internal/pipeline`) reads that mark — bot or marked is `agent`,
 unmarked by a trusted login is `human`, anyone else `other` — and `triage.yml`
 re-triages an issue labelled `needs-info`/`needs-decision` when a `human`
-comments on it, so an answer to the loop's question is picked up. No Claude session or project links in commits, PRs or comments.
+comments on it, so an answer to the loop's question is picked up; the
+six-hourly sweep also picks one the trigger missed
+(`scripts/answered-issues.sh`: the latest comment is a `human`'s and newer
+than the triage block's `updated:` stamp, now a full UTC timestamp). No Claude session or project links in commits, PRs or comments.
 
 Triage is `skills/triage-issues/SKILL.md`, run by `.github/workflows/triage.yml`
 on every opened/reopened issue and a six-hourly sweep. The agent there **only
@@ -794,7 +857,12 @@ line of that block.
 **No `pull_request_target`**: a fork's PR gets no secrets on
 `pull_request`, so the two-hourly sweep reviews it from the default branch, and
 finds any unreviewed head by the `sha:` in its own comment's hidden block.
-Drafts and bots are skipped. It never approves, requests changes or blocks a
+Drafts and bots are skipped. A documentation-only PR (`scripts/ci-changes.sh`'s
+`docs_only`: Markdown such as the README, never `docs/`, skills, `commands/`,
+`.claude/`, CLAUDE.md or the PRD) runs no agent: the apply job re-checks the
+files of that exact head (the compare API, pinned to the sha) and records a
+scripted `review:pass`, domain `clear`, so the merge gate still sees a review
+of the current head. It never approves, requests changes or blocks a
 merge into `main`; `automerge-check.sh` refuses a `review:blocking` PR into a
 feature branch, and the work loop's preflight answers a blocking or concerns
 review on its open PR before it stops.
@@ -884,6 +952,16 @@ template) — done**.
   native role. Prose
   blocks keep their notes and composer as the *next sibling* (`[data-block] +
   .existing`), not inside; diagram statements put theirs under the figure.
+- Path-based CI: `ci.yml`'s `changes` job feeds the PR's file list to
+  `scripts/ci-changes.sh` (tested in `internal/pipeline`), and each job runs
+  only when its paths changed — a README edit runs none. A job skipped by its
+  `if` reports success, which keeps the ruleset's required checks green; the
+  `test` matrix instead runs both legs and skips their steps, since a skipped
+  matrix job does not report under its per-leg names. CodeQL's required
+  `analyze` gates the same way, `security.yml` (not required) uses a plain
+  `paths:` filter. A change to CI itself, a failed listing or a push to
+  `main` runs everything. A new required check must follow the same pattern,
+  never a workflow-level `paths:`, which leaves the check pending forever.
 - Coverage gate: `go test -coverprofile=coverage.out ./... && ./scripts/coverage.sh 80`
 - Lint: `golangci-lint run`
 - Vulnerabilities: `security.yml` runs govulncheck (pinned, Renovate bumps it

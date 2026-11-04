@@ -51,19 +51,55 @@ func TestTemplateImageIsTheRelease(t *testing.T) {
 		t.Errorf("Dockerfile builds FROM %v, want exactly %q — the image of the release this template ships in", from, want)
 	}
 
+	files := extraFiles(t)
+	if !files[templateDir+"/Dockerfile"] {
+		t.Errorf("release-please-config.json does not list %s/Dockerfile in extra-files, so a release leaves its tag behind", templateDir)
+	}
+}
+
+// The plugin manifest's version is the release's too. It sat at an old
+// release for two minor versions because nothing moved it; release-please
+// does now, and this pins that it keeps doing so.
+func TestPluginVersionIsTheRelease(t *testing.T) {
+	var manifest map[string]string
+	readJSON(t, ".release-please-manifest.json", &manifest)
+	var plugin struct {
+		Version string `json:"version"`
+	}
+	readJSON(t, ".claude-plugin/plugin.json", &plugin)
+	if plugin.Version != manifest["."] {
+		t.Errorf(".claude-plugin/plugin.json is version %q, want the release %q", plugin.Version, manifest["."])
+	}
+	if !extraFiles(t)[".claude-plugin/plugin.json"] {
+		t.Error("release-please-config.json does not list .claude-plugin/plugin.json in extra-files, so a release leaves the plugin's version behind")
+	}
+}
+
+// extraFiles is the set of paths release-please rewrites on a release. An
+// entry is a bare path or an object naming one (a JSON file and the field).
+func extraFiles(t *testing.T) map[string]bool {
+	t.Helper()
 	var config struct {
 		Packages map[string]struct {
-			ExtraFiles []string `json:"extra-files"`
+			ExtraFiles []json.RawMessage `json:"extra-files"`
 		} `json:"packages"`
 	}
 	readJSON(t, "release-please-config.json", &config)
-	listed := false
-	for _, f := range config.Packages["."].ExtraFiles {
-		listed = listed || f == templateDir+"/Dockerfile"
+	files := map[string]bool{}
+	for _, raw := range config.Packages["."].ExtraFiles {
+		var path string
+		if json.Unmarshal(raw, &path) != nil {
+			var entry struct {
+				Path string `json:"path"`
+			}
+			if err := json.Unmarshal(raw, &entry); err != nil {
+				t.Fatalf("release-please-config.json: extra-files entry %s: %v", raw, err)
+			}
+			path = entry.Path
+		}
+		files[path] = true
 	}
-	if !listed {
-		t.Errorf("release-please-config.json does not list %s/Dockerfile in extra-files, so a release leaves its tag behind", templateDir)
-	}
+	return files
 }
 
 func TestTemplateStaysGenericAndSingleInstance(t *testing.T) {

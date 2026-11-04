@@ -203,19 +203,13 @@ func isDone(r *Review) bool {
 	if len(entries) == 0 {
 		return false
 	}
+	rule := r.Server.Review().Completion()
 	for i := range entries {
 		events, err := entries[i].Store.Load()
 		if err != nil {
 			return false
 		}
-		done := false
-		for _, e := range events {
-			if e.Type == feedback.TypeReviewDone {
-				done = true
-				break
-			}
-		}
-		if !done {
+		if !rule.Met(feedback.Reviewers(events)) {
 			return false
 		}
 	}
