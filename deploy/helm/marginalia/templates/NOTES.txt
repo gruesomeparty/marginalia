@@ -9,6 +9,13 @@ WARNING: persistence is off and no store is set — every review lives in an
 emptyDir and is lost when the pod goes.
 {{- end }}
 {{- end }}
+{{- if not (or .Values.auth.human.reviewers .Values.networkPolicy.enabled) }}
+
+NOTE: auth.human.reviewers is empty and networkPolicy is off. The host checks
+each reviewer's token, not the proxy's own sign-in rules, so anyone with a
+valid token for this audience who reaches the pod around the proxy gets in.
+Set auth.human.reviewers, or networkPolicy.from naming only the ingress.
+{{- end }}
 {{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
 
 No Ingress or HTTPRoute was rendered. Route {{ include "marginalia.host" . }} to

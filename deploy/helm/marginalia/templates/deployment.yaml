@@ -83,7 +83,8 @@ spec:
             {{- $s = int64 $value | toString }}
             {{- end }}
             {{- end }}
-            {{- if ne $s "" }}
+            {{- /* A value set to null in values arrives as nil, which toString spells "<nil>". */}}
+            {{- if and (ne $s "") (not (kindIs "invalid" $value)) }}
             - name: {{ $name }}
               value: {{ $s | quote }}
             {{- end }}

@@ -55,6 +55,11 @@ if render --show-only templates/tests/healthz.yaml | grep -q 'app.kubernetes.io/
   echo "helm-check: the test pod carries the Service's selector labels" >&2; exit 1
 fi
 echo "helm-check: ok: the test pod is not a Service endpoint"
+out="$(render --set-json 'extraEnv={"SOME_SETTING":null}')"
+if grep -q '<nil>' <<<"$out"; then
+  echo "helm-check: a value set to null rendered as <nil>" >&2; exit 1
+fi
+echo "helm-check: ok: a null value is left out"
 
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \
