@@ -86,7 +86,7 @@ func resolveRoot(explicit string) (string, error) {
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = resolved
 	}
-	info, err := os.Stat(abs)
+	info, err := os.Stat(abs) //nolint:gosec // abs is the operator's own --root, the boundary every tool path is checked against
 	if err != nil {
 		return "", fmt.Errorf("root %s: %w", root, err)
 	}

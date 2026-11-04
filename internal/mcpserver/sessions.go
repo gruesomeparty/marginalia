@@ -83,7 +83,7 @@ func (s *Server) stop(id string) error {
 		return errUnknownSession(id)
 	}
 	l.cancel()
-	<-l.done
+	_ = <-l.done // Serve's own error is the shutdown it was asked for; the drain is what we wait on
 	return nil
 }
 
