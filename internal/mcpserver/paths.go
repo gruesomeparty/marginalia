@@ -86,7 +86,7 @@ func resolveRoot(explicit string) (string, error) {
 	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = resolved
 	}
-	info, err := os.Stat(abs) //nolint:gosec // the root is the operator's flag or environment, never a tool argument
+	info, err := os.Stat(abs) // #nosec G703 -- the operator chose this root (flag or env), not a tool argument
 	if err != nil {
 		return "", fmt.Errorf("root %s: %w", root, err)
 	}

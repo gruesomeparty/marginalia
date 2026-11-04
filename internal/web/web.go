@@ -174,7 +174,8 @@ func ReviewInfo(c *review.Config, doc *document.Document, rel string) Review {
 	for _, b := range doc.Blocks {
 		blocks[b.ID] = true
 	}
-	info.Notes = nil
+	// A note with no block is about the whole document, and comes first.
+	info.Notes = c.NotesFor("", names...)
 	for _, b := range doc.Blocks {
 		info.Notes = append(info.Notes, c.NotesFor(b.ID, names...)...)
 	}
