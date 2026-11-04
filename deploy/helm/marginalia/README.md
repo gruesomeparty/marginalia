@@ -102,6 +102,35 @@ ingress:
     nginx.ingress.kubernetes.io/auth-response-headers: X-Auth-Request-Id-Token
 ```
 
+The sign-in and callback (`/oauth2/…`) must reach oauth2-proxy, not the
+host, or sign-in loops. With the proxy on the same hostname, add an Ingress
+for that path, with no auth annotations, through `extraObjects`:
+
+```yaml
+extraObjects:
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: '{{ include "marginalia.fullname" . }}-oauth2'
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: review.example.com
+          http:
+            paths:
+              - path: /oauth2
+                pathType: Prefix
+                backend:
+                  service:
+                    name: oauth2-proxy
+                    port:
+                      number: 80
+```
+
+The Service has to be in the release's namespace (an Ingress cannot route
+across namespaces). Otherwise give oauth2-proxy a hostname of its own and
+point `auth-signin` there.
+
 If your IdP issues JWT access tokens, `--set-xauthrequest --pass-access-token`
 returns one as `X-Auth-Request-Access-Token` without the alpha config: set
 `auth.human.header` to that and `auth.human.audience` to the access token's

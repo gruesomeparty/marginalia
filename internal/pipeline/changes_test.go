@@ -25,14 +25,14 @@ func ciChanges(t *testing.T, paths []string, args ...string) map[string]bool {
 		}
 		got[k] = v == "true"
 	}
-	if len(got) != 8 {
-		t.Fatalf("ci-changes printed %d keys, want 8: %s", len(got), out)
+	if len(got) != 9 {
+		t.Fatalf("ci-changes printed %d keys, want 9: %s", len(got), out)
 	}
 	return got
 }
 
 func TestCIChanges(t *testing.T) {
-	everything := "test go image cloudflare workflows deps codeql"
+	everything := "test go image helm cloudflare workflows deps codeql"
 	for _, c := range []struct {
 		name  string
 		paths []string
@@ -49,20 +49,22 @@ func TestCIChanges(t *testing.T) {
 		{"a plugin command", []string{"commands/review-doc.md"}, ""},
 		{"homepage", []string{"site/index.html"}, ""},
 		// Tests read testdata, Markdown included.
-		{"testdata", []string{"internal/document/testdata/list.md"}, "test go image"},
-		{"markdown the binary could embed", []string{"internal/web/help.md"}, "test go image"},
-		{"go", []string{"internal/web/page.go"}, "test go image codeql"},
-		{"embedded template", []string{"internal/web/review.html.tmpl"}, "test go image"},
-		{"module", []string{"go.sum"}, "test go image deps codeql"},
+		{"testdata", []string{"internal/document/testdata/list.md"}, "test go image helm"},
+		{"markdown the binary could embed", []string{"internal/web/help.md"}, "test go image helm"},
+		{"go", []string{"internal/web/page.go"}, "test go image helm codeql"},
+		{"embedded template", []string{"internal/web/review.html.tmpl"}, "test go image helm"},
+		{"module", []string{"go.sum"}, "test go image helm deps codeql"},
 		{"template", []string{"deploy/cloudflare/src/index.ts"}, "test cloudflare"},
 		{"template lockfile", []string{"deploy/cloudflare/package-lock.json"}, "test cloudflare deps"},
-		{"dockerfile", []string{"Dockerfile"}, "test image"},
+		{"dockerfile", []string{"Dockerfile"}, "test image helm"},
+		{"the chart", []string{"deploy/helm/marginalia/values.yaml"}, "test helm"},
+		{"a chart check", []string{"scripts/helm-check.sh"}, "test helm"},
 		// Dependency review checks the actions a workflow pins.
 		{"a loop workflow", []string{".github/workflows/review-prs.yml"}, "test workflows deps"},
 		{"a script", []string{"scripts/merge-gate.sh"}, "test"},
-		{"docs and code", []string{"README.md", "cmd/serve.go"}, "test go image codeql"},
+		{"docs and code", []string{"README.md", "cmd/serve.go"}, "test go image helm codeql"},
 		// A rename names both sides; the old one counts too.
-		{"renamed out of testdata", []string{"notes/a.md", "internal/x/testdata/a.md"}, "test go image"},
+		{"renamed out of testdata", []string{"notes/a.md", "internal/x/testdata/a.md"}, "test go image helm"},
 		// CI itself, or nothing to go on: everything.
 		{"ci workflow", []string{"README.md", ".github/workflows/ci.yml"}, everything},
 		{"codeql workflow", []string{".github/workflows/codeql.yml"}, everything},

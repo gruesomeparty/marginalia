@@ -24,6 +24,7 @@ jobs:
       test: ${{ steps.paths.outputs.test }}
       go: ${{ steps.paths.outputs.go }}
       image: ${{ steps.paths.outputs.image }}
+      helm: ${{ steps.paths.outputs.helm }}
       cloudflare: ${{ steps.paths.outputs.cloudflare }}
       workflows: ${{ steps.paths.outputs.workflows }}
       deps: ${{ steps.paths.outputs.deps }}
@@ -220,6 +221,8 @@ jobs:
   # tools come from `go install` at pinned versions rather than from more
   # third-party actions.
   helm-chart:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.helm == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
