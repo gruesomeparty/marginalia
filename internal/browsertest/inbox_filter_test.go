@@ -37,9 +37,9 @@ func TestInboxFilterAppliesOnChange(t *testing.T) {
 	do(t, ctx,
 		chromedp.Navigate(ts.URL+"/?tab=all"),
 		chromedp.WaitVisible(chromedp.CSS(".filters")),
-		// One script sets the value and fires the change: a separate SetValue
-		// can itself trigger the submit, and the page is gone by the time a
-		// second step looks for the select.
+		// Set and announce the choice in one step: setting it through the
+		// protocol can already fire change, and the page then navigates
+		// away under a second step (seen on macOS CI).
 		chromedp.Evaluate[chromedp.Void](`(function(s){s.value="agent:b";s.dispatchEvent(new Event("change",{bubbles:true}))})(document.querySelector('select[name="agent"]'))`),
 		chromedp.WaitVisible(chromedp.CSS(".filters .clear")),
 	)

@@ -27,6 +27,10 @@ type Limits struct {
 	// AssetsPerPublish caps how many one publish may carry.
 	AssetBytes       int64
 	AssetsPerPublish int
+	// AssetMemory caps the image bytes the instance holds in memory across
+	// every review: assets are served from RAM, so this, not StoredBytes,
+	// is what keeps them inside the container.
+	AssetMemory int64
 	// RevisionsPerReview caps how often a review may be republished.
 	RevisionsPerReview int
 	// PublishesPerHour caps publishes per agent identity, sliding.
@@ -50,6 +54,7 @@ func DefaultLimits() Limits {
 		DocumentsPerPublish: 20,
 		AssetBytes:          2 << 20,
 		AssetsPerPublish:    20,
+		AssetMemory:         256 << 20,
 		RevisionsPerReview:  50,
 		PublishesPerHour:    30,
 		OpenReviews:         200,
@@ -74,6 +79,9 @@ func (l Limits) withDefaults() Limits {
 	}
 	if l.AssetsPerPublish <= 0 {
 		l.AssetsPerPublish = d.AssetsPerPublish
+	}
+	if l.AssetMemory <= 0 {
+		l.AssetMemory = d.AssetMemory
 	}
 	if l.RevisionsPerReview <= 0 {
 		l.RevisionsPerReview = d.RevisionsPerReview
@@ -145,6 +153,15 @@ func (h *Host) checkPublish(meta Meta, p Publish) error {
 			return limited("bytes per asset", l.AssetBytes, fmt.Sprintf("%d in %s", n, a.Name))
 		}
 		bytes += int64(len(a.Content))
+	}
+	if len(p.Assets) > 0 {
+		var sent int64
+		for _, a := range p.Assets {
+			sent += int64(len(a.Content))
+		}
+		if held := h.assetMemory(); held+sent > l.AssetMemory {
+			return limited("asset bytes in memory", l.AssetMemory, held+sent)
+		}
 	}
 	if meta.Revision > l.RevisionsPerReview {
 		return limited("revisions per review", l.RevisionsPerReview, meta.Revision)
@@ -218,6 +235,21 @@ func (h *Host) openReviews() int {
 	return n
 }
 
+// assetMemory is the image bytes every review holds in memory now. A
+// replaced asset still counts until its review is rebuilt, which errs on
+// the side of refusing.
+func (h *Host) assetMemory() int64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var n int64
+	for _, r := range h.reviews {
+		for _, b := range r.assets {
+			n += int64(len(b))
+		}
+	}
+	return n
+}
+
 // isDone reports whether every document of a review carries a review_done.
 func isDone(r *Review) bool {
 	entries := r.Server.Entries()
@@ -237,9 +269,13 @@ func isDone(r *Review) bool {
 	return true
 }
 
-// lastActivity is the latest of a review's publish and its events.
+// lastActivity is the latest of a review's publish, its events and its
+// restore from the archive.
 func lastActivity(r *Review) time.Time {
 	last, _ := time.Parse(time.RFC3339, r.Meta.Updated)
+	if r.Restored.After(last) {
+		last = r.Restored
+	}
 	for _, e := range r.Server.Entries() {
 		events, err := e.Store.Load()
 		if err != nil {
@@ -269,39 +305,35 @@ func (h *Host) Sweep(ctx context.Context) (archived []string, err error) {
 	h.mu.RUnlock()
 	sort.Strings(ids)
 	for _, id := range ids {
-		r := h.Review(id)
-		if r == nil {
-			continue
-		}
-		keep := h.limits.RetainOpen
-		if isDone(r) {
-			keep = h.limits.RetainDone
-		}
-		if now.Sub(lastActivity(r)) <= keep {
-			continue
-		}
-		if err := h.archive(ctx, r); err != nil {
+		ok, err := h.sweepOne(ctx, id, now)
+		if err != nil {
 			return archived, err
 		}
-		archived = append(archived, id)
+		if ok {
+			archived = append(archived, id)
+		}
 	}
 	return archived, nil
 }
 
-// archive moves one review out of the served set.
-func (h *Host) archive(ctx context.Context, r *Review) error {
-	id := r.Meta.ID
-	if err := h.store.Move(ctx, prefixReviews+id+"/", prefixArchive+id+"/"); err != nil {
-		return fmt.Errorf("hosted: archiving %s: %w", id, err)
+// sweepOne archives one review if it has outlived its retention, deciding
+// under the publish lock so a republish cannot land between the decision
+// and the move.
+func (h *Host) sweepOne(ctx context.Context, id string, now time.Time) (bool, error) {
+	h.pub.Lock()
+	defer h.pub.Unlock()
+	r := h.Review(id)
+	if r == nil {
+		return false, nil
 	}
-	h.mu.Lock()
-	delete(h.reviews, id)
-	h.mu.Unlock()
-	// The documents' bytes leave the budget here; the logs' left it in the
-	// metering layer, as the move went through it.
-	h.recordStored(-r.Meta.Bytes)
-	h.logf("marginalia: review %s archived (last activity %s)\n", id, lastActivity(r).Format(time.RFC3339))
-	return nil
+	keep := h.limits.RetainOpen
+	if isDone(r) {
+		keep = h.limits.RetainDone
+	}
+	if now.Sub(lastActivity(r)) <= keep {
+		return false, nil
+	}
+	return true, h.archiveLocked(ctx, r, "sweep")
 }
 
 // sweeper runs Sweep hourly until ctx is cancelled.
@@ -326,6 +358,7 @@ func (h *Host) describeLimits() string {
 	return strings.Join([]string{
 		fmt.Sprintf("%d KiB/document", l.DocumentBytes>>10),
 		fmt.Sprintf("%d documents/publish", l.DocumentsPerPublish),
+		fmt.Sprintf("%d MiB images in memory", l.AssetMemory>>20),
 		fmt.Sprintf("%d revisions/review", l.RevisionsPerReview),
 		fmt.Sprintf("%d publishes/agent/hour", l.PublishesPerHour),
 		fmt.Sprintf("%d open reviews", l.OpenReviews),

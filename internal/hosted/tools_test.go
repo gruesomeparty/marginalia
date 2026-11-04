@@ -89,7 +89,7 @@ func TestHostedToolsAreTheOnesWeMeantToShip(t *testing.T) {
 	for _, tool := range res.Tools {
 		got[tool.Name] = true
 	}
-	want := []string{"publish_document", "feedback_since", "review_status", "reply_to_note", "mark_addressed", "await_review_done", "close_review"}
+	want := []string{"publish_document", "feedback_since", "review_status", "reply_to_note", "mark_addressed", "await_review_done", "close_review", "withdraw_review"}
 	for _, name := range want {
 		if !got[name] {
 			t.Errorf("missing tool %q", name)

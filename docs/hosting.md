@@ -104,6 +104,7 @@ blindly:
 | documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
 | bytes per asset (image) | 2 MiB | `--limit-asset-bytes` / `MARGINALIA_LIMIT_ASSET_BYTES` |
 | assets per publish | 20 | `--limit-assets-per-publish` / `MARGINALIA_LIMIT_ASSETS_PER_PUBLISH` |
+| image bytes held in memory, all reviews | 256 MiB | `--limit-asset-memory` / `MARGINALIA_LIMIT_ASSET_MEMORY` |
 | revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
 | publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
 | open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
@@ -113,8 +114,16 @@ The stored total is tracked in memory, never by listing the store; past it
 new publishes are refused and a human's note never is. Finished reviews are
 **archived** `--retain-done` (30 days) after their last activity, and reviews
 never marked done after `--retain-open` (90 days): the whole review moves
-under `archive/`, out of the inbox, nothing edited or deleted, restorable by
-moving it back. The sweep runs at startup and hourly. Diagrams are
+under `archive/`, out of the inbox, nothing edited or deleted. The sweep
+runs at startup and hourly. The reviewer can also archive any review from
+its inbox row and bring one back from the **Archived** tab (a restore counts
+as activity, so the sweep leaves it alone; like a note, a restore is never
+refused by a cap, even past the open-reviews or stored-bytes limit), and an agent can take back a
+review it published with `withdraw_review` while the reviewer has not
+written anything on it. Marginalia itself never deletes: to remove archived
+reviews for good, put a lifecycle rule on the store's `archive/` prefix (on
+R2, an object lifecycle rule that deletes objects under
+`<prefix>/archive/` after N days). Diagrams are
 `--diagrams=off` in hosted mode unless you say otherwise: an agent's input is
 not worth a headless browser per publish.
 
@@ -205,8 +214,8 @@ a container, and the image's default). Then there are the caps —
 `MARGINALIA_LIMIT_*` / `MARGINALIA_RETAIN_*` variable). The defaults are
 conservative and listed under [Limits](#limits). Finished reviews are archived under
 `archive/` in the store after `--retain-done`, open ones after
-`--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
-review is restored by moving its prefix back under `reviews/`.
+`--retain-open`, by a sweep at startup and hourly, or on demand from the
+inbox; nothing is deleted, and the inbox's Archived tab restores one.
 
 ## Run it
 

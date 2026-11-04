@@ -215,7 +215,7 @@ func TestAgentWaitOnAnArchivedReview(t *testing.T) {
 		got <- code
 	}()
 	time.Sleep(100 * time.Millisecond)
-	if err := h.archive(context.Background(), r); err != nil {
+	if err := h.Archive(context.Background(), r.Meta.ID, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if code := <-got; code != http.StatusNotFound {

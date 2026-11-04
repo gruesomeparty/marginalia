@@ -144,6 +144,28 @@ func TestAssetsAreRefusedBeforeAnythingIsWritten(t *testing.T) {
 	}
 }
 
+// Assets are served from memory, so what every review holds is capped on
+// its own: a publish that would take the instance past it is refused.
+func TestAssetMemoryIsCapped(t *testing.T) {
+	big := pngOf(t, color.Black)
+	h, err := Open(context.Background(), Options{Store: storage.NewMemory(), PublicURL: "https://review.example", DevIdentity: "dev@example.com", Log: testWriter{t}, Limits: Limits{AssetMemory: int64(len(big)) * 3 / 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := []Document{{Name: "plan.md", Content: []byte("# Plan\n")}}
+	if _, err := h.Publish(context.Background(), Publish{Docs: doc, Assets: []Asset{{Name: "a.png", Content: big}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.Publish(context.Background(), Publish{Docs: doc, Assets: []Asset{{Name: "b.png", Content: big}}})
+	var limit *LimitError
+	if !errors.As(err, &limit) || limit.Limit != "asset bytes in memory" {
+		t.Errorf("a second image past the memory cap: %v", err)
+	}
+	if _, err := h.Publish(context.Background(), Publish{Docs: doc}); err != nil {
+		t.Errorf("a publish without images was refused: %v", err)
+	}
+}
+
 // publish_document carries assets as base64, and refuses what is not.
 func TestPublishDocumentCarriesAssets(t *testing.T) {
 	h, ts := open(t, storage.NewMemory())
