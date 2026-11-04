@@ -83,7 +83,11 @@ func (s *Server) stop(id string) error {
 		return errUnknownSession(id)
 	}
 	l.cancel()
-	_ = <-l.done // Serve's own error is the shutdown it was asked for; the drain is what we wait on
+	if err := <-l.done; err != nil {
+		// The review is stopped either way; a drain that failed is worth a
+		// notice, not a failed close.
+		s.logf("review %s: shutdown: %v", id, err)
+	}
 	return nil
 }
 
