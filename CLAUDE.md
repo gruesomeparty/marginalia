@@ -624,7 +624,8 @@ users are agents, not humans.
   a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
-  hence the rebuild. `deploy_template_test.go` pins that tag to
+  hence the rebuild. `deploy_template_test.go` pins that tag (and
+  `.claude-plugin/plugin.json`'s version, also a release-please extra file) to
   `.release-please-manifest.json`, pins the `durable_object` scheduling
   policy and a single unnamed `getContainer` (that policy has no
   `max_instances`; one Durable Object is what keeps the host its store's
