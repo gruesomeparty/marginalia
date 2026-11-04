@@ -348,6 +348,54 @@ func TestReviewDocumentHandsItsRuleToTheReads(t *testing.T) {
 	}
 }
 
+// The acceptance criterion of issue #215: a document-level question with
+// options; tapping sqlite appends one event and the wait returns reason
+// "answer" with sqlite as the choice, before any Done.
+func TestAwaitReturnsAChoice(t *testing.T) {
+	root := t.TempDir()
+	writeDoc(t, root, "spec.md", specDoc)
+	cfg := writeDoc(t, root, "review.yaml", "notes:\n  - id: db\n    text: Which database?\n    options: [postgres, sqlite]\n")
+	cs, _ := serveMCP(t, root)
+	var started reviewDocumentOut
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}, "config": cfg}, &started); err != nil {
+		t.Fatal(err)
+	}
+	post(t, started.URL, feedback.Event{Type: feedback.TypeReply, Text: "sqlite", ReplyTo: "req:db", Fields: map[string]string{"choice": "sqlite"}})
+	var woke awaitOut
+	if err := call(t, cs, "await_review_done", map[string]any{"session_id": started.SessionID, "timeout_seconds": 5}, &woke); err != nil {
+		t.Fatal(err)
+	}
+	if woke.Done || woke.Reason != "answer" || len(woke.Choices) != 1 || woke.Choices[0].Choice != "sqlite" || woke.Choices[0].Note != "req:db" {
+		t.Fatalf("the wait returned %+v, want reason answer with sqlite", woke)
+	}
+	if n := len(woke.Docs[0].Events); n != 1 {
+		t.Errorf("one tap appended %d events", n)
+	}
+}
+
+// A question outranks a choice in the same batch: the wait says
+// "question", so the agent answers before acting, and still carries the
+// choice so nothing is lost.
+func TestAwaitQuestionOutranksAChoice(t *testing.T) {
+	root := t.TempDir()
+	writeDoc(t, root, "spec.md", specDoc)
+	cfg := writeDoc(t, root, "review.yaml", "notes:\n  - id: db\n    text: Which database?\n    options: [postgres, sqlite]\n")
+	cs, _ := serveMCP(t, root)
+	var started reviewDocumentOut
+	if err := call(t, cs, "review_document", map[string]any{"paths": []string{"spec.md"}, "config": cfg}, &started); err != nil {
+		t.Fatal(err)
+	}
+	post(t, started.URL, feedback.Event{Type: feedback.TypeReply, Text: "sqlite", ReplyTo: "req:db", Fields: map[string]string{"choice": "sqlite"}})
+	post(t, started.URL, feedback.Event{Doc: "spec.md", Block: "1/2", Type: feedback.TypeQuestion, Text: "why?"})
+	var woke awaitOut
+	if err := call(t, cs, "await_review_done", map[string]any{"session_id": started.SessionID, "timeout_seconds": 5}, &woke); err != nil {
+		t.Fatal(err)
+	}
+	if woke.Done || woke.Reason != "question" || len(woke.Choices) != 1 || woke.Choices[0].Choice != "sqlite" {
+		t.Fatalf("the wait returned %+v, want reason question carrying the sqlite choice", woke)
+	}
+}
+
 // review_status names the blocks that moved since the reviewer's Done: a
 // stdio read of the file on disk, measured from the parse the live session
 // recorded at that Done.

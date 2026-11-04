@@ -24,6 +24,7 @@ One listener, four surfaces:
 | | |
 |---|---|
 | `/` | The **inbox**: every review, newest activity first, with what each one is waiting on (*awaiting you*, *in progress*, *done*, or *agent replied since you finished*) and its counts. Tabs *Needs me* / *Done* / *All* and the filters live in the query string, so a filtered inbox is a link; `GET /api/reviews` is the same list as JSON. Server-rendered, readable with no script, works on a phone. |
+| `/stats` | **How the loop is doing**: per agent, reviews, time to first look and to Done (median and p90, from publishing), rounds per finished review, notes by type, and what became of the agent's `addressed` claims (confirmed, reopened, not yet checked, text unchanged). Filter by period (`period=7d|30d|90d`), `agent` and `framing`; `GET /api/stats` is the same as JSON. Counts and timings only, never document or note text. Only the documents a review's current revision serves are counted. |
 | `/r/<id>/` | One review's pages and API, exactly as `serve` mounts them at `/`, plus an **← Inbox** link and the `i` key. |
 | `/mcp` | The tools over Streamable HTTP. |
 | `/healthz` | For the platform. |
@@ -40,7 +41,7 @@ another machine.
 
 | Tool | What it does |
 |---|---|
-| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`; get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. |
+| `publish_document` | Send `documents: [{name, content}]` (the extension picks the format), an optional `title`, `review`, `config` and `theme`, and optionally `blocking`, `due_by` and `callback_url` (below); get back the review URL, each document's URL and block count, and the vocabulary. Pass `review_id` to publish a **new revision**: earlier revisions stay as written, the page renders the new one, and the reviewer's notes re-anchor, stale where a block changed and orphaned where it is gone. A revision replaces the whole document set. Images the documents show go in `assets: [{name, content_base64, type}]` (PNG, JPEG, WebP, SVG): a markdown image or link naming one points at the review's copy, served from `/r/<id>/assets/<rev>/<name>` under a sandboxing policy, and a revision keeps the assets it does not resend. Review pages load images from this host only. |
 | `feedback_since`, `review_status`, `await_review_done`, `close_review` | As over stdio, by `review_id` (and `name` for one document). `close_review` returns the final status; a hosted review stays at its URL. |
 | `reply_to_note`, `mark_addressed` | As over stdio, by `review_id` + `name`. Still the only two tools that write, each one fixed type. |
 
@@ -48,6 +49,48 @@ A name is one plain file name: `../x.md`, `.env` and `a/b.md` are refused,
 not cleaned up. A publish refuses before writing anything when the format is
 unsupported (naming `request-feature`), the content is empty, the config is
 invalid, or a limit is reached.
+
+**Saying how urgent it is.** `blocking: true` says the agent cannot go on
+until you answer; `due_by` (RFC 3339, `2026-11-01T17:00:00Z`) says when it
+needs the answer. The inbox lists a review that is blocking, or past its
+due-by, first, under *An agent is waiting*, with how long the agent has waited
+(since the revision it is waiting on) and an *overdue* marker; `/api/reviews`
+carries `blocking`, `due_by`, `overdue`, `waiting_since` and `urgent`. A
+blocking publish is notified at once, past the debounce. Each revision states
+its own urgency, so a republish without `blocking` is no longer blocking, and
+a finished review is never urgent. It orders your inbox; it decides nothing.
+
+**Being called back instead of waiting.** A job that should not hold a
+runner open on `await_review_done` passes `callback_url`, and the host
+POSTs to it when the reviewer submits Done or asks a question:
+
+```json
+{"event":"review_done","review_id":"…","revision":2,"name":"plan.md","done":true,
+ "cursor":{"plan.md":14},"since":14,"at":"2026-10-31T09:00:00Z"}
+```
+
+`cursor` goes back to `feedback_since`/`await_review_done`, `since` to
+`GET /agent/r/{id}/wait`; both are taken just before the event, so reading
+from them returns it (and every question a collapsed burst stands for). It never carries a title, a quote or a word of a
+note. `X-Marginalia-Signature: sha256=<hex>` is HMAC-SHA256 of the body under
+the `callback_secret` the publish returned; verify it, and the `at`, before
+acting. Questions in a burst collapse into one call a minute carrying the
+burst's first cursor; a Done goes at once. A session Done on a review of
+several documents calls once per document; only the last says `done: true`,
+so act on `done`, not on the first Done event. A revision without `callback_url` keeps the
+review's. Delivery is off the request path, with a 5s timeout and one retry.
+
+It is off unless the operator lists the hosts a callback may name, in
+`MARGINALIA_CALLBACK_HOSTS` (comma-separated, `*.example.com` for a domain's
+subdomains), with `MARGINALIA_CALLBACK_SECRET` (at least 32 characters; each
+review's secret is derived from it, the review id and the callback URL, so a
+URL named on a republish gets a secret of its own and nothing secret is
+stored, and rotating it rotates them all). A callback must be https, carry no
+credentials, and name a listed host; the host refuses, at publish time and
+again when it connects, any address that is not public (loopback, private,
+link-local, `100.64.0.0/10`), and does not follow redirects. The allow-list
+is checked again on every delivery, so a host removed from it is no longer
+called by reviews published before.
 
 ### Limits
 
@@ -59,6 +102,9 @@ blindly:
 |---|---|---|
 | bytes per document | 512 KiB | `--limit-document-bytes` / `MARGINALIA_LIMIT_DOCUMENT_BYTES` |
 | documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
+| bytes per asset (image) | 2 MiB | `--limit-asset-bytes` / `MARGINALIA_LIMIT_ASSET_BYTES` |
+| assets per publish | 20 | `--limit-assets-per-publish` / `MARGINALIA_LIMIT_ASSETS_PER_PUBLISH` |
+| image bytes held in memory, all reviews | 256 MiB | `--limit-asset-memory` / `MARGINALIA_LIMIT_ASSET_MEMORY` |
 | revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
 | publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
 | open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |
@@ -68,8 +114,16 @@ The stored total is tracked in memory, never by listing the store; past it
 new publishes are refused and a human's note never is. Finished reviews are
 **archived** `--retain-done` (30 days) after their last activity, and reviews
 never marked done after `--retain-open` (90 days): the whole review moves
-under `archive/`, out of the inbox, nothing edited or deleted, restorable by
-moving it back. The sweep runs at startup and hourly. Diagrams are
+under `archive/`, out of the inbox, nothing edited or deleted. The sweep
+runs at startup and hourly. The reviewer can also archive any review from
+its inbox row and bring one back from the **Archived** tab (a restore counts
+as activity, so the sweep leaves it alone; like a note, a restore is never
+refused by a cap, even past the open-reviews or stored-bytes limit), and an agent can take back a
+review it published with `withdraw_review` while the reviewer has not
+written anything on it. Marginalia itself never deletes: to remove archived
+reviews for good, put a lifecycle rule on the store's `archive/` prefix (on
+R2, an object lifecycle rule that deletes objects under
+`<prefix>/archive/` after N days). Diagrams are
 `--diagrams=off` in hosted mode unless you say otherwise: an agent's input is
 not worth a headless browser per publish.
 
@@ -80,11 +134,12 @@ gets a POST when an agent publishes a review, publishes a revision, or
 replies or claims after you pressed Done, never on anything you did. The body
 is plain text with the review's title, the agent and what happened, with the
 review URL in the text and in a `Click` header, so an ntfy topic works as is;
-`--notify-format json` sends `{event, review_id, title, agent, url, at}` for a
+`--notify-format json` sends `{event, review_id, title, agent, url, at}` (plus `blocking`) for a
 generic webhook. It never carries a word of a document or a note, and it is
 delivered off the request path with a short timeout and one retry: a dead
 receiver is a line on stderr, never a failed publish. At most one
 notification per review per minute; a burst collapses into one "n updates".
+A blocking publish skips that wait and says so.
 
 ### Who is asking
 
@@ -162,8 +217,8 @@ a container, and the image's default). Then there are the caps —
 `MARGINALIA_LIMIT_*` / `MARGINALIA_RETAIN_*` variable). The defaults are
 conservative and listed under [Limits](#limits). Finished reviews are archived under
 `archive/` in the store after `--retain-done`, open ones after
-`--retain-open`, by a sweep at startup and hourly; nothing is deleted, and a
-review is restored by moving its prefix back under `reviews/`.
+`--retain-open`, by a sweep at startup and hourly, or on demand from the
+inbox; nothing is deleted, and the inbox's Archived tab restores one.
 
 ## Run it
 
@@ -265,7 +320,7 @@ HEAD):
 |---|---|
 | publish, `n` documents | `n + 1` PUT (documents and metadata), plus `n + 1` one-key LIST (the guard that keeps a blob off a log's key) |
 | one comment, reply, claim or `review_done` | exactly **1 PUT** |
-| serving the inbox or a review page | **0** — state is in memory after startup |
+| serving the inbox, stats or a review page | **0** — state is in memory after startup |
 | `await_review_done`, `feedback_since`, `review_status` | **0** — the change token is in memory |
 | startup | 1 LIST per 1000 keys, then per review: 1 GET for the metadata, 1 GET per document of the current revision, and 1 LIST plus 1 GET per event for each log |
 | archiving a review | 1 COPY + 1 DELETE per object |

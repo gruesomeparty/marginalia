@@ -82,6 +82,9 @@ type Options struct {
 	// Notify tells the human when an agent publishes or replies; nil is
 	// off. See notify.go.
 	Notify *Notifier
+	// Callbacks call an agent back when the reviewer finishes or asks;
+	// nil is off. See callback.go.
+	Callbacks *Callbacks
 	// Diagrams draws mermaid when set; nil shows the anchored source. Off
 	// by default in hosted mode: mermaid-cli is the expensive path, and an
 	// agent's input is not something to shell out for unless the operator
@@ -99,8 +102,11 @@ type Host struct {
 	// source and the router's table, and it is complete: startup loaded it
 	// all, and this process is the only writer.
 	reviews map[string]*Review
-	mux     *http.ServeMux
-	mcp     *mcp.Server
+	// archived is every review under archive/, by id: enough of each to
+	// list it and bring it back (archive.go). Like reviews, loaded once.
+	archived map[string]*Archived
+	mux      *http.ServeMux
+	mcp      *mcp.Server
 	// closing is closed once when the host is going down, so an in-flight
 	// await returns "cancelled" instead of being waited out by the drain.
 	closing   chan struct{}
@@ -114,6 +120,9 @@ type Host struct {
 	// limits and use are the caps and what counts against them.
 	limits Limits
 	use    usage
+	// meter is the layer under the cache that measures logs and freezes a
+	// review's appends while it is archived (metered.go).
+	meter *metered
 }
 
 func (h *Host) interrupt() { h.closeOnce.Do(func() { close(h.closing) }) }
@@ -138,6 +147,13 @@ func (h *Host) untilClosed(ctx context.Context) (context.Context, context.Cancel
 type Review struct {
 	Meta   Meta
 	Server *server.Server
+	// Restored is when the review last came back from the archive, or
+	// zero. It counts as activity, so a review the reviewer just restored
+	// is not archived again by the next sweep.
+	Restored time.Time
+	// assets is every asset's bytes (Meta.Assets), held from publish or
+	// startup on so serving one never reads the store.
+	assets map[string][]byte
 }
 
 // Open loads every review in opts.Store and returns a host serving them. A
@@ -161,10 +177,14 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	h := &Host{opts: opts, reviews: map[string]*Review{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
+	h := &Host{opts: opts, reviews: map[string]*Review{}, archived: map[string]*Archived{}, closing: make(chan struct{}), limits: opts.Limits.withDefaults()}
 	h.use.publishes = map[string][]time.Time{}
-	h.store = storage.NewWriteThrough(&metered{Store: opts.Store, h: h, bytes: map[string]int64{}})
+	h.meter = &metered{Store: opts.Store, h: h, bytes: map[string]int64{}}
+	h.store = storage.NewWriteThrough(h.meter)
 	if err := h.load(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.loadArchived(ctx); err != nil {
 		return nil, err
 	}
 	// The sweep at startup: what outlived its retention while the process
@@ -189,6 +209,7 @@ func (h *Host) load(ctx context.Context) error {
 		return fmt.Errorf("hosted: listing reviews: %w", err)
 	}
 	latest := map[string]int{}
+	restored := map[string]time.Time{}
 	for _, key := range keys {
 		id, ok := reviewOf(key)
 		if !ok {
@@ -196,6 +217,9 @@ func (h *Host) load(ctx context.Context) error {
 		}
 		if n := metaVersion(id, key); n > latest[id] {
 			latest[id] = n
+		}
+		if at, ok := markTime(prefixReviews, id, markRestored, key); ok && at.After(restored[id]) {
+			restored[id] = at
 		}
 	}
 	for id, n := range latest {
@@ -205,6 +229,7 @@ func (h *Host) load(ctx context.Context) error {
 			h.logf("marginalia: review %s could not be loaded and is not served: %v\n", id, err)
 			continue
 		}
+		r.Restored = restored[id]
 		h.reviews[id] = r
 		h.recordStored(r.Meta.Bytes)
 	}
@@ -230,7 +255,7 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 		if err != nil {
 			return nil, err
 		}
-		doc, err := document.ParseBytes(name, src)
+		doc, err := document.ParseBytesWith(name, src, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -257,7 +282,19 @@ func (h *Host) open(ctx context.Context, id string, n int) (*Review, error) {
 		}
 		docs = append(docs, e)
 	}
-	return h.build(meta, docs)
+	r, err := h.build(meta, docs)
+	if err != nil {
+		return nil, err
+	}
+	r.assets = make(map[string][]byte, len(meta.Assets))
+	for name, a := range meta.Assets {
+		raw, err := h.store.GetBlob(ctx, assetKey(id, a.Rev, name))
+		if err != nil {
+			return nil, fmt.Errorf("asset %s: %w", name, err)
+		}
+		r.assets[name] = raw
+	}
+	return r, nil
 }
 
 // build wires parsed documents and metadata into the per-review server that
@@ -285,6 +322,7 @@ func (h *Host) build(meta Meta, docs []server.Entry) (*Review, error) {
 		// The inbox is at the host's root: --public-url is an origin and
 		// nothing else (publicOrigin), so a host is never mounted below "/".
 		InboxURL: "/",
+		Recorded: func(rel string, e feedback.Event) { h.recorded(meta.ID, rel, e) },
 	})
 	return &Review{Meta: meta, Server: srv}, nil
 }
@@ -324,6 +362,17 @@ type Publish struct {
 	Review string // shipped preset
 	Config string // inline review YAML
 	Theme  string
+	// Callback is the URL to call back (callback.go), checked against the
+	// allow-list before anything is written. A republish without one keeps
+	// the review's.
+	Callback string
+	// Blocking and DueBy are the agent's urgency for this revision; a
+	// republish states its own, so an answered question stops being urgent.
+	Blocking bool
+	DueBy    time.Time
+	// Assets are images published beside the documents. A republish adds
+	// or replaces the ones it sends and keeps the rest.
+	Assets []Asset
 }
 
 // Publish stores a new review — revision 1 of every document, then its
@@ -336,9 +385,10 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 	now := h.opts.Now().UTC().Format(time.RFC3339)
 	meta := Meta{
 		ID: id, Title: p.Title, Agent: p.Agent, Revision: 1,
-		Review: p.Review, Config: p.Config, Theme: p.Theme,
+		Review: p.Review, Config: p.Config, Theme: p.Theme, Callback: p.Callback,
 		Created: now, Updated: now,
 	}
+	meta.Blocking, meta.DueBy = urgency(p)
 	return h.publish(ctx, meta, p, nil)
 }
 
@@ -369,6 +419,17 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 	}
 	if p.Theme != "" {
 		meta.Theme = p.Theme
+	}
+	if p.Callback != "" {
+		meta.Callback = p.Callback
+	}
+	meta.Blocking, meta.DueBy = urgency(p)
+	finished, err := revisionFinished(prev)
+	if err != nil {
+		return nil, err
+	}
+	if finished {
+		meta.Rounds++
 	}
 	meta.Docs = nil
 	// A document this revision drops keeps its events in the wait's count;
@@ -446,10 +507,39 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish, bases map[stri
 	if err := h.checkPublish(meta, p); err != nil {
 		return nil, err
 	}
+	if p.Callback != "" {
+		if err := h.opts.Callbacks.Check(p.Callback); err != nil {
+			return nil, err
+		}
+	}
 	id, n := meta.ID, meta.Revision
 	var docBytes int64
 	for _, d := range p.Docs {
 		docBytes += int64(len(d.Content))
+	}
+	// Assets: the earlier revision's carry over, the ones sent now are
+	// added or replace them, and only the new bytes count as stored.
+	meta.Assets = maps.Clone(meta.Assets)
+	assets := map[string][]byte{}
+	if prev := h.Review(id); prev != nil {
+		maps.Copy(assets, prev.assets)
+	}
+	sent := map[string]bool{}
+	for _, a := range p.Assets {
+		typ, err := checkAsset(a)
+		if err != nil {
+			return nil, err
+		}
+		if sent[a.Name] {
+			return nil, fmt.Errorf("asset %q is listed twice", a.Name)
+		}
+		sent[a.Name] = true
+		if meta.Assets == nil {
+			meta.Assets = map[string]AssetMeta{}
+		}
+		meta.Assets[a.Name] = AssetMeta{Rev: n, Type: typ, Bytes: int64(len(a.Content))}
+		assets[a.Name] = a.Content
+		docBytes += int64(len(a.Content))
 	}
 	meta.Bytes += docBytes
 	seen := map[string]bool{}
@@ -468,7 +558,7 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish, bases map[stri
 		if document.FormatFor(d.Name) == "" {
 			return nil, session.UnsupportedInput(filepath.Ext(d.Name))
 		}
-		doc, err := document.ParseBytes(d.Name, d.Content)
+		doc, err := document.ParseBytesWith(d.Name, d.Content, linker(id, meta.Assets))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
@@ -497,9 +587,15 @@ func (h *Host) publish(ctx context.Context, meta Meta, p Publish, bases map[stri
 	if err != nil {
 		return nil, err
 	}
+	r.assets = assets
 	for _, d := range p.Docs {
 		if err := h.store.PutBlob(ctx, revKey(id, n, d.Name), d.Content); err != nil {
 			return nil, fmt.Errorf("hosted: storing %s: %w", d.Name, err)
+		}
+	}
+	for _, a := range p.Assets {
+		if err := h.store.PutBlob(ctx, assetKey(id, n, a.Name), a.Content); err != nil {
+			return nil, fmt.Errorf("hosted: storing asset %s: %w", a.Name, err)
 		}
 	}
 	raw, err := json.Marshal(meta)
@@ -571,6 +667,19 @@ func (h *Host) routes() {
 	// the other.
 	mux.Handle("GET /{$}", h.requireHuman(http.HandlerFunc(h.handleRoot)))
 	mux.Handle("GET /api/reviews", h.requireHuman(http.HandlerFunc(h.handleReviews)))
+	// Archive and restore change what the inbox holds, so a forged
+	// cross-site form must not reach them.
+	cop := http.NewCrossOriginProtection()
+	if h.opts.PublicURL != "" {
+		if err := cop.AddTrustedOrigin(strings.TrimSuffix(h.opts.PublicURL, "/")); err != nil {
+			h.logf("marginalia: %v\n", err)
+		}
+	}
+	mux.Handle("POST /api/reviews/{id}/archive", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleArchive))))
+	mux.Handle("POST /api/reviews/{id}/restore", h.requireHuman(cop.Handler(http.HandlerFunc(h.handleRestore))))
+	mux.Handle("GET /r/{id}/assets/{rev}/{name}", h.requireHuman(http.HandlerFunc(h.handleAsset)))
+	mux.Handle("GET /stats", h.requireHuman(http.HandlerFunc(h.handleStats)))
+	mux.Handle("GET /api/stats", h.requireHuman(http.HandlerFunc(h.handleAPIStats)))
 	mux.HandleFunc("GET /healthz", mcpserver.Healthz)
 	mux.Handle("/mcp", h.transport())
 	if h.oauthEnabled() {
@@ -603,8 +712,15 @@ func (h *Host) handleReview(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Images come from this host or nowhere: a published asset is served
+	// here, and an image a document links elsewhere is not fetched.
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	http.StripPrefix("/r/"+id, rv.Server.Handler()).ServeHTTP(w, r)
 }
+
+// pageCSP is the policy on a hosted review page. It restricts images only;
+// the page's own script and styles are inline, and it makes no other request.
+const pageCSP = "img-src 'self' data:"
 
 // Handler is the whole listener's mux.
 func (h *Host) Handler() http.Handler { return h.mux }
@@ -648,6 +764,10 @@ func (h *Host) Serve(ctx context.Context, ln net.Listener) error {
 	h.logf("marginalia: hosting %d review(s) at %s (listening on %s; MCP at /mcp, %s)\n", n, h.opts.PublicURL, ln.Addr(), strings.Join(how, " or "))
 	h.logf("marginalia: limits: %s\n", h.describeLimits())
 	go h.sweeper(ctx)
+	if h.opts.Callbacks != nil {
+		go h.opts.Callbacks.Run(ctx)
+		defer h.opts.Callbacks.Close()
+	}
 	if h.opts.Notify != nil {
 		go h.opts.Notify.run(ctx)
 		defer h.opts.Notify.Close()
@@ -682,4 +802,12 @@ func (h *Host) out() io.Writer {
 
 func (h *Host) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(h.out(), format, args...)
+}
+
+// urgency is how a publish's urgency is recorded on its metadata.
+func urgency(p Publish) (bool, string) {
+	if p.DueBy.IsZero() {
+		return p.Blocking, ""
+	}
+	return p.Blocking, p.DueBy.UTC().Format(time.RFC3339)
 }

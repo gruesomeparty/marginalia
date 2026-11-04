@@ -45,6 +45,9 @@ type Notification struct {
 	// Updates is how many events this one stands for, when a burst was
 	// collapsed; 1 otherwise.
 	Updates int `json:"updates,omitempty"`
+	// Blocking says the agent is stopped until the reviewer answers. It is
+	// delivered at once, whatever the debounce (issue #220).
+	Blocking bool `json:"blocking,omitempty"`
 }
 
 // Notifier delivers notifications to a set of URLs, debounced per review.
@@ -125,7 +128,7 @@ func (n *Notifier) Notify(ev Notification) {
 		n.pending = map[string]Notification{}
 	}
 	now := n.now()
-	if last, sent := n.last[ev.ReviewID]; sent && now.Sub(last) < n.debounce() {
+	if last, sent := n.last[ev.ReviewID]; sent && now.Sub(last) < n.debounce() && !ev.Blocking {
 		// Inside the window: fold into what is waiting, keeping the latest
 		// event's words and counting the rest.
 		if p, ok := n.pending[ev.ReviewID]; ok {
@@ -134,6 +137,11 @@ func (n *Notifier) Notify(ev Notification) {
 		n.pending[ev.ReviewID] = ev
 		n.mu.Unlock()
 		return
+	}
+	// Whatever was waiting rides along rather than following a minute later.
+	if p, ok := n.pending[ev.ReviewID]; ok {
+		ev.Updates += p.Updates
+		delete(n.pending, ev.ReviewID)
 	}
 	n.last[ev.ReviewID] = now
 	n.mu.Unlock()
@@ -252,6 +260,9 @@ func title(ev Notification) string {
 }
 
 func tag(ev Notification) string {
+	if ev.Blocking {
+		return "rotating_light"
+	}
 	switch ev.Event {
 	case NotifyPublished:
 		return "inbox_tray"
@@ -281,6 +292,9 @@ func Text(ev Notification) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s: %s", who, what, title(ev))
+	if ev.Blocking {
+		b.WriteString(" (blocking: the agent is waiting on you)")
+	}
 	if ev.Updates > 1 {
 		fmt.Fprintf(&b, " (%d updates)", ev.Updates)
 	}
@@ -297,6 +311,7 @@ func (h *Host) notify(event string, r *Review) {
 	h.opts.Notify.Notify(Notification{
 		Event: event, ReviewID: r.Meta.ID, Title: inboxTitle(r), Agent: r.Meta.Agent,
 		URL: h.URL(r.Meta.ID), At: h.opts.Now().UTC().Format(time.RFC3339),
+		Blocking: r.Meta.Blocking && event != NotifyReplied,
 	})
 }
 

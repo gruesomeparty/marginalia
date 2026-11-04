@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"sort"
@@ -27,6 +28,9 @@ const (
 	// StatusReplied: the agent answered or claimed after the reviewer
 	// finished — the revision loop coming back for a second look.
 	StatusReplied = "replied"
+	// StatusArchived: moved out of the inbox, by the reviewer, by the agent
+	// that published it, or by the retention sweep. Restorable.
+	StatusArchived = "archived"
 )
 
 // StatusLabel is the status as the page shows it.
@@ -40,6 +44,8 @@ func StatusLabel(status string) string {
 		return "done"
 	case StatusReplied:
 		return "agent replied since you finished"
+	case StatusArchived:
+		return "archived"
 	}
 	return status
 }
@@ -50,12 +56,19 @@ const (
 	TabNeedsMe = "needs-me"
 	TabDone    = "done"
 	TabAll     = "all"
+	// TabArchived is the archive: the only tab an archived review is under.
+	TabArchived = "archived"
 )
 
 // InTab reports whether a review with status belongs under tab. An unknown
 // tab is the default one.
 func InTab(status, tab string) bool {
+	if (status == StatusArchived) != (tab == TabArchived) {
+		return false
+	}
 	switch tab {
+	case TabArchived:
+		return true
 	case TabAll:
 		return true
 	case TabDone:
@@ -85,6 +98,16 @@ type InboxRow struct {
 	Outstanding int      `json:"outstanding"`
 	Stale       int      `json:"stale"`
 	Unclaimed   int      `json:"unclaimed"`
+	// Blocking, DueBy and Overdue are the agent's urgency (issue #220):
+	// it is stopped until the reviewer answers, it needs the answer by
+	// DueBy, and that time has passed. WaitingSince is when the agent
+	// published the revision it is waiting on. Urgent is a review that is
+	// not done and is blocking or overdue; the inbox lists those first.
+	Blocking     bool       `json:"blocking,omitempty"`
+	DueBy        *time.Time `json:"due_by,omitempty"`
+	Overdue      bool       `json:"overdue,omitempty"`
+	WaitingSince time.Time  `json:"waiting_since,omitzero"`
+	Urgent       bool       `json:"urgent,omitempty"`
 	// Changed is how many blocks moved since the reviewer last finished.
 	Changed int `json:"changed"`
 }
@@ -214,7 +237,7 @@ type Inbox struct {
 	// rather than the filtered ones, so a choice never strands the reviewer.
 	Framings, Agents []string
 	// Counts per tab, for the tab labels.
-	NeedsMe, Done, All int
+	NeedsMe, Done, All, Archived int
 	// Now is what "today" is measured against; zero means the clock. Tests
 	// set it so a row stamped at 23:59 does not move groups mid-run.
 	Now time.Time
@@ -230,6 +253,8 @@ type inboxRow struct {
 	SinceISO  string
 	Class     string // CSS class for the status
 	HasCounts bool
+	Waiting   string // how long the agent has waited, for an urgent row
+	Due       string
 }
 
 // inboxGroup is a run of rows under one heading: Today, then Earlier, by last
@@ -264,6 +289,9 @@ type inboxView struct {
 	Done     int
 	All      int
 	TabLabel string
+	// Back is this page's own address, which an archive or restore form
+	// returns to.
+	Back     string
 	Empty    string
 	Tabs     []tabLink
 	Filter   InboxFilter
@@ -283,6 +311,8 @@ func RenderInbox(w io.Writer, in Inbox) error {
 		v.TabLabel, v.Empty = "Done", "Nothing finished yet."
 	case TabAll:
 		v.TabLabel, v.Empty = "All", "No reviews have been published to this instance."
+	case TabArchived:
+		v.TabLabel, v.Empty = "Archived", "Nothing is archived."
 	default:
 		v.Tab, v.TabLabel, v.Empty = TabNeedsMe, "Needs me", "Nothing is waiting for you."
 	}
@@ -293,6 +323,8 @@ func RenderInbox(w io.Writer, in Inbox) error {
 			Since: stamp(r.Published), SinceISO: r.Published.UTC().Format(time.RFC3339),
 			Class:     "s-" + r.Status,
 			HasCounts: r.Comments > 0 || r.Outstanding > 0 || r.Stale > 0 || r.Unclaimed > 0,
+			Waiting:   waited(r, in.Now),
+			Due:       due(r),
 		})
 	}
 	f := in.Filter
@@ -302,13 +334,14 @@ func RenderInbox(w io.Writer, in Inbox) error {
 	}
 	v.Filter, v.Filtered = f, f.Filtered()
 	v.Clear = InboxFilter{Tab: f.Tab, Group: f.Group}.href()
+	v.Back = f.href()
 	if v.Filtered {
 		v.Empty = "No review matches this filter."
 	}
 	for _, t := range []struct {
 		key, label string
 		n          int
-	}{{TabNeedsMe, "Needs me", in.NeedsMe}, {TabDone, "Done", in.Done}, {TabAll, "All", in.All}} {
+	}{{TabNeedsMe, "Needs me", in.NeedsMe}, {TabDone, "Done", in.Done}, {TabAll, "All", in.All}, {TabArchived, "Archived", in.Archived}} {
 		g := f
 		g.Tab = t.key
 		v.Tabs = append(v.Tabs, tabLink{Key: t.key, Label: t.label, Href: g.href(), N: t.n, Current: t.key == v.Tab})
@@ -335,6 +368,8 @@ func RenderInbox(w io.Writer, in Inbox) error {
 	default:
 		v.setGroups(groupByDay(v.Rows, in.Now))
 	}
+	// Whatever the grouping, a review an agent is stuck on leads its group
+	// (rows arrive urgent-first from the host and grouping keeps order).
 	return tmpl.ExecuteTemplate(w, "inbox.html.tmpl", v)
 }
 
@@ -346,7 +381,7 @@ func (v *inboxView) setGroups(groups []inboxGroup) {
 }
 
 // statusOrder puts what asks the most of the reviewer first.
-var statusOrder = []string{StatusAwaiting, StatusReplied, StatusInProgress, StatusDone}
+var statusOrder = []string{StatusAwaiting, StatusReplied, StatusInProgress, StatusDone, StatusArchived}
 
 // groupBy splits rows by key, keeping each group's rows newest first. Groups
 // come in order's order when one is given — a status label is written for the
@@ -422,8 +457,12 @@ func groupByDay(rows []inboxRow, now time.Time) []inboxGroup {
 		now = time.Now()
 	}
 	today := now.UTC().Format("2006-01-02")
-	var recent, earlier []inboxRow
+	var urgent, recent, earlier []inboxRow
 	for _, r := range rows {
+		if r.Urgent {
+			urgent = append(urgent, r)
+			continue
+		}
 		if r.LastActivity.UTC().Format("2006-01-02") == today {
 			recent = append(recent, r)
 		} else {
@@ -431,6 +470,9 @@ func groupByDay(rows []inboxRow, now time.Time) []inboxGroup {
 		}
 	}
 	var out []inboxGroup
+	if len(urgent) > 0 {
+		out = append(out, inboxGroup{Label: "An agent is waiting", Rows: urgent})
+	}
 	if len(recent) > 0 {
 		out = append(out, inboxGroup{Label: "Today", Rows: recent})
 	}
@@ -452,4 +494,46 @@ func stamp(t time.Time) string {
 		return t.Format("15:04") + " UTC"
 	}
 	return t.Format("Jan 2, 15:04") + " UTC"
+}
+
+// waited is how long the agent behind an urgent row has been waiting, as
+// of the render: "3h", "2d 4h". Rendered on the server like every time on
+// this page; a reload refreshes it.
+func waited(r InboxRow, now time.Time) string {
+	if !r.Urgent || r.WaitingSince.IsZero() {
+		return ""
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	d := now.Sub(r.WaitingSince)
+	if d < time.Minute {
+		return "under a minute"
+	}
+	return waitText(d)
+}
+
+// waitText is a duration in its two largest units: "45m", "3h 10m", "2d 4h".
+func waitText(d time.Duration) string {
+	m := int(d / time.Minute)
+	days, hours, mins := m/(24*60), m/60%24, m%60
+	switch {
+	case days > 0 && hours > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case days > 0:
+		return fmt.Sprintf("%dd", days)
+	case hours > 0 && mins > 0:
+		return fmt.Sprintf("%dh %dm", hours, mins)
+	case hours > 0:
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", mins)
+}
+
+// due is a row's due-by as the page shows it.
+func due(r InboxRow) string {
+	if r.DueBy == nil {
+		return ""
+	}
+	return stamp(*r.DueBy)
 }

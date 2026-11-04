@@ -236,7 +236,9 @@ func Materialize(events []Event, blocks []Block) Resolution {
 		if e.Type == TypeReviewDone {
 			continue
 		}
-		if e.Block == "" {
+		// An event names a block, with one exception: the answer to a
+		// requester note about the whole document (issue #215).
+		if e.Block == "" && (e.Type != TypeReply || !strings.HasPrefix(e.ReplyTo, review.RequesterPrefix)) {
 			continue
 		}
 		hash, known := hashes[e.Block]
@@ -288,13 +290,15 @@ func Materialize(events []Event, blocks []Block) Resolution {
 	for block := range byBlock {
 		settle(byBlock[block], hashes, texts)
 	}
-	for _, block := range order {
+	// Answers to questions about the whole document come first, as the
+	// questions do on the page; they are about no block, so never orphaned.
+	for _, block := range append([]string{""}, order...) {
 		if notes, ok := byBlock[block]; ok {
 			res.States = append(res.States, state(block, notes, false))
 		}
 	}
 	for _, block := range seen {
-		if _, known := hashes[block]; known {
+		if _, known := hashes[block]; known || block == "" {
 			continue
 		}
 		res.States = append(res.States, state(block, byBlock[block], true))
@@ -544,6 +548,12 @@ type Suggestion struct {
 	Replacement string `json:"replacement"`
 	Author      string `json:"author"`
 	Ts          string `json:"ts"`
+	// Sub is set when the suggestion replaces one sentence rather than the
+	// block (issue #218): Replacement stands in for Sub.Quote only. At is
+	// where that sentence sits in the block's normalized text now, when it
+	// can still be found, so an applier replaces exactly that span.
+	Sub *Sub     `json:"sub,omitempty"`
+	At  *Located `json:"at,omitempty"`
 	// Reason is why a suggestion needs confirmation before it is applied;
 	// empty for an applicable one.
 	Reason string `json:"reason,omitempty"`
@@ -555,6 +565,8 @@ const (
 	ReasonNoHash     = "written without a hash, so the match cannot be proven"
 	ReasonOrphaned   = "the block no longer exists in the document"
 	ReasonSuperseded = "a later note on this block supersedes it"
+	ReasonSubStale   = "the sentence changed after this was written"
+	ReasonSubLater   = "a later note on this sentence supersedes it"
 )
 
 // Suggestions splits the log's suggest_edit notes into the ones that may be
@@ -581,6 +593,29 @@ func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
 				Replacement: note.Event.Text,
 				Author:      note.Event.Author,
 				Ts:          note.Event.Ts,
+				Sub:         note.Event.Sub,
+				At:          note.At,
+			}
+			if note.Event.Sub != nil {
+				// A sentence suggestion stands or falls by its sentence: other
+				// sentences in the paragraph may move, and several sentences
+				// may each carry a suggestion of their own.
+				switch {
+				case st.Orphaned:
+					s.Reason = ReasonOrphaned
+				case note.Stale || note.At == nil:
+					s.Reason = ReasonSubStale
+				case supersededOnSentence(note, st.History):
+					s.Reason = ReasonSubLater
+				case note.Event.Sub.Hash == "":
+					s.Reason = ReasonNoHash
+				}
+				if s.Reason == "" {
+					applicable = append(applicable, s)
+				} else {
+					needsConfirmation = append(needsConfirmation, s)
+				}
+				continue
 			}
 			switch {
 			case st.Orphaned:
@@ -600,4 +635,30 @@ func (r Resolution) Suggestions() (applicable, needsConfirmation []Suggestion) {
 		}
 	}
 	return applicable, needsConfirmation
+}
+
+// supersededOnSentence reports whether a later note speaks to the same
+// sentence: a note about the whole block, or one whose sentence overlaps.
+// Answers and dangling replies are not verdicts and do not count.
+func supersededOnSentence(n Note, history []Note) bool {
+	// Later by timestamp, as the block-level rule reads it; log order only
+	// breaks a tie, since an import can append an older note after a newer.
+	after := false
+	for _, o := range history {
+		if o.ID == n.ID {
+			after = true
+			continue
+		}
+		newer := o.Event.Ts > n.Event.Ts || (o.Event.Ts == n.Event.Ts && after)
+		if !newer || o.Dangling || o.Answers != "" {
+			continue
+		}
+		if o.Event.Sub == nil {
+			return true
+		}
+		if o.At != nil && n.At != nil && o.At.Start < n.At.End && n.At.Start < o.At.End {
+			return true
+		}
+	}
+	return false
 }

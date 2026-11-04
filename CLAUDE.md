@@ -57,8 +57,13 @@ users are agents, not humans.
   all three of: the suggestion is the note that stands for its block, its hash
   matches the block now, and it has a hash at all — `Materialize` treats a
   hash-less note as not-stale, which is right for reading and not good enough
-  for editing. The tool never applies anything: *never mutate the source
-  document*.
+  for editing. A suggestion with `sub` (issue #218) is judged by its
+  sentence instead: applicable while `Locate` still finds it (`At` says
+  where), superseded only by a later note on the whole block or an
+  overlapping sentence, so one paragraph can carry several. The page
+  starts a selection's suggestion from the sentence and draws it as a
+  redline (word diff in page script, text nodes only). The tool never
+  applies anything: *never mutate the source document*.
 - `internal/mcpserver` is the agent-facing surface (`marginalia mcp`, stdio):
   `review_document`, `feedback_since`, `review_status`, `reply_to_note`,
   `mark_addressed`, `await_review_done`, `close_review`. Three rules hold it together. **Stdout belongs to the
@@ -221,6 +226,14 @@ users are agents, not humans.
   is outstanding work for the agent, counted in `Replies` and not `Comments`;
   the page shows it under the sidenote and not in the block's notes. `import`
   lets a `req:` reply through, since no log holds the question.
+  A note may carry 2–4 `options` and may have no `block` (issue #215): the
+  page heads itself with block-less notes and draws one button per option;
+  a tap is that same `reply` with `fields.choice`, and `check()` admits fields
+  on a protocol event only there, through `Config.CheckAnswer` (the choice
+  must be offered). Materialize keeps a block-less requester answer as a
+  state for block `""`, first and never orphaned. `await_review_done` returns
+  reason `answer` with `choices` (`mcpserver.Choices`); `question` outranks it, and `choices` is filled whatever the reason. `import` admits a block-less `req:` reply.
+  An agent cannot tap: its two write tools carry no fields.
 - `internal/review/presets/*.yaml` are framings embedded in the binary
   (`--review adr|copy|schema|security`), so an agent picks a vocabulary rather
   than inventing one and the events compare across runs. `Config.Overlay`
@@ -342,9 +355,11 @@ users are agents, not humans.
   `POST /api/feedback` returns `at` for the same reason it returns `id`. The
   offer is a button on a selection, never a hijacked mouseup, and the block's
   click handler ignores a click that ends a drag-select — otherwise "comment on
-  a sentence" would have cost "select a sentence". Scope is markdown prose:
-  trees and fences are skipped because their rendered text and `PlainText` can
-  differ.
+  a sentence" would have cost "select a sentence". Scope is markdown prose
+  and source-file declarations (`main.tree.source`, issue #31 — a declaration
+  renders its own source, so `PlainText` and the DOM agree; `paint` skips the
+  fold caret): other trees and fences are skipped because their rendered text
+  and `PlainText` can differ.
 - Several reviewers (issue #53): `State.ByAuthor` is each author's latest
   note on a block, and `Current`/`Overall` is the weightiest of those
   (reject > question > anything else > approve, latest breaking a tie), so
@@ -426,12 +441,17 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
-- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+- Source files (issue #31: Go, Python, TypeScript/TSX, JavaScript, Rust,
+  Java) are read by `internal/codetree` on tree-sitter,
   through `gotreesitter` — a **pure-Go** runtime, so the build stays
   `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
   runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
   name plus a `decl` function saying which nodes are declarations, what each
-  is called, and which child lists hold its members; comment attachment,
+  is called, and which child lists hold its members (`scope` re-roots them,
+  so a Rust impl's methods sit under its type, a trait impl's under
+  type/trait; `skip` leaves a docstring in
+  its container's text; `attached` node types — Rust attributes — join the
+  declaration below like a comment); comment attachment,
   `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
   and highlighting (from node types, not highlight queries, so it is the same
   for every grammar) are shared. Ids are symbol paths (`Batch/Full`,
@@ -492,6 +512,23 @@ users are agents, not humans.
   changes). Tab counts are taken after the filters, `/api/reviews` accepts
   the same parameters, and a row's `framing` is its preset, `custom` for an
   inline config alone, or empty for the default.
+  Urgency (issue #220): `publish_document`'s `blocking` and `due_by` land
+  on `Meta.Blocking`/`Meta.DueBy`, per revision; `Host.urgency` marks a
+  row `Urgent` when it is not done and blocking or past due, `rows()` sorts
+  urgent first and day grouping heads them "An agent is waiting", with the
+  wait measured from `Meta.Updated`. A blocking publish bypasses the
+  notifier's debounce. A hint for ordering, never a verdict.
+- `/stats` and `/api/stats` (issue #216, `hosted/stats.go`, `web.RenderStats`)
+  are the inbox's sibling, human-only and computed the same way — current
+  revision, in-memory logs, `feedback.Materialize`, zero store reads. Per
+  agent and in total: first look (first human event − `Meta.Created`), time
+  to done (when every document's log first met the review's completion
+  rule − `Meta.Created`), rounds (`Meta.Rounds`, incremented at republish
+  when the outgoing revision met the rule past `Meta.From`, plus one if the
+  current one does), notes by
+  non-protocol type, and claim outcomes (notes with an `addressed`: latest
+  status, and `Unclaimed`). Filters: `period=7d|30d|90d` on publish time,
+  `agent`, `framing`. Retired documents' logs are not counted.
 - Themes are CSS variable sets on `[data-palette]` and light/dark a mode on
   `[data-mode]`, so `--theme` and the reviewer's own toggle are one mechanism.
   The reviewer's display choices (mode, ligatures) live in `localStorage`,
@@ -598,6 +635,43 @@ users are agents, not humans.
   and never a human's note. `Sweep` (startup, then hourly) moves a review
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
+  The same move runs on demand (`hosted/archive.go`): the reviewer's
+  Archive button and **Archived** tab (`POST /api/reviews/{id}/archive|restore`,
+  behind `http.CrossOriginProtection`), and the agent's `withdraw_review`,
+  which only the publishing agent may call and only while every log is
+  empty — once the reviewer has written, archiving is their decision. Each
+  move writes a marker blob first (`<id>/archived/<ns>`, `<id>/restored/<ns>`,
+  time in the key so startup's listing already knows it); a restore counts
+  as activity, so the sweep does not take it straight back. Before a
+  move, `metered.freeze` waits out in-flight appends under the review's
+  prefix and refuses later ones until a restore thaws it, so a note
+  routed to the old server cannot split the log across both trees (and
+  `Withdraw` freezes before its emptiness check). Archived
+  reviews' metadata is read once at startup for the tab; their logs are not.
+  Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
+  Callbacks (`hosted/callback.go`, issue #219) call an agent back on a
+  human's `review_done` or `question` (`server.Options.Recorded`, told of
+  every appended event): `publish_document`'s `callback_url` lands on
+  `Meta.Callback` (inherited by a republish), the body is ids, cursor and
+  event only, signed HMAC-SHA256 under a secret derived from
+  `MARGINALIA_CALLBACK_SECRET`, the review id and the URL (so a republish
+  naming another URL cannot learn it), returned by a publish that names one. Off without
+  `MARGINALIA_CALLBACK_HOSTS`; https and listed hosts only, and the dialer
+  refuses a non-public address after resolution (no proxy, no redirects).
+  Questions debounce per review; a Done is never held.
+  Assets (issue #217, `hosted/assets.go`): `publish_document` takes
+  `assets` (base64 PNG/JPEG/WebP/SVG, type checked against extension and
+  content), stored put-if-absent at `reviews/<id>/asset/<n>/<name>`,
+  recorded in `Meta.Assets` (name → rev, type, bytes) and carried over by a
+  republish that does not resend them. Their bytes are held in memory
+  (`Review.assets`), so serving `/r/{id}/assets/{rev}/{name}` reads nothing;
+  it answers with nosniff and a `sandbox` CSP. Markdown image and link
+  destinations naming an asset are rewritten at parse time through
+  `document.Options.Link` (HTML only; text and hash unchanged), and hosted
+  review pages carry `img-src 'self' data:` so a remote image is not
+  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes,
+  and `AssetMemory` (256 MiB) on what every review holds in RAM together,
+  checked at publish, since that, not stored bytes, bounds the container.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a
