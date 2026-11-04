@@ -159,7 +159,14 @@ func (h *Host) publishDocument(ctx context.Context, req *mcp.CallToolRequest, in
 	for _, d := range in.Documents {
 		p.Docs = append(p.Docs, Document{Name: d.Name, Content: []byte(d.Content)})
 	}
+	if n := len(in.Assets); n > h.limits.AssetsPerPublish {
+		return nil, publishOut{}, limited("assets per publish", h.limits.AssetsPerPublish, n)
+	}
 	for _, a := range in.Assets {
+		// Refuse an oversized image before decoding it, not after.
+		if n := int64(base64.StdEncoding.DecodedLen(len(a.ContentBase64))); n > h.limits.AssetBytes+2 {
+			return nil, publishOut{}, limited("bytes per asset", h.limits.AssetBytes, fmt.Sprintf("about %d in %s", n, a.Name))
+		}
 		raw, err := base64.StdEncoding.DecodeString(a.ContentBase64)
 		if err != nil {
 			return nil, publishOut{}, fmt.Errorf("asset %q: content_base64 is not base64: %w", a.Name, err)

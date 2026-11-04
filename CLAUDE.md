@@ -439,6 +439,23 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
+- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+  through `gotreesitter` — a **pure-Go** runtime, so the build stays
+  `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
+  runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
+  name plus a `decl` function saying which nodes are declarations, what each
+  is called, and which child lists hold its members; comment attachment,
+  `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
+  and highlighting (from node types, not highlight queries, so it is the same
+  for every grammar) are shared. Ids are symbol paths (`Batch/Full`,
+  `const/batchCap`); a method stays in source order with its type in its path.
+  A leaf (a function) hashes all of itself; a container hashes its text
+  outside its children (`Symbol.Head`/`Tail`). `.goreleaser.yaml` builds with
+  `-tags=grammar_subset,grammar_subset_<grammar>…` so a release embeds only
+  the grammars registered — `TestReleaseEmbedsEveryGrammar` fails when a
+  language is added without its tag; an untagged `go build` embeds all ~200
+  and behaves the same, bigger. A directory walk skips `FormatSource`; a
+  source file is reviewed when named or listed in an index.
 - OpenAPI (issue #150, `document/openapi.go`) is not a format: a JSON/YAML/TOML
   document whose one root has an `openapi` or `swagger` key is anchored by
   what the spec names — `GET /orders/{id}`, the path item `/orders/{id}`,
@@ -621,7 +638,9 @@ users are agents, not humans.
   destinations naming an asset are rewritten at parse time through
   `document.Options.Link` (HTML only; text and hash unchanged), and hosted
   review pages carry `img-src 'self' data:` so a remote image is not
-  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes.
+  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes,
+  and `AssetMemory` (256 MiB) on what every review holds in RAM together,
+  checked at publish, since that, not stored bytes, bounds the container.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a
@@ -681,7 +700,8 @@ users are agents, not humans.
   a release also restarts the container. The
   `Dockerfile` is one `FROM ghcr.io/…:<version>` inside a release-please
   block (`extra-files`). Containers pull only from Cloudflare's registry,
-  hence the rebuild. `deploy_template_test.go` pins that tag to
+  hence the rebuild. `deploy_template_test.go` pins that tag (and
+  `.claude-plugin/plugin.json`'s version, also a release-please extra file) to
   `.release-please-manifest.json`, pins the `durable_object` scheduling
   policy and a single unnamed `getContainer` (that policy has no
   `max_instances`; one Durable Object is what keeps the host its store's
@@ -797,7 +817,10 @@ Claude Code") or any `<!-- agent:… -->` block. `scripts/comment-from.sh`
 (tested in `internal/pipeline`) reads that mark — bot or marked is `agent`,
 unmarked by a trusted login is `human`, anyone else `other` — and `triage.yml`
 re-triages an issue labelled `needs-info`/`needs-decision` when a `human`
-comments on it, so an answer to the loop's question is picked up. No Claude session or project links in commits, PRs or comments.
+comments on it, so an answer to the loop's question is picked up; the
+six-hourly sweep also picks one the trigger missed
+(`scripts/answered-issues.sh`: the latest comment is a `human`'s and newer
+than the triage block's `updated:` stamp, now a full UTC timestamp). No Claude session or project links in commits, PRs or comments.
 
 Triage is `skills/triage-issues/SKILL.md`, run by `.github/workflows/triage.yml`
 on every opened/reopened issue and a six-hourly sweep. The agent there **only
