@@ -500,7 +500,9 @@ suggestion with `sub` is about one sentence: replace only `sub.quote` with the
 `replacement`, never the whole block. Find it by text: the quote and `at` are
 the rendered text, not the markdown source, so `at` only tells two matches
 apart when markup sits inside the sentence. It
-stays applicable while that sentence reads the same. Marginalia never edits
+stays applicable while that sentence reads the same. When one paragraph
+carries several, apply them last `at` first (an edit shifts what follows) or
+re-run `suggestions` between edits. Marginalia never edits
 the document; applying is yours.
 
 ---
