@@ -62,6 +62,7 @@ blindly:
 | documents per publish | 20 | `--limit-documents-per-publish` / `MARGINALIA_LIMIT_DOCUMENTS_PER_PUBLISH` |
 | bytes per asset (image) | 2 MiB | `--limit-asset-bytes` / `MARGINALIA_LIMIT_ASSET_BYTES` |
 | assets per publish | 20 | `--limit-assets-per-publish` / `MARGINALIA_LIMIT_ASSETS_PER_PUBLISH` |
+| image bytes held in memory, all reviews | 256 MiB | `--limit-asset-memory` / `MARGINALIA_LIMIT_ASSET_MEMORY` |
 | revisions per review | 50 | `--limit-revisions` / `MARGINALIA_LIMIT_REVISIONS` |
 | publishes per agent per hour | 30 | `--limit-publishes-per-hour` / `MARGINALIA_LIMIT_PUBLISHES_PER_HOUR` |
 | open (not done) reviews | 200 | `--limit-open-reviews` / `MARGINALIA_LIMIT_OPEN_REVIEWS` |

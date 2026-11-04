@@ -627,7 +627,9 @@ users are agents, not humans.
   destinations naming an asset are rewritten at parse time through
   `document.Options.Link` (HTML only; text and hash unchanged), and hosted
   review pages carry `img-src 'self' data:` so a remote image is not
-  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes.
+  fetched. Caps: `AssetBytes`, `AssetsPerPublish`, counted into stored bytes,
+  and `AssetMemory` (256 MiB) on what every review holds in RAM together,
+  checked at publish, since that, not stored bytes, bounds the container.
   Diagrams default off in hosted mode. Notifications (`hosted/notify.go`,
   `--notify-url`) fire on the agent's side of the loop only — publish,
   republish, a `reply`/`addressed` once the review is done — never on a
