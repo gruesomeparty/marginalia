@@ -51,7 +51,18 @@ document's text instead of `review_document {paths}`, and pass the
 tools below take a `session_id` or a path. To revise, call `publish_document`
 again with the `review_id`: the reviewer's notes re-anchor against the new
 text, stale where a block changed and orphaned where it is gone, exactly as
-`review_status` reports after a local edit.
+`review_status` reports after a local edit. If you cannot go on without the
+answer, say so: `blocking: true` (and `due_by`, RFC 3339, when there is a
+deadline) puts the review at the top of the reviewer's inbox and notifies at
+once. Use it only when you are actually stopped; each revision states its own.
+If the document shows images (screenshots, mockups), send them in the same
+call as `assets: [{name, content_base64}]` (PNG, JPEG, WebP or SVG):
+`![mock](mock.png)` then shows the review's own copy, and a revision keeps
+assets it does not resend.
+A job that should stop rather than wait (CI, say) can pass `callback_url`:
+the host POSTs a signed notice, with the cursor to read from, when the
+reviewer submits Done or asks a question, if the operator allows that host.
+Keep the `callback_secret` the publish returns and verify the signature.
 
 On a hosted instance the review also lands in the owner's **inbox** (`/`), so
 the URL you hand over is a convenience, not the only way in. A publish can be
@@ -156,7 +167,7 @@ Supported inputs and how their blocks are anchored:
 | `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
 | `.diff`, `.patch` | the file, and each hunk under it by ordinal — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |
-| `.go` (name the file; a directory walk skips source) | `Ingest`, `Batch`, `Batch/Cap` (field), `Batch/Full` (method), `const/batchCap` |
+| `.go`, `.py`/`.pyi`, `.ts`/`.mts`/`.cts`/`.tsx`, `.js`/`.mjs`/`.cjs`/`.jsx`, `.rs`, `.java` (name the file; a directory walk skips source) | `Ingest`, `Batch`, `Batch/Cap` (field), `Batch/Full` (method), `const/batchCap` (Go), `Batch/Display/fmt` (a Rust trait impl's method), `Batch/full#2` (a Java overload) |
 
 Anchoring by path is what makes feedback on a schema, config or diagram
 mechanically applicable: the human's note points at the field, node or edge
@@ -315,6 +326,9 @@ notes:
     doc: spec.md            # which document, when you serve a set
     block: "1/2"
     text: why 500? I took it from the queue's batch limit — is that right?
+  - id: db                  # no block: about the whole document, heads the page
+    text: Postgres or SQLite for the first release?
+    options: [postgres, sqlite]   # 2–4 options: the human answers in one tap
 skip:
   - "2"                  # folded on the page, and refused if anything posts to it
 ```
@@ -329,6 +343,16 @@ file), so an unnamed note follows its id into every document that has one, and
 startup warns you if a note names a document the review does not serve. Prefer a note on the block over a
 paragraph in `instructions` when the question is *about* something specific —
 that is the whole point of anchoring. Your notes never enter the feedback log.
+
+When you need a decision rather than prose, give the note `options`. A tap
+saves a `reply` to `req:<id>` with `fields.choice` set to the option (the
+server refuses anything you did not offer), and `await_review_done` returns
+at once with reason `answer` and `choices: [{doc, note, choice, author}]`
+(reason `question` if a question arrived in the same batch; `choices` is
+filled either way).
+Act on it, then keep waiting from the returned cursor. The human can still
+answer in words instead, so a reply to that note without `fields.choice` is
+an answer too.
 
 `--theme` picks a palette (`default`, `catppuccin`, `catppuccin-mocha`, …) if
 the human has a preference; light/dark and ligatures are theirs to set on the
@@ -479,8 +503,15 @@ It reads the document and its log from disk — no server needed — and splits 
 `suggest_edit` events into `applicable` (the note that stands, with a hash that
 still matches: apply the `replacement` verbatim over the `current` text) and
 `needs_confirmation`, each with a `reason` — the block changed, the note has no
-hash to check, a later note supersedes it, or the block is gone. Marginalia
-never edits the document; applying is yours.
+hash to check, a later note supersedes it, or the block is gone. A
+suggestion with `sub` is about one sentence: replace only `sub.quote` with the
+`replacement`, never the whole block. Find it by text: the quote and `at` are
+the rendered text, not the markdown source, so `at` only tells two matches
+apart when markup sits inside the sentence. It
+stays applicable while that sentence reads the same. When one paragraph
+carries several, apply them last `at` first (an edit shifts what follows) or
+re-run `suggestions` between edits. Marginalia never edits
+the document; applying is yours.
 
 ---
 

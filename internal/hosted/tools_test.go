@@ -89,7 +89,7 @@ func TestHostedToolsAreTheOnesWeMeantToShip(t *testing.T) {
 	for _, tool := range res.Tools {
 		got[tool.Name] = true
 	}
-	want := []string{"publish_document", "feedback_since", "review_status", "reply_to_note", "mark_addressed", "await_review_done", "close_review"}
+	want := []string{"publish_document", "feedback_since", "review_status", "reply_to_note", "mark_addressed", "await_review_done", "close_review", "withdraw_review"}
 	for _, name := range want {
 		if !got[name] {
 			t.Errorf("missing tool %q", name)
@@ -283,6 +283,9 @@ func TestPublishRefusalsWriteNothing(t *testing.T) {
 	}
 	if err := call(t, cs, "publish_document", map[string]any{"review_id": "nope", "documents": []map[string]any{{"name": "a.md", "content": "# a\n"}}}, nil); err == nil {
 		t.Error("a revision of an unknown review was accepted")
+	}
+	if err := call(t, cs, "publish_document", map[string]any{"documents": []map[string]any{{"name": "a.md", "content": "# a\n"}}, "due_by": "tomorrow"}, nil); err == nil || !strings.Contains(err.Error(), "RFC 3339") {
+		t.Errorf("a due_by that is not a time must say what one looks like: %v", err)
 	}
 	if keys, _ := counting.List(context.Background(), ""); len(keys) != 0 {
 		t.Errorf("refusals left keys behind: %v", keys)

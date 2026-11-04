@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -69,6 +70,68 @@ func TestGoAnchorsBySymbolPath(t *testing.T) {
 	}
 	if got := flat(f.Symbols, 0); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("symbols:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Every other language follows the same rule: a declaration by its name,
+// what a container holds after a slash.
+func TestLanguagesAnchorBySymbolPath(t *testing.T) {
+	cases := map[string][]string{
+		"a.py": {
+			"docstring doc", "import import", "import#2 import", "RETRIES assign",
+			"Batch class", "  Batch/cap assign", "  Batch/docstring doc", "  Batch/full method", "  Batch/size method",
+			"ingest def", "if code",
+		},
+		"a.ts": {
+			"import code", "batchCap,other const", "z let",
+			"Doer interface", "  Doer/do method", "  Doer/name field",
+			"Id type", "Color enum",
+			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method", "  Batch/size method",
+			"ingest function", "default export", "handler const", "NS namespace", "  NS/f function",
+			`"a/b" namespace`, `  "a/b"/g function`,
+		},
+		"a.js": {
+			"import code", "batchCap const",
+			"Batch class", "  Batch/cap field", "  Batch/constructor method", "  Batch/full method",
+			"ingest function", "default export", "handler const",
+		},
+		"a.tsx": {"import code", "Props type", "Hello function", "Card const"},
+		"a.rs": {
+			"use code", "CAP const", "NAME static",
+			"Batch struct", "  Batch/cap field", "  Batch/items field",
+			"Color enum", "  Color/Red variant", "  Color/Green variant",
+			"Doer trait", "  Doer/run method",
+			"impl Batch impl", "  Batch/full method",
+			"impl Display for Batch impl", "  Batch/Display/fmt method",
+			"inner mod", "  inner/f fn", "m macro", "Id type", "main fn",
+		},
+		"A.java": {
+			"package package", "import import",
+			"Batch class", "  Batch/cap field", "  Batch/A,B field", "  Batch/Batch constructor", "  Batch/full method",
+			"  Batch/Color enum", "  Batch/Inner interface", "    Batch/Inner/run method",
+			"Point record",
+		},
+	}
+	for name, want := range cases {
+		f := parse(t, name, load(t, name))
+		// treeBuilder numbers repeats; here the raw paths repeat, so number
+		// them the same way for the comparison.
+		seen := map[string]int{}
+		var got []string
+		for _, line := range flat(f.Symbols, 0) {
+			i := strings.LastIndex(line, " ")
+			path, kind := strings.TrimLeft(line[:i], " "), line[i+1:]
+			if seen[path]++; seen[path] > 1 {
+				path += "#" + strconv.Itoa(seen[path])
+			}
+			got = append(got, line[:len(line)-len(strings.TrimLeft(line, " "))]+path+" "+kind)
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("%s:\n%s\nwant:\n%s", name, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+		if l := Detect(name); l == nil || Detect("x"+name[strings.LastIndex(name, "."):]) != l {
+			t.Errorf("%s: not detected", name)
+		}
 	}
 }
 
@@ -214,25 +277,38 @@ func FuzzParse(f *testing.F) {
 	f.Add(string(load(&testing.T{}, "ingest.go")))
 	f.Add("package p\nfunc (")
 	f.Add("type ( A struct { B interface { C } } )")
+	for _, name := range []string{"a.py", "a.ts", "a.rs", "A.java"} {
+		f.Add(string(load(&testing.T{}, name)))
+	}
+	f.Add("class A:\n    # c\n    \"\"\"doc\"\"\"\n    def f(self): pass\n")
+	f.Add("/// d\n#[a]\nimpl X for Y { fn f() {} }\n")
 	f.Fuzz(func(t *testing.T, src string) {
-		file, err := Parse(Detect("x.go"), []byte(src))
-		if err != nil {
-			return // refused whole; the caller shows the file
+		// Every language reads every input, so the walker's per-language
+		// paths (scope, skip, attached) all meet malformed bytes.
+		for _, name := range []string{"x.go", "x.py", "x.ts", "x.rs", "x.java"} {
+			fuzzOne(t, name, src)
 		}
-		var walk func([]*Symbol, int, int)
-		walk = func(syms []*Symbol, lo, hi int) {
-			at := lo
-			for _, s := range syms {
-				if s.Start < at || s.End < s.Start || s.End > hi {
-					t.Fatalf("%s at [%d,%d) outside [%d,%d) after %d", s.Path, s.Start, s.End, lo, hi, at)
-				}
-				walk(s.Children, s.Start, s.End)
-				at = s.End
-			}
-		}
-		walk(file.Symbols, 0, len(src))
-		_ = file.HTML([]byte(src), 0, len(src))
 	})
+}
+
+func fuzzOne(t *testing.T, name, src string) {
+	file, err := Parse(Detect(name), []byte(src))
+	if err != nil {
+		return // refused whole; the caller shows the file
+	}
+	var walk func([]*Symbol, int, int)
+	walk = func(syms []*Symbol, lo, hi int) {
+		at := lo
+		for _, s := range syms {
+			if s.Start < at || s.End < s.Start || s.End > hi {
+				t.Fatalf("%s: %s at [%d,%d) outside [%d,%d) after %d", name, s.Path, s.Start, s.End, lo, hi, at)
+			}
+			walk(s.Children, s.Start, s.End)
+			at = s.End
+		}
+	}
+	walk(file.Symbols, 0, len(src))
+	_ = file.HTML([]byte(src), 0, len(src))
 }
 
 // Dedenting a method read out of a type leaves a raw string's own
@@ -244,5 +320,88 @@ func TestHTMLKeepsIndentationInsideStrings(t *testing.T) {
 	out := html.UnescapeString(tag.ReplaceAllString(f.HTML(src, start, len(src)-3), ""))
 	if !strings.Contains(out, "\n\t\tSELECT 1\n\t`") {
 		t.Errorf("raw string re-indented: %q", out)
+	}
+}
+
+// Bytes no top-level symbol holds — the rest of a file whose parse stopped
+// early — are an `unknown` block, the id notes on them were written against.
+func TestUncoveredBytesAreUnknown(t *testing.T) {
+	src := []byte("package p\n\nleftover tail\n")
+	w := &walker{src: src}
+	pkg := &Symbol{Path: "package", Kind: "package", Start: 0, End: 9}
+	out := w.cover([]*Symbol{pkg}, 0, len(src))
+	if len(out) != 2 {
+		t.Fatalf("got %d symbols, want the package and one gap", len(out))
+	}
+	gap := out[1]
+	if gap.Path != KindUnknown || gap.Kind != KindUnknown {
+		t.Errorf("gap is %s (%s), want %s", gap.Path, gap.Kind, KindUnknown)
+	}
+	if got := string(src[gap.Start:gap.End]); got != "leftover tail" {
+		t.Errorf("gap holds %q", got)
+	}
+}
+
+// A Rust item's doc comment and attributes are part of it, though the
+// grammar ends a line comment after its newline.
+func TestRustDocsAndAttributesJoinTheirItem(t *testing.T) {
+	src := load(t, "a.rs")
+	f := parse(t, "a.rs", src)
+	for path, want := range map[string]string{
+		"CAP":   "/// Cap.\nconst CAP",
+		"Batch": "/// A batch.\n#[derive(Debug)]\npub struct Batch",
+	} {
+		var got *Symbol
+		for _, s := range f.Symbols {
+			if s.Path == path {
+				got = s
+			}
+		}
+		if got == nil {
+			t.Fatalf("no %s in %v", path, flat(f.Symbols, 0))
+		}
+		if text := string(src[got.Start:got.End]); !strings.HasPrefix(text, want) {
+			t.Errorf("%s starts %q, want %q", path, text[:min(len(text), 40)], want)
+		}
+	}
+}
+
+func TestTypeScriptDestructuringNamesHaveNoLayout(t *testing.T) {
+	src := []byte("const {\n  a,\n  b,\n} = load();\n")
+	f := parse(t, "a.ts", src)
+	if len(f.Symbols) != 1 || f.Symbols[0].Path != "{a,b,}" {
+		t.Errorf("got %v, want one symbol {a,b,}", flat(f.Symbols, 0))
+	}
+}
+
+// A docstring that leads a body is the container's own text; one after a
+// member is a block, since it would otherwise sit between children and be
+// neither shown nor hashed.
+func TestPythonDocstringsAreNeverHidden(t *testing.T) {
+	src := load(t, "a.py")
+	f := parse(t, "a.py", src)
+	var batch *Symbol
+	for _, s := range f.Symbols {
+		if s.Path == "Batch" {
+			batch = s
+		}
+	}
+	if batch == nil {
+		t.Fatalf("no Batch in %v", flat(f.Symbols, 0))
+	}
+	head := string(src[batch.Start:batch.Head()])
+	for _, want := range []string{"# Batches.", `"""Doc."""`} {
+		if !strings.Contains(head, want) {
+			t.Errorf("class head %q lacks %s", head, want)
+		}
+	}
+	for _, c := range batch.Children {
+		text := string(src[c.Start:c.End])
+		if c.Path == "Batch/docstring" && text != `"""Cap doc."""` {
+			t.Errorf("attribute docstring reads %q", text)
+		}
+		if c.Path == "Batch/cap" && strings.Contains(text, "Doc.") {
+			t.Errorf("Batch/cap took the class docstring: %q", text)
+		}
 	}
 }

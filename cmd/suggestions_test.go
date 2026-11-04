@@ -144,3 +144,49 @@ func TestSuggestionsRequiresAPath(t *testing.T) {
 		t.Errorf("a usage mistake should not advertise the feature tracker: %v", err)
 	}
 }
+
+// The acceptance criterion of issue #218: a suggestion on the second of
+// three sentences carries its sentence, is applicable while that sentence
+// reads the same (whatever happens to the others), and needs confirmation
+// once it is edited.
+func TestASentenceSuggestionFollowsItsSentence(t *testing.T) {
+	body := "# Spec\n\nOne is first. Two is second. Three is third.\n"
+	plain := "One is first. Two is second. Three is third."
+	path := seed(t, body, feedback.Event{
+		Block: "1/2", Hash: "auto", Type: feedback.TypeSuggestEdit, Text: "Two comes second.",
+		Sub: feedback.MakeSub(plain, "Two is second."), Ts: "2026-07-03T10:00:00Z",
+	})
+	read := func() (ready, needs []feedback.Suggestion) {
+		out, err := runCmd(t, "suggestions", path, "--json")
+		if err != nil {
+			t.Fatalf("suggestions: %v\n%s", err, out)
+		}
+		var reports []struct {
+			Applicable        []feedback.Suggestion `json:"applicable"`
+			NeedsConfirmation []feedback.Suggestion `json:"needs_confirmation"`
+		}
+		if err := json.Unmarshal([]byte(out), &reports); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		return reports[0].Applicable, reports[0].NeedsConfirmation
+	}
+	ready, _ := read()
+	if len(ready) != 1 || ready[0].Sub == nil || ready[0].Sub.Quote != "Two is second." || ready[0].At == nil || ready[0].At.Start != 14 {
+		t.Fatalf("applicable = %+v, want the sentence suggestion with its span", ready)
+	}
+	// Another sentence changes: the block hash moves, the suggestion holds.
+	if err := os.WriteFile(path, []byte(strings.Replace(body, "One is first.", "One is the first.", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ready, _ = read(); len(ready) != 1 || ready[0].At.Start != 18 {
+		t.Errorf("after another sentence moved: %+v", ready)
+	}
+	// Its own sentence changes: needs confirmation.
+	if err := os.WriteFile(path, []byte(strings.Replace(body, "Two is second.", "Two is next.", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ready, needs := read()
+	if len(ready) != 0 || len(needs) != 1 || needs[0].Reason != feedback.ReasonSubStale {
+		t.Errorf("after its sentence was edited: ready %+v, needs %+v", ready, needs)
+	}
+}

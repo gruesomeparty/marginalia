@@ -14,7 +14,7 @@ the document around it changes.
 | `.diff`, `.patch` | the file, and each hunk under it — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.sql`, and `sql` fences in markdown | ordinal, kind and object of each statement — `3:alter-table:orders`, `1:begin`; in a fence of two or more statements, under the fence's own ID — `1/3/2:create-index:orders` |
 | `.tf`, `.tfvars`, `.hcl` | a block's type and labels, what is inside it after a slash — `resource.aws_s3_bucket.logs`, `resource.aws_s3_bucket.logs/versioning/enabled`, `variable.region/default` |
-| `.go` source | symbol path — `Ingest`, `Batch`, a field `Batch/Cap`, a method `Batch/Full`, `const/batchCap`; named on the command line, never picked up by a directory walk |
+| source: `.go`, `.py`/`.pyi`, `.ts`/`.mts`/`.cts`/`.tsx`, `.js`/`.mjs`/`.cjs`/`.jsx`, `.rs`, `.java` | symbol path — a function `Ingest`, a type `Batch`, a member `Batch/Cap` or method `Batch/Full`, `const/batchCap` (Go), `impl Display for Batch` with its methods under `Batch/Display/fmt` (Rust); named on the command line, never picked up by a directory walk |
 
 Everything but markdown renders as a folding tree — one commentable block per
 node, indented by depth, with **Collapse all** for a big file.
@@ -99,25 +99,30 @@ rename or a mode change says what it is instead of showing an empty diff.
 
 ## Source files
 
-A source file is reviewed declaration by declaration, each anchored by the
-name the code already uses: a function by its name, a method by its type and
-name (`Batch/Full`), a struct field or interface method under its type, a
-constant under `const` whether it sits in a group or not. A method stays where
-the file put it rather than moving under its type, so the page reads in source
-order.
+A source file — Go, Python, TypeScript, JavaScript, Rust or Java — is
+reviewed declaration by declaration, each anchored by the name the code
+already uses: a function by its name, a method by its type and name
+(`Batch/Full`), a field or interface method under its type. Go puts a constant
+under `const` whether it sits in a group or not; Rust puts an impl block's
+methods under the type it implements (`Batch/full`), and a trait impl's under
+the type and the trait (`Batch/Display/fmt`), so `fmt` from Display and from
+Debug never trade ids when their impls are reordered; an overloaded Java method is `Batch/full`,
+then `Batch/full#2`. A Go method stays where the file put it rather than
+moving under its type, so the page reads in source order. Comments, Python
+decorators and Rust attributes directly above a declaration are part of it.
 
 A function quotes and hashes all of itself, signature and body, because a note
-on a function is almost always about its body. A struct or interface hashes its
-own header, not its members, which are blocks of their own — so editing a
+on a function is almost always about its body. A struct, class or interface
+hashes its own header, not its members, which are blocks of their own — so editing a
 method or a field leaves a note on the type alone. No anchor holds a line
 number, so an edit elsewhere in the file moves nothing.
 
 Parsing is [tree-sitter](https://tree-sitter.github.io/), through a pure-Go
 runtime, so the single binary needs no C toolchain and no extra install. A file
 that does not compile still renders: what the parser could not place shows as
-an `unknown` block, and nothing in the file is hidden. Go is the first
-language; others are a grammar and a short table of which nodes are
-declarations away.
+an `unknown` block, and nothing in the file is hidden. Another language is a
+grammar and a short table of which nodes are declarations away — ask with the
+`request-feature` skill.
 
 Source files are reviewed when you name them — `marginalia serve handler.go` —
 and a directory walk passes them by, so serving a folder of docs never turns
@@ -159,11 +164,14 @@ answering a typo with "install the thing you just said you had" would be worse.
 
 ## Where sentence-level notes apply
 
-Deliberately narrow: markdown prose. A tree node and a diagram statement are
-already fine-grained, and inside a code fence the rendered text and the block's
-plain text can differ — so the page simply does not offer there, and a note on
-the whole block is what you get. That is better than an anchor nothing can
-resolve.
+Deliberately narrow: markdown prose, and the declarations of a source file. A
+tree node and a diagram statement are already fine-grained, and inside a code
+fence the rendered text and the block's plain text can differ — so the page
+simply does not offer there, and a note on the whole block is what you get.
+That is better than an anchor nothing can resolve. A source declaration is the
+exception among trees because it renders exactly its own source: select a few
+lines inside a long function and the note anchors to them, re-found after
+unrelated edits and stale once those lines change.
 
 ## Code in a document
 
