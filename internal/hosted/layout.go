@@ -157,6 +157,12 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Blocking and DueBy are the agent's word on urgency for this revision
+	// (issue #220): it is stopped until the reviewer answers, and by when it
+	// needs the answer (RFC 3339). A presentation hint for the inbox and the
+	// notification, never a verdict; each publish states its own.
+	Blocking bool   `json:"blocking,omitempty"`
+	DueBy    string `json:"due_by,omitempty"`
 	// Assets is every image the current revision serves, by name, with the
 	// revision whose blob holds it (reviews/<id>/asset/<rev>/<name>).
 	Assets map[string]AssetMeta `json:"assets,omitempty"`

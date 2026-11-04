@@ -348,6 +348,10 @@ type Publish struct {
 	Review string // shipped preset
 	Config string // inline review YAML
 	Theme  string
+	// Blocking and DueBy are the agent's urgency for this revision; a
+	// republish states its own, so an answered question stops being urgent.
+	Blocking bool
+	DueBy    time.Time
 	// Assets are images published beside the documents. A republish adds
 	// or replaces the ones it sends and keeps the rest.
 	Assets []Asset
@@ -366,6 +370,7 @@ func (h *Host) Publish(ctx context.Context, p Publish) (*Review, error) {
 		Review: p.Review, Config: p.Config, Theme: p.Theme,
 		Created: now, Updated: now,
 	}
+	meta.Blocking, meta.DueBy = urgency(p)
 	return h.publish(ctx, meta, p, nil)
 }
 
@@ -397,6 +402,7 @@ func (h *Host) Republish(ctx context.Context, id string, p Publish) (*Review, er
 	if p.Theme != "" {
 		meta.Theme = p.Theme
 	}
+	meta.Blocking, meta.DueBy = urgency(p)
 	finished, err := revisionFinished(prev)
 	if err != nil {
 		return nil, err
@@ -766,4 +772,12 @@ func (h *Host) out() io.Writer {
 
 func (h *Host) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(h.out(), format, args...)
+}
+
+// urgency is how a publish's urgency is recorded on its metadata.
+func urgency(p Publish) (bool, string) {
+	if p.DueBy.IsZero() {
+		return p.Blocking, ""
+	}
+	return p.Blocking, p.DueBy.UTC().Format(time.RFC3339)
 }
