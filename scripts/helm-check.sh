@@ -46,11 +46,11 @@ printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  SOME
 expect "numbers from a values file stay integers" 'value: "10000000"' -- -f "$numbers"
 expect "extraEnv numbers too" 'value: "25000000"' -- -f "$numbers"
 expect "a fraction is not truncated" 'value: "0.5"' -- -f "$numbers"
-expect "helm test is let through a narrowed policy" 'component: helm-test' -- --set networkPolicy.enabled=true --set-json 'networkPolicy.from=[{"namespaceSelector":{"matchLabels":{"name":"ingress"}}}]' --show-only templates/networkpolicy.yaml
-if render --set networkPolicy.enabled=true --set networkPolicy.allowHelmTest=false --set-json 'networkPolicy.from=[{"namespaceSelector":{}}]' --show-only templates/networkpolicy.yaml | grep -q helm-test; then
-  echo "helm-check: allowHelmTest=false still admits the test pod" >&2; exit 1
+expect "helm test can be let through a narrowed policy" 'component: helm-test' -- --set networkPolicy.enabled=true --set networkPolicy.allowHelmTest=true --set-json 'networkPolicy.from=[{"namespaceSelector":{"matchLabels":{"name":"ingress"}}}]' --show-only templates/networkpolicy.yaml
+if render --set networkPolicy.enabled=true --set-json 'networkPolicy.from=[{"namespaceSelector":{}}]' --show-only templates/networkpolicy.yaml | grep -q helm-test; then
+  echo "helm-check: a narrowed policy admits the test pod by default" >&2; exit 1
 fi
-echo "helm-check: ok: the helm test exception can be turned off"
+echo "helm-check: ok: the helm test exception is off by default"
 if render --show-only templates/tests/healthz.yaml | grep -q 'app.kubernetes.io/name:'; then
   echo "helm-check: the test pod carries the Service's selector labels" >&2; exit 1
 fi
