@@ -83,7 +83,7 @@ func (s *Server) stop(id string) error {
 		return errUnknownSession(id)
 	}
 	l.cancel()
-	<-l.done
+	<-l.done //nolint:errcheck // waiting for the drain; Serve's result is the stop just asked for
 	return nil
 }
 
