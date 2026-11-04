@@ -439,12 +439,17 @@ users are agents, not humans.
   (`resource.aws_s3_bucket.logs`), body members after a slash, repeats
   numbered by `treeBuilder` — and a block hashes its header only, as a proto
   message does.
-- Source files (issue #31) are read by `internal/codetree` on tree-sitter,
+- Source files (issue #31: Go, Python, TypeScript/TSX, JavaScript, Rust,
+  Java) are read by `internal/codetree` on tree-sitter,
   through `gotreesitter` — a **pure-Go** runtime, so the build stays
   `CGO_ENABLED=0`; the cgo bindings were rejected for that reason. One
   runtime serves every language: a `Lang` (`lang_<name>.go`) is a grammar
   name plus a `decl` function saying which nodes are declarations, what each
-  is called, and which child lists hold its members; comment attachment,
+  is called, and which child lists hold its members (`scope` re-roots them,
+  so a Rust impl's methods sit under its type, a trait impl's under
+  type/trait; `skip` leaves a docstring in
+  its container's text; `attached` node types — Rust attributes — join the
+  declaration below like a comment); comment attachment,
   `unknown` cover for unparsed bytes (top level only, so no byte is hidden),
   and highlighting (from node types, not highlight queries, so it is the same
   for every grammar) are shared. Ids are symbol paths (`Batch/Full`,
@@ -628,6 +633,20 @@ users are agents, not humans.
   and never a human's note. `Sweep` (startup, then hourly) moves a review
   whole to `archive/` once its last activity is older than `RetainDone`
   (done) or `RetainOpen` (open) — never a delete, re-runnable if interrupted.
+  The same move runs on demand (`hosted/archive.go`): the reviewer's
+  Archive button and **Archived** tab (`POST /api/reviews/{id}/archive|restore`,
+  behind `http.CrossOriginProtection`), and the agent's `withdraw_review`,
+  which only the publishing agent may call and only while every log is
+  empty — once the reviewer has written, archiving is their decision. Each
+  move writes a marker blob first (`<id>/archived/<ns>`, `<id>/restored/<ns>`,
+  time in the key so startup's listing already knows it); a restore counts
+  as activity, so the sweep does not take it straight back. Before a
+  move, `metered.freeze` waits out in-flight appends under the review's
+  prefix and refuses later ones until a restore thaws it, so a note
+  routed to the old server cannot split the log across both trees (and
+  `Withdraw` freezes before its emptiness check). Archived
+  reviews' metadata is read once at startup for the tab; their logs are not.
+  Permanent deletion is a bucket lifecycle rule on `archive/`, never code.
   Assets (issue #217, `hosted/assets.go`): `publish_document` takes
   `assets` (base64 PNG/JPEG/WebP/SVG, type checked against extension and
   content), stored put-if-absent at `reviews/<id>/asset/<n>/<name>`,
