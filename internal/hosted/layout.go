@@ -118,6 +118,11 @@ type Meta struct {
 	// but their events still count toward the agent wait's cursor, which
 	// must never move back.
 	Retired map[string]uint64 `json:"retired,omitempty"`
+	// Rounds is how many earlier revisions a reviewer finished, counted at
+	// each republish, so the stats page can say how many rounds a review
+	// took without keeping every revision's metadata in memory. Metadata
+	// written before it existed reads as zero.
+	Rounds int `json:"rounds,omitempty"`
 	// Baseline is, per document, the last revision the reviewer finished
 	// before this one: what the page's changes are measured from (issue
 	// #214). Absent for a document nobody has finished yet, which marks

@@ -13,7 +13,7 @@ import (
 	"github.com/gruesomeparty/marginalia/internal/review"
 )
 
-//go:embed review.html.tmpl inbox.html.tmpl tokens.css
+//go:embed review.html.tmpl inbox.html.tmpl stats.html.tmpl tokens.css
 var files embed.FS
 
 // One template set: the review page, the inbox, and the design tokens both
@@ -21,7 +21,7 @@ var files embed.FS
 // cannot drift from the other by growing a palette of its own.
 var tmpl = template.Must(template.New("review.html.tmpl").
 	Funcs(template.FuncMap{"safe": func(s string) template.HTML { return template.HTML(s) }}). //nolint:gosec // only for goldmark output (raw HTML off) and SVG that internal/diagram sanitized
-	ParseFS(files, "review.html.tmpl", "inbox.html.tmpl", "tokens.css"))
+	ParseFS(files, "review.html.tmpl", "inbox.html.tmpl", "stats.html.tmpl", "tokens.css"))
 
 // NavDoc is one document of the review set as the navigation tree sees it.
 type NavDoc struct {
