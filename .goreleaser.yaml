@@ -16,7 +16,7 @@ builds:
     # language (TestReleaseEmbedsEveryGrammar keeps the list complete). A
     # plain `go build` embeds them all and behaves the same, only bigger.
     flags:
-      - -tags=grammar_subset,grammar_subset_go
+      - -tags=grammar_subset,grammar_subset_go,grammar_subset_java,grammar_subset_javascript,grammar_subset_python,grammar_subset_rust,grammar_subset_tsx,grammar_subset_typescript
     ldflags:
       - -s -w
       - -X github.com/gruesomeparty/marginalia/cmd.version={{.Version}}
