@@ -152,6 +152,7 @@ Supported inputs and how their blocks are anchored:
 | `.sql`, and `sql` fences of two or more statements | `3:alter-table:orders` (ordinal, kind, object); inside a fence, `1/3/2:create-index:orders` |
 | `.diff`, `.patch` | the file, and each hunk under it by ordinal — `internal/server/handlers.go`, `internal/server/handlers.go/2` |
 | `.tf`, `.tfvars`, `.hcl` | `resource.aws_s3_bucket.logs` (type and labels); inside it, `resource.aws_s3_bucket.logs/versioning/enabled` |
+| `.go` (name the file; a directory walk skips source) | `Ingest`, `Batch`, `Batch/Cap` (field), `Batch/Full` (method), `const/batchCap` |
 
 Anchoring by path is what makes feedback on a schema, config or diagram
 mechanically applicable: the human's note points at the field, node or edge
