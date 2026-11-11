@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/gruesomeparty/marginalia/internal/highlight"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // protoLang highlights .proto declarations in the tree renderer, which are

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gruesomeparty/marginalia/internal/mermaid"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // mermaidSourceKind is the block kind of a diagram Marginalia could not take
