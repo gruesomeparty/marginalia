@@ -151,7 +151,12 @@ main.tree.diff{max-width:none}
 @keyframes land{from{background:color-mix(in srgb,var(--accent) var(--tint-strong),transparent)}to{background:transparent}}
 @media (prefers-reduced-motion:reduce){.block.landed{animation:none;outline:2px solid var(--accent)}.progress .fill{transition:none}}
 .layout{display:flex;align-items:flex-start}
-main{flex:1;min-width:0;max-width:68ch;margin:2rem auto;padding:0 2.5rem}
+/* The page uses the screen it is given: main is centred in whatever the nav
+   leaves, and on a wide screen the text grows rather than the line, so prose
+   keeps a readable measure and still fills the space. */
+main{flex:1;min-width:0;max-width:80ch;margin:2rem auto;padding:0 2.5rem}
+@media (min-width:1440px){main{font-size:1.125em}}
+@media (min-width:2200px){main{font-size:1.25em}}
 .nav{position:sticky;top:2.9rem;flex:0 0 16rem;max-height:calc(100vh - 2.9rem);overflow:auto;padding:1.5rem .5rem 1.5rem 1.5rem;font-family:var(--sans);font-size:var(--fs-base);border-right:1px solid var(--rule)}
 .nav summary{cursor:pointer;color:var(--muted);margin-bottom:.5rem}
 .nav ul{list-style:none;margin:.15rem 0;padding-left:.85rem}
@@ -309,7 +314,9 @@ li.block[data-count]:not([data-count="0"])::before{left:-1.7rem}
 /* The margin rail (issue 130): on a screen with room beside the text, notes
    sit to the right of their block instead of between blocks, and the page
    script places them. */
-body.rail main{margin-left:var(--sp-5);margin-right:auto}
+/* The rail's column is reserved on the right of the layout, so main and its
+   notes are centred together instead of main being pushed to the left. */
+body.rail .layout{padding-right:calc(18rem + 2rem)}
 body.rail .existing.in-rail{position:absolute;z-index:1;width:18rem;margin:0;text-align:left;font-style:normal;font-weight:400;line-height:1.45;white-space:normal}
 body.rail .existing.in-rail.off{display:none}
 .existing .item{padding:.4rem .6rem;border-left:2px solid var(--marker);margin:.3rem 0;background:var(--card);border-radius:var(--r-tab)}
@@ -400,7 +407,7 @@ body.rail .existing.in-rail.off{display:none}
 .notes-panel .entry .text{display:block;margin-top:var(--sp-1);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .notes-panel .entry .quote{display:block;margin-top:var(--sp-1);color:var(--muted);font-style:italic;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .notes-panel .entry.orphan{border-left-color:var(--muted)}
-main.tree{--step:1.25rem;max-width:110ch;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5}
+main.tree{--step:1.25rem;max-width:160ch;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5}
 main.tree .block{display:flex;align-items:flex-start;gap:.1rem;margin:0 -.5rem;padding:.05rem .5rem;padding-left:calc(.5rem + var(--lvl,0)*var(--step))}
 /* Depth as a variable so indentation needs no inline styles and no script. */
 main.tree .block[data-level="1"]{--lvl:1}main.tree .block[data-level="2"]{--lvl:2}main.tree .block[data-level="3"]{--lvl:3}main.tree .block[data-level="4"]{--lvl:4}main.tree .block[data-level="5"]{--lvl:5}main.tree .block[data-level="6"]{--lvl:6}main.tree .block[data-level="7"]{--lvl:7}main.tree .block[data-level="8"]{--lvl:8}main.tree .block[data-level="9"]{--lvl:9}main.tree .block[data-level="10"]{--lvl:10}main.tree .block[data-level="11"]{--lvl:11}main.tree .block[data-level="12"]{--lvl:12}main.tree .block[data-level="13"]{--lvl:13}main.tree .block[data-level="14"]{--lvl:14}main.tree .block[data-level="15"]{--lvl:15}main.tree .block[data-level="16"]{--lvl:16}main.tree .block[data-level="17"]{--lvl:17}main.tree .block[data-level="18"]{--lvl:18}main.tree .block[data-level="19"]{--lvl:19}main.tree .block[data-level="20"]{--lvl:20}main.tree .block[data-level="21"]{--lvl:21}main.tree .block[data-level="22"]{--lvl:22}main.tree .block[data-level="23"]{--lvl:23}main.tree .block[data-level="24"]{--lvl:24}
