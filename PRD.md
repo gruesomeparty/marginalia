@@ -105,7 +105,8 @@ Optionally re-renders with resolution states for a second pass.
   a renderer being installed. A fence keeps its own block, so a note about the
   diagram as a whole still has somewhere to live, and a diagram type the
   parser does not take apart stays reviewable as the source block it is.
-- Readable defaults: ~68ch column, serif body, sans headings, mono code,
+- Readable defaults: an ~80ch column centred in the window (type grows on
+  wide screens rather than the line), serif body, sans headings, mono code,
   system fonts only (no webfont dependency), responsive down to phone width.
   The mono stack prefers a programming font the reviewer may already have
   installed (JetBrains Mono, Fira Code, Cascadia Code, Iosevka) with
