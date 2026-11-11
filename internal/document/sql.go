@@ -6,7 +6,7 @@ import (
 
 	"github.com/gruesomeparty/marginalia/internal/highlight"
 	"github.com/gruesomeparty/marginalia/internal/sqlstmt"
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 var sqlLang, _ = highlight.For("sql")

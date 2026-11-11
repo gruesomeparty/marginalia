@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/gruesomeparty/marginalia/internal/codetree"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/v2"
+	"github.com/yuin/goldmark/v2/ast"
+	"github.com/yuin/goldmark/v2/extension"
+	"github.com/yuin/goldmark/v2/text"
 )
 
 // Formats Marginalia can render for review.
