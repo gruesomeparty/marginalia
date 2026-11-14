@@ -4,11 +4,11 @@ go 1.26.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/chromedp/chromedp v0.21.1
-	github.com/go-jose/go-jose/v4 v4.1.7
+	github.com/chromedp/chromedp v0.23.1
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/odvcencio/gotreesitter v0.56.0
+	github.com/odvcencio/gotreesitter v0.57.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.7
 	gopkg.in/yaml.v3 v3.0.1
@@ -16,7 +16,7 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/chromedp/cdproto v0.159.0 // indirect
+	github.com/chromedp/cdproto v0.160.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260213210345-44df1a37e875 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
