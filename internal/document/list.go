@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/v2/ast"
 )
 
 // listItemKind is the block kind of a single bullet or numbered item.
