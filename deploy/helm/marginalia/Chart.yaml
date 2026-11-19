@@ -10,8 +10,8 @@ keywords:
   - mcp
   - agents
 # The chart is released with the binary: release-please moves both lines, so
-# chart 0.3.0 runs image 0.3.0 and a chart never names an image that does not
-# exist yet.
+# chart 0.3.0 runs image 0.3.0. Between the release PR merging and the
+# release job pushing that image, main names a tag that is not there yet.
 # x-release-please-start-version
 version: 0.6.0
 appVersion: "0.6.0"

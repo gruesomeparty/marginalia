@@ -2,6 +2,7 @@ package hosted
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -30,7 +31,33 @@ func checkHumanHeader(name string) error {
 	if strings.EqualFold(strings.TrimSpace(name), "Authorization") {
 		return errors.New("hosted: the human token cannot ride in Authorization — that header is the agent's credential and page routes refuse it; have the proxy forward the token in a header of its own (e.g. X-Auth-Request-Id-Token)")
 	}
+	if !isToken(name) {
+		return fmt.Errorf("hosted: %q is not a header name — no request could carry it, so every reviewer would be refused", name)
+	}
 	return nil
+}
+
+// checkHumanCookie refuses a cookie name no browser could send. "-" turns
+// the cookie off and empty means the default.
+func checkHumanCookie(name string) error {
+	if name == "-" || isToken(name) {
+		return nil
+	}
+	return fmt.Errorf("hosted: %q is not a cookie name — no request could carry it", name)
+}
+
+// isToken reports whether s is an RFC 9110 token, which is what a header
+// field name and a cookie name both are. Empty passes: it means the default.
+func isToken(s string) bool {
+	for _, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case strings.ContainsRune("!#$%&'*+-.^_`|~", c):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // human resolves the reviewer behind a page request, or says why it cannot.

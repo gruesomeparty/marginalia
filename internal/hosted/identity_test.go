@@ -367,3 +367,19 @@ func TestHumanHeaderCannotBeAuthorization(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestHumanHeaderAndCookieMustBeNames(t *testing.T) {
+	e := newEdge(t)
+	for _, o := range []Options{{HumanHeader: "X Auth Token"}, {HumanHeader: "X-Token:"}, {HumanCookie: "a;b"}} {
+		o.Store, o.HumanAuth = storage.NewMemory(), e.verifier()
+		if _, err := Open(context.Background(), o); err == nil || !strings.Contains(err.Error(), "not a") {
+			t.Errorf("%+q/%+q: got %v", o.HumanHeader, o.HumanCookie, err)
+		}
+	}
+	for _, o := range []Options{{HumanHeader: "X-Auth-Request-Id-Token", HumanCookie: "-"}, {HumanCookie: "_oauth2_proxy"}} {
+		o.Store, o.HumanAuth = storage.NewMemory(), e.verifier()
+		if _, err := Open(context.Background(), o); err != nil {
+			t.Errorf("%+q/%+q: %v", o.HumanHeader, o.HumanCookie, err)
+		}
+	}
+}

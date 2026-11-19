@@ -169,6 +169,9 @@ func Open(ctx context.Context, opts Options) (*Host, error) {
 	if err := checkHumanHeader(opts.HumanHeader); err != nil {
 		return nil, err
 	}
+	if err := checkHumanCookie(opts.HumanCookie); err != nil {
+		return nil, err
+	}
 	if opts.OAuth != nil && opts.OAuthIssuer != "" && opts.PublicURL == "" {
 		// The metadata names this resource by its public URL; a derived one
 		// would send every client to the wrong place.
