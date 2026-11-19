@@ -39,7 +39,7 @@ jobs:
       # needs puppeteer told not to sandbox.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version: '26'
       # Pinned, and pinned to the one version the repo already commits to:
       # internal/diagram/testdata holds a real mmdc render whose filename names
       # its version, and fixture_test.go drives it through the whole pipeline
