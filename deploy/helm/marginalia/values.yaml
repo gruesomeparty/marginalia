@@ -201,8 +201,11 @@ tolerations: []
 affinity: {}
 priorityClassName: ""
 
-# The image `helm test` runs its health check from (needs wget).
-testImage: busybox:1.37
+# The image `helm test` runs its health check from (needs wget). Written as
+# repository + tag so Renovate's helm-values manager keeps it current.
+testImage:
+  repository: busybox
+  tag: "1.37.0"
 
 # Admit traffic to the pod only from these peers (NetworkPolicy `from`
 # entries), e.g. the ingress controller's namespace. Egress stays open: the
