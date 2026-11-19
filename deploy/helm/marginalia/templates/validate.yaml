@@ -1,0 +1,17 @@
+{{- /* Settings the host would refuse at startup, refused here instead. */ -}}
+{{- $_ := include "marginalia.publicURL" . }}
+{{- if not (and .Values.auth.human.issuer .Values.auth.human.audience) }}
+{{- fail "auth.human.issuer and auth.human.audience are both required: a token checked against one and not the other is a token from any app of that issuer" }}
+{{- end }}
+{{- if eq (lower (trim .Values.auth.human.header)) "authorization" }}
+{{- fail "auth.human.header cannot be Authorization: that header is the agent's credential and page routes refuse it" }}
+{{- end }}
+{{- if not (or .Values.existingSecret .Values.auth.mcp.oauth.issuer) }}
+{{- fail "agents need a credential on /mcp: set existingSecret (holding MARGINALIA_MCP_TOKEN) or auth.mcp.oauth.issuer" }}
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.httpRoute.enabled }}
+{{- fail "enable ingress or httpRoute, not both" }}
+{{- end }}
+{{- if and .Values.httpRoute.enabled (not .Values.httpRoute.parentRefs) }}
+{{- fail "httpRoute.parentRefs is required: the Gateway the routes attach to" }}
+{{- end }}

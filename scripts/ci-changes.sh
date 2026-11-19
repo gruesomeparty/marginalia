@@ -16,6 +16,8 @@
 #               cmd/), the module, the linter's config.
 #   image       the hosted image: go, plus what builds and smoke-tests it.
 #   cloudflare  the deploy template.
+#   helm        the Kubernetes chart: image (helm-smoke installs one built
+#               from the checkout), plus the chart and its check scripts.
 #   workflows   zizmor: anything under .github/.
 #   deps        dependency review: the module, the template's npm lockfile,
 #               or the workflows (it checks the actions they pin).
@@ -35,7 +37,7 @@
 # Pages workflow builds.
 set -euo pipefail
 
-keys=(test go image cloudflare workflows deps codeql docs_only)
+keys=(test go image helm cloudflare workflows deps codeql docs_only)
 
 inert='(\.md$|^docs/|^site/)'
 testdata='/testdata/'
@@ -43,6 +45,7 @@ ci_itself='^(\.github/workflows/(ci|codeql)\.yml|scripts/ci-changes\.sh)$'
 go_src='(\.go$|^go\.(mod|sum)$|^(internal|cmd)/|^\.golangci)'
 image_src='^(Dockerfile|\.goreleaser\.ya?ml|\.dockerignore|scripts/(image-smoke|trivy-new)\.sh)$'
 cloudflare_src='^deploy/cloudflare/'
+helm_src='^(deploy/helm/|scripts/helm-(check|smoke)\.sh$)'
 deps_src='^(go\.(mod|sum)|deploy/cloudflare/package(-lock)?\.json|\.github/(workflows|actions)/.*)$'
 codeql_src='(\.go$|^go\.(mod|sum)$)'
 # Markdown that agents follow (skills, the plugin's commands, agents and
@@ -85,10 +88,12 @@ for p in "${paths[@]}"; do
   [[ "$p" =~ $go_src ]] && on_go=true && on_image=true
   [[ "$p" =~ $image_src ]] && on_image=true
   [[ "$p" =~ $cloudflare_src ]] && on_cloudflare=true
+  [[ "$p" =~ $helm_src ]] && on_helm=true
   [[ "$p" =~ ^\.github/ ]] && on_workflows=true
   [[ "$p" =~ $deps_src ]] && on_deps=true
   [[ "$p" =~ $codeql_src ]] && on_codeql=true
 done
 on_docs_only=$docs
+[ "$on_image" = true ] && on_helm=true
 
 for k in "${keys[@]}"; do v="on_$k"; echo "$k=${!v}"; done
