@@ -82,3 +82,18 @@ OIDC proxy, as (path, pathType) pairs.
 - path: /.well-known/oauth-protected-resource
   type: PathPrefix
 {{- end }}
+
+{{/*
+One env value as the host reads it. A number in a values file decodes as a
+float, which prints as 1e+07 and the host's integer parse refuses: only a
+whole number is rewritten, so 0.5 stays 0.5. A null arrives as nil, which
+toString spells "<nil>", and renders empty.
+*/}}
+{{- define "marginalia.envValue" -}}
+{{- if kindIs "invalid" . -}}
+{{- else if and (kindIs "float64" .) (eq (float64 (int64 .)) .) -}}
+{{- int64 . -}}
+{{- else -}}
+{{- toString . -}}
+{{- end -}}
+{{- end }}

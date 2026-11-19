@@ -20,7 +20,11 @@
   "MARGINALIA_RETAIN_DONE" .Values.limits.retainDone
   "MARGINALIA_RETAIN_OPEN" .Values.limits.retainOpen
 }}
-{{- $env = merge (deepCopy .Values.extraEnv) $env }}
+{{- /* extraEnv is a list of Kubernetes EnvVars and wins over a derived setting of the same name, which is then left out rather than listed twice. */}}
+{{- range .Values.extraEnv }}
+{{- if not .name }}{{ fail "extraEnv: every entry needs a name" }}{{ end }}
+{{- $_ := unset $env .name }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,7 +51,7 @@ spec:
       annotations:
         # The host reads its settings once, at start: a changed setting
         # restarts it.
-        checksum/env: {{ toJson $env | sha256sum | trunc 16 }}
+        checksum/env: {{ toJson (list $env .Values.extraEnv) | sha256sum | trunc 16 }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -76,17 +80,19 @@ spec:
               protocol: TCP
           env:
             {{- range $name, $value := $env }}
-            {{- /* A number in a values file decodes as a float, which prints as 1e+07: the host's integer parse refuses that. Only a whole number is rewritten, so 0.5 stays 0.5. */}}
-            {{- $s := toString $value }}
-            {{- if kindIs "float64" $value }}
-            {{- if eq (float64 (int64 $value)) $value }}
-            {{- $s = int64 $value | toString }}
-            {{- end }}
-            {{- end }}
-            {{- /* A value set to null in values arrives as nil, which toString spells "<nil>". */}}
-            {{- if and (ne $s "") (not (kindIs "invalid" $value)) }}
+            {{- $s := include "marginalia.envValue" $value }}
+            {{- if ne $s "" }}
             - name: {{ $name }}
               value: {{ $s | quote }}
+            {{- end }}
+            {{- end }}
+            {{- range .Values.extraEnv }}
+            {{- if hasKey . "value" }}
+            - name: {{ .name }}
+              value: {{ include "marginalia.envValue" .value | quote }}
+            {{- else }}
+            - name: {{ .name }}
+              {{- toYaml (omit . "name") | nindent 14 }}
             {{- end }}
             {{- end }}
           {{- if or .Values.existingSecret .Values.extraEnvFrom }}

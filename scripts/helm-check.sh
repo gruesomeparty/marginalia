@@ -42,7 +42,7 @@ expect "extra objects, templated" "name: '?check-extra" -- --set-json 'extraObje
 # the host as an integer, not 1e+07.
 numbers="$(mktemp)"
 trap 'rm -f "$numbers"' EXIT
-printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  SOME_NUMBER: 25000000\n  A_FRACTION: 0.5\n' >"$numbers"
+printf 'limits:\n  documentBytes: 10000000\n  openReviews: 50\nextraEnv:\n  - name: SOME_NUMBER\n    value: 25000000\n  - name: A_FRACTION\n    value: 0.5\n' >"$numbers"
 expect "numbers from a values file stay integers" 'value: "10000000"' -- -f "$numbers"
 expect "extraEnv numbers too" 'value: "25000000"' -- -f "$numbers"
 expect "a fraction is not truncated" 'value: "0.5"' -- -f "$numbers"
@@ -55,11 +55,21 @@ if render --show-only templates/tests/healthz.yaml | grep -q 'app.kubernetes.io/
   echo "helm-check: the test pod carries the Service's selector labels" >&2; exit 1
 fi
 echo "helm-check: ok: the test pod is not a Service endpoint"
-out="$(render --set-json 'extraEnv={"SOME_SETTING":null}')"
+out="$(render --set-json 'extraEnv=[{"name":"SOME_SETTING","value":null}]')"
 if grep -q '<nil>' <<<"$out"; then
   echo "helm-check: a value set to null rendered as <nil>" >&2; exit 1
 fi
 echo "helm-check: ok: a null value is left out"
+expect "extraEnv takes a valueFrom" 'secretKeyRef:' -- --set-json 'extraEnv=[{"name":"MARGINALIA_NOTIFY_URL","valueFrom":{"secretKeyRef":{"name":"n","key":"url"}}}]'
+out="$(render --set-json 'extraEnv=[{"name":"MARGINALIA_STORE","value":"file:///elsewhere"}]')"
+if [ "$(grep -c 'name: MARGINALIA_STORE$' <<<"$out")" != 1 ] || ! grep -q 'file:///elsewhere' <<<"$out"; then
+  echo "helm-check: extraEnv did not replace the derived setting exactly once" >&2; exit 1
+fi
+echo "helm-check: ok: extraEnv replaces a derived setting"
+if render --set-json 'extraEnv=[{"value":"x"}]' >/dev/null 2>&1; then
+  echo "helm-check: an extraEnv entry without a name rendered" >&2; exit 1
+fi
+echo "helm-check: ok: an unnamed extraEnv entry is refused"
 
 # Auth annotations stay off the public paths.
 if render --set ingress.enabled=true --set ingress.pagesAnnotations.auth=x --show-only templates/ingress.yaml \

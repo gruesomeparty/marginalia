@@ -92,10 +92,15 @@ limits:
   retainDone: ""
   retainOpen: ""
 
-# More environment, as a map of name: value, and more envFrom sources.
-# extraEnv wins over a setting the chart derives (and skips its checks), and
-# is plain text in the release: credentials go in existingSecret instead.
-extraEnv: {}
+# More environment, as Kubernetes EnvVars (value or valueFrom), and more
+# envFrom sources. An extraEnv entry wins over a setting the chart derives
+# (and skips its checks). A plain value is text in the release: credentials
+# go in existingSecret, or a valueFrom.secretKeyRef.
+#   extraEnv:
+#     - name: MARGINALIA_NOTIFY_URL
+#       valueFrom:
+#         secretKeyRef: {name: marginalia-notify, key: url}
+extraEnv: []
 extraEnvFrom: []
 
 service:
