@@ -9,6 +9,7 @@
       "bump-minor-pre-major": true,
       "extra-files": [
         "deploy/cloudflare/Dockerfile",
+        "deploy/helm/marginalia/Chart.yaml",
         { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" }
       ]
     }

@@ -22,7 +22,7 @@ func TestAgentWaitWakesOnASavedNote(t *testing.T) {
 	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
 	wait := ts.URL + "/agent/r/" + r.Meta.ID + "/wait"
 	agent := map[string]string{"Authorization": "Bearer tok"}
-	human := map[string]string{accessHeader: e.mint(e.key, e.claims("berkay@example.com"))}
+	human := map[string]string{DefaultHumanHeader: e.mint(e.key, e.claims("berkay@example.com"))}
 
 	if code, _ := do(t, "GET", wait, nil, nil); code != http.StatusUnauthorized {
 		t.Errorf("no credential: %d, want 401", code)
@@ -112,7 +112,7 @@ func TestAgentWaitSurvivesRepublishAndRestart(t *testing.T) {
 	h, ts := open()
 	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)})
 	agent := map[string]string{"Authorization": "Bearer tok"}
-	human := map[string]string{accessHeader: e.mint(e.key, e.claims("berkay@example.com"))}
+	human := map[string]string{DefaultHumanHeader: e.mint(e.key, e.claims("berkay@example.com"))}
 	note := func(ts *httptest.Server, typ string) {
 		t.Helper()
 		body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Block: "1/2", Type: typ, Text: "x"})
@@ -173,7 +173,7 @@ func TestAgentWaitCountsADroppedDocument(t *testing.T) {
 	h, ts := openWithEdge(t, e)
 	r := publish(t, h, "spec", Document{Name: "spec.md", Content: []byte(specDoc)}, Document{Name: "notes.md", Content: []byte(specDoc)})
 	agent := map[string]string{"Authorization": "Bearer tok"}
-	human := map[string]string{accessHeader: e.mint(e.key, e.claims("berkay@example.com"))}
+	human := map[string]string{DefaultHumanHeader: e.mint(e.key, e.claims("berkay@example.com"))}
 	note := func(doc string) {
 		t.Helper()
 		body, _ := json.Marshal(feedback.Event{Doc: doc, Block: "1/2", Type: "comment", Text: "x"})
@@ -239,7 +239,7 @@ func TestHostedCompletionRule(t *testing.T) {
 	done := func(who string) {
 		t.Helper()
 		body, _ := json.Marshal(feedback.Event{Doc: "spec.md", Type: feedback.TypeReviewDone})
-		hdr := map[string]string{accessHeader: e.mint(e.key, e.claims(who))}
+		hdr := map[string]string{DefaultHumanHeader: e.mint(e.key, e.claims(who))}
 		if code, out := do(t, "POST", ts.URL+"/r/"+r.Meta.ID+"/api/feedback", body, hdr); code != http.StatusCreated {
 			t.Fatalf("%s: %d %s", who, code, out)
 		}
