@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1  # zizmor: ignore[artipacked] claude-code-action pushes its branch with these credentials
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: '1.27'
       - name: Install the linter version CI pins
@@ -85,7 +85,7 @@ jobs:
           if [[ "$ISSUE" =~ ^[0-9]+$ ]]; then json="$(gh issue view "$ISSUE" --repo "$REPO" --json labels)"; fi
           model="$(scripts/pick-model.sh implement <<<"$json")"
           echo "model=$model" >>"$GITHUB_OUTPUT"
-      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         if: steps.creds.outputs.ready == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
